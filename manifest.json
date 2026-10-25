@@ -14,7 +14,7 @@
   "background": { "service_worker": "background.js", "type": "module" },
   "options_ui": { "page": "options/options.html", "open_in_tab": true },
   "side_panel": { "default_path": "sidepanel/sidepanel.html" },
-  "permissions": ["activeTab", "scripting", "downloads", "storage", "offscreen", "notifications", "sidePanel"],
+  "permissions": ["activeTab", "scripting", "downloads", "downloads.open", "storage", "offscreen", "notifications", "sidePanel"],
   "optional_permissions": ["webRequest"],
   "optional_host_permissions": ["<all_urls>"],
   "content_security_policy": {

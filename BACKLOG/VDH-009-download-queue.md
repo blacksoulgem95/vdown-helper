@@ -1,7 +1,7 @@
 ---
 id: VDH-009
 title: Download queue and state machine
-status: todo
+status: in-progress
 priority: P0
 area: background
 depends_on: [VDH-003]
@@ -22,4 +22,4 @@ Persisted queue in `chrome.storage.local`. Stages: DETECTED, PREPARING, DOWNLOAD
 
 ## Notes
 
-_None yet._
+State machine, SpeedMeter, request planner and job runner implemented (`src/lib/queue.ts`, `src/lib/request.ts`, `src/background/runner.ts`); pure logic tested. Runner behaviour against real chrome.downloads not yet verified (VDH-018).

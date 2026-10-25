@@ -1,7 +1,7 @@
 ---
 id: VDH-008
 title: Background detection and per-tab store
-status: todo
+status: in-progress
 priority: P0
 area: background
 depends_on: [VDH-005, VDH-007]
@@ -23,4 +23,4 @@ Service worker orchestrates scan on popup open / rescan / (optional) auto-scan, 
 
 ## Notes
 
-_None yet._
+Implemented: `src/lib/analyze.ts` (tested), `src/background/{detect,pageFetch,observer,tabState}.ts`. Browser behaviour (injection, webRequest observer, per-origin fallback) not yet verified in real Chromium (VDH-018).

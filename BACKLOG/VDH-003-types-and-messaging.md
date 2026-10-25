@@ -1,7 +1,7 @@
 ---
 id: VDH-003
 title: Shared types and typed messaging
-status: todo
+status: done
 priority: P0
 area: lib
 depends_on: [VDH-001]
@@ -15,9 +15,9 @@ Define `MediaResource`, `HlsVariant`, `Downloadability`, `DownloadJob`, `JobStag
 
 ## Acceptance criteria
 
-- [ ] No `any` in message plumbing
-- [ ] Unknown/invalid messages are rejected with a typed error
-- [ ] Unit tests for validation
+- [x] No `any` in message plumbing
+- [x] Unknown/invalid messages are rejected with a typed error
+- [x] Unit tests for validation
 
 ## Notes
 

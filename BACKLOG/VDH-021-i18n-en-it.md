@@ -1,7 +1,7 @@
 ---
 id: VDH-021
 title: Internationalisation (en, it)
-status: todo
+status: in-progress
 priority: P1
 area: ui
 depends_on: [VDH-003]
@@ -21,4 +21,4 @@ Use `_locales/en` and `_locales/it` with `chrome.i18n`, a typed `t()` helper, an
 
 ## Notes
 
-_None yet._
+`t()` helper, catalog parity test in place; catalogs are filled as UI lands.

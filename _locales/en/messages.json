@@ -1,0 +1,14 @@
+{
+  "extName": {
+    "message": "vdown-helper"
+  },
+  "extDescription": {
+    "message": "Detect. Decode. Download. Finds videos on the page you are viewing and downloads them locally."
+  },
+  "notifyDoneTitle": {
+    "message": "Download complete"
+  },
+  "notifyFailTitle": {
+    "message": "Download failed"
+  }
+}

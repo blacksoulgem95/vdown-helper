@@ -1,7 +1,7 @@
 ---
 id: VDH-012
 title: FFmpeg.wasm processing pipeline
-status: todo
+status: in-progress
 priority: P1
 area: background
 depends_on: [VDH-011]
@@ -23,4 +23,4 @@ Bundle `@ffmpeg/ffmpeg` + `@ffmpeg/core` locally (no remote fetch). Operations: 
 
 ## Notes
 
-_None yet._
+Implemented: `src/offscreen/ffmpeg.ts` (WORKERFS mounts, single-flight), `src/lib/ffmpegArgs.ts` (tested). Core bundled from node_modules by `scripts/build.mjs`. Needs E2E verification of the wasm load, MP3/WAV/M4A outputs and CSP.

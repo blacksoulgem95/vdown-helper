@@ -122,9 +122,11 @@ describe('HLS', () => {
 });
 
 describe('resource limits', () => {
-  it('blocks in-memory jobs over the limit but not native downloads', () => {
+  it('blocks FFmpeg jobs over the memory limit, but not native downloads or disk-backed concatenation', () => {
     const big = 3 * 1024 ** 3;
-    expect(planOutput(input({ isHls: true, sourceFormat: 'hls', estimatedBytes: big })).issues).toContain('too-large');
+    const hls = { isHls: true, sourceFormat: 'hls' as const, estimatedBytes: big };
+    expect(planOutput(input({ ...hls, container: 'mp4' })).issues).toContain('too-large');
+    expect(planOutput(input({ ...hls, container: 'ts' })).valid).toBe(true);
     expect(planOutput(input({ estimatedBytes: big })).valid).toBe(true);
   });
   it('blocks encodes longer than the configured limit', () => {

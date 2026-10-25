@@ -219,8 +219,8 @@ export function planOutput(i: PlanInput): Plan {
 function finalize(plan: Plan, i: PlanInput): Plan {
   const issues = [...plan.issues];
   const limitBytes = i.limits.maxMemoryMb * 1024 * 1024;
-  // Native downloads are streamed to disk by Chrome and are not bounded by browser memory.
-  if (plan.pipeline !== 'native' && i.estimatedBytes !== undefined && i.estimatedBytes > limitBytes) {
+  // Native downloads and plain concatenation are staged on disk; only FFmpeg holds its output in memory.
+  if (plan.requiresFfmpeg && i.estimatedBytes !== undefined && i.estimatedBytes > limitBytes) {
     issues.push('too-large');
   }
   if (

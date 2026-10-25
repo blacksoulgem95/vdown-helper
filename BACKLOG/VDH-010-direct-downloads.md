@@ -1,7 +1,7 @@
 ---
 id: VDH-010
 title: Direct file downloads via chrome.downloads
-status: todo
+status: in-progress
 priority: P0
 area: background
 depends_on: [VDH-009]
@@ -22,4 +22,4 @@ Native downloads for MP4/WebM etc. Map `chrome.downloads` events to bytes/total/
 
 ## Notes
 
-_None yet._
+Implemented in `src/background/runner.ts` (runNative, polling, pause/resume/open/show). Needs E2E verification.

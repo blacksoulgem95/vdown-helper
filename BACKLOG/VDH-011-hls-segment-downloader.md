@@ -1,7 +1,7 @@
 ---
 id: VDH-011
 title: HLS segment downloader (offscreen document)
-status: todo
+status: in-progress
 priority: P0
 area: background
 depends_on: [VDH-005, VDH-009]
@@ -23,4 +23,4 @@ Offscreen document fetches playlist segments with bounded concurrency, retries w
 
 ## Notes
 
-_None yet._
+Implemented in `src/offscreen/hls.ts` + `jobs.ts` (OPFS staging, ordered writes, AES-128 via WebCrypto, DRM refusal, retries, cancel). Needs E2E verification against fixture HLS.

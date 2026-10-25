@@ -1,0 +1,14 @@
+{
+  "extName": {
+    "message": "vdown-helper"
+  },
+  "extDescription": {
+    "message": "Rileva. Decodifica. Scarica. Trova i video nella pagina che stai visualizzando e li scarica in locale."
+  },
+  "notifyDoneTitle": {
+    "message": "Download completato"
+  },
+  "notifyFailTitle": {
+    "message": "Download non riuscito"
+  }
+}

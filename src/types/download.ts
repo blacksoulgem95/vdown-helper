@@ -58,6 +58,14 @@ export interface DownloadRequest {
   sourceFormat: MediaFormat;
   /** True when the source is HLS (needs the segment pipeline). */
   isHls: boolean;
+  /** HLS segments are fMP4 (init section) rather than MPEG-TS. */
+  fragmented?: boolean;
+  /** The chosen stream already carries audio. */
+  hasMuxedAudio: boolean;
+  /** The source has a video track at all. */
+  hasVideo: boolean;
+  /** Live/event stream: refused. */
+  live?: boolean;
   /** Source codecs when known; used for copy-vs-transcode decisions. */
   videoCodec?: string;
   audioCodec?: string;
@@ -91,6 +99,8 @@ export interface DownloadJob {
   stages: JobStage[];
   /** True when the underlying mechanism supports pause/resume (direct downloads only). */
   canPause: boolean;
+  /** True when the segment/FFmpeg pipeline in the offscreen document performs this job. */
+  viaOffscreen?: boolean;
   paused: boolean;
   createdAt: number;
   updatedAt: number;

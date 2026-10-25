@@ -1,7 +1,7 @@
 ---
 id: VDH-007
 title: Content-script DOM and performance scanner
-status: todo
+status: in-progress
 priority: P0
 area: content
 depends_on: [VDH-003, VDH-006]
@@ -22,4 +22,4 @@ Injected on demand via `chrome.scripting`. Collects `video`/`audio`, `currentSrc
 
 ## Notes
 
-_None yet._
+Implemented in `src/content/scanner.ts`; jsdom tests in `tests/scanner.test.ts` pass. Not yet verified in real Chromium (VDH-018).

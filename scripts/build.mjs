@@ -20,7 +20,7 @@ writeFileSync(resolve(DIST, 'manifest.json'), JSON.stringify(manifest, null, 2))
 cpSync(resolve(root, '_locales'), resolve(DIST, '_locales'), { recursive: true });
 
 // FFmpeg.wasm core, bundled locally. Never fetched from a CDN (remote code is not allowed).
-const coreDir = resolve(root, 'node_modules/@ffmpeg/core/dist/umd');
+const coreDir = resolve(root, 'node_modules/@ffmpeg/core/dist/esm');
 const vendor = resolve(DIST, 'vendor/ffmpeg');
 mkdirSync(vendor, { recursive: true });
 for (const f of ['ffmpeg-core.js', 'ffmpeg-core.wasm']) {
