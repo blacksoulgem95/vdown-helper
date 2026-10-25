@@ -1,7 +1,7 @@
 ---
 id: VDH-005
 title: HLS playlist parser
-status: todo
+status: done
 priority: P0
 area: lib
 depends_on: [VDH-004]
@@ -15,12 +15,12 @@ Dedicated parser: `#EXTM3U`, `#EXT-X-STREAM-INF`, `#EXT-X-MEDIA`, `#EXTINF`, `#E
 
 ## Acceptance criteria
 
-- [ ] Master playlist yields only variants actually present, with bandwidth, resolution, frame rate and codecs when given
-- [ ] Separate audio renditions exposed with group/language/URI
-- [ ] Media playlist yields segments, durations, init map, sequence, endlist (VOD vs live)
-- [ ] Plain `.m3u` is not classified as HLS
-- [ ] Malformed input returns a typed error, never throws unhandled
-- [ ] Unit tests incl. relative URLs and invalid manifests
+- [x] Master playlist yields only variants actually present, with bandwidth, resolution, frame rate and codecs when given
+- [x] Separate audio renditions exposed with group/language/URI
+- [x] Media playlist yields segments, durations, init map, sequence, endlist (VOD vs live)
+- [x] Plain `.m3u` is not classified as HLS
+- [x] Malformed input returns a typed error, never throws unhandled
+- [x] Unit tests incl. relative URLs and invalid manifests
 
 ## Notes
 

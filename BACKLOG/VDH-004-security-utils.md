@@ -1,7 +1,7 @@
 ---
 id: VDH-004
 title: Security utilities
-status: todo
+status: done
 priority: P0
 area: security
 depends_on: [VDH-001]
@@ -15,10 +15,10 @@ URL scheme allow-list (http/https/blob), URL normalisation, credential/token red
 
 ## Acceptance criteria
 
-- [ ] Dangerous schemes (`javascript:`, `data:`, `file:`, `chrome:`) rejected
-- [ ] Sanitiser covers Windows reserved names, trailing dots/spaces, unicode controls, 200-char cap
-- [ ] Logger redacts userinfo and sensitive query params
-- [ ] Unit tests
+- [x] Dangerous schemes (`javascript:`, `data:`, `file:`, `chrome:`) rejected
+- [x] Sanitiser covers Windows reserved names, trailing dots/spaces, unicode controls, 200-char cap
+- [x] Logger redacts userinfo and sensitive query params
+- [x] Unit tests
 
 ## Notes
 

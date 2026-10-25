@@ -1,7 +1,7 @@
 ---
 id: VDH-001
 title: Project scaffold
-status: todo
+status: in-progress
 priority: P0
 area: build
 depends_on: []

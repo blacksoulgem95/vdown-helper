@@ -18,12 +18,12 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 
 | ID | Title | Status | Priority | Area | Depends on |
 |---|---|---|---|---|---|
-| [VDH-001](VDH-001-project-scaffold.md) | Project scaffold | todo | P0 | build | - |
+| [VDH-001](VDH-001-project-scaffold.md) | Project scaffold | in-progress | P0 | build | - |
 | [VDH-002](VDH-002-manifest-permissions-csp.md) | MV3 manifest, permissions model, CSP | todo | P0 | build | VDH-001 |
 | [VDH-003](VDH-003-types-and-messaging.md) | Shared types and typed messaging | todo | P0 | lib | VDH-001 |
-| [VDH-004](VDH-004-security-utils.md) | Security utilities | todo | P0 | security | VDH-001 |
-| [VDH-005](VDH-005-hls-parser.md) | HLS playlist parser | todo | P0 | lib | VDH-004 |
-| [VDH-006](VDH-006-metadata-dedupe.md) | Media metadata and dedupe utilities | todo | P1 | lib | VDH-003, VDH-004 |
+| [VDH-004](VDH-004-security-utils.md) | Security utilities | done | P0 | security | VDH-001 |
+| [VDH-005](VDH-005-hls-parser.md) | HLS playlist parser | done | P0 | lib | VDH-004 |
+| [VDH-006](VDH-006-metadata-dedupe.md) | Media metadata and dedupe utilities | in-progress | P1 | lib | VDH-003, VDH-004 |
 | [VDH-007](VDH-007-content-scanner.md) | Content-script DOM and performance scanner | todo | P0 | content | VDH-003, VDH-006 |
 | [VDH-008](VDH-008-background-detection.md) | Background detection and per-tab store | todo | P0 | background | VDH-005, VDH-007 |
 | [VDH-009](VDH-009-download-queue.md) | Download queue and state machine | todo | P0 | background | VDH-003 |
@@ -40,5 +40,5 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-020](VDH-020-native-companion-doc.md) | Native companion architecture doc | todo | P3 | docs | VDH-019 |
 | [VDH-021](VDH-021-i18n-en-it.md) | Internationalisation (en, it) | todo | P1 | ui | VDH-003 |
 | [VDH-022](VDH-022-ci-and-tooling.md) | CI workflow and lint/format tooling | todo | P2 | build | VDH-001 |
-| [VDH-023](VDH-023-branding-icons.md) | Logo and icons | todo | P2 | ui | VDH-001 |
+| [VDH-023](VDH-023-branding-icons.md) | Logo and icons | in-progress | P2 | ui | VDH-001 |
 | [VDH-024](VDH-024-license-notices.md) | License and third-party notices | todo | P2 | docs | VDH-012 |

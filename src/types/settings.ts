@@ -1,0 +1,28 @@
+import type { AudioBitrate, AudioFormat, OutputMode } from './download';
+
+export type QualityPreset = 'highest' | '2160' | '1440' | '1080' | '720' | '480' | '360';
+
+export interface Settings {
+  schemaVersion: 1;
+  defaultMode: OutputMode;
+  preferredQuality: QualityPreset;
+  defaultAudioFormat: AudioFormat;
+  defaultAudioBitrate: AudioBitrate;
+  /** Template with tokens: {title} {host} {resolution} {date} {format} {id}. */
+  namingTemplate: string;
+  /** Relative sub-folder inside the Chrome Downloads folder; empty = none. */
+  subfolder: string;
+  /** Scan automatically when a tab finishes loading (needs the optional host permission). */
+  autoScan: boolean;
+  /** Observe media requests via webRequest (needs the optional permission). */
+  networkObserver: boolean;
+  maxConcurrentDownloads: number;
+  /** Parallel segment fetches per HLS job. */
+  segmentConcurrency: number;
+  /** Largest output allowed to be assembled in browser memory, in MB. */
+  maxMemoryMb: number;
+  /** Refuse FFmpeg conversions longer than this (seconds of media), 0 = no limit. */
+  maxEncodeDurationSec: number;
+  notifyOnComplete: boolean;
+  notifyOnError: boolean;
+}

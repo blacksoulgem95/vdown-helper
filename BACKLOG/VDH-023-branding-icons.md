@@ -1,7 +1,7 @@
 ---
 id: VDH-023
 title: Logo and icons
-status: todo
+status: in-progress
 priority: P2
 area: ui
 depends_on: [VDH-001]
