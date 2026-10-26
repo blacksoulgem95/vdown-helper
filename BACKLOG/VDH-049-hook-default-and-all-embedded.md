@@ -1,7 +1,7 @@
 ---
 id: VDH-049
 title: Page hook on by default, one grant for all embedded players
-status: in-progress
+status: done
 priority: P1
 area: security
 depends_on: [VDH-033]
@@ -23,7 +23,7 @@ of every site is scanned without asking again.
 - [x] The popup's embedded-players button asks once for all sites (`<all_urls>` + header replay) (payload: unit; button: E2E). The reload offer after a real grant needs Chrome's prompt -> VDH-028
 - [x] Settings: the hook switch only stores the setting (no prompt) and _Revoke access_ keeps it (typecheck; the stored setting drives registration: E2E). The new _Allow all sites and embedded players_ switch needs Chrome's prompt -> VDH-028
 - [x] en/it strings, README, `docs/store-policy.md`, `CLAUDE.md` updated
-- [ ] CI green on the PR head
+- [x] CI green on the PR head (run 40322827859 on `25c3550`: `check` and `e2e`; `main` run 40323962531 green) and merged as `087e584`; Release run 40323962533 published `v1.1.1` (patch: the merge message carried no bump token)
 
 ## Notes
 
