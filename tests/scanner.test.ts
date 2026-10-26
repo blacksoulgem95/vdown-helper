@@ -323,3 +323,95 @@ describe('blob: sources (scanAsync)', () => {
     });
   });
 });
+
+describe('metadata and open-site lookups', () => {
+  const realFetch = globalThis.fetch;
+  const requested: string[] = [];
+  const answer = (map: Record<string, unknown | string>) => {
+    requested.length = 0;
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      requested.push(`${url} credentials=${init?.credentials}`);
+      const v = map[new URL(url).pathname];
+      if (v === undefined) return new Response('nope', { status: 404 });
+      const res = new Response(typeof v === 'string' ? v : JSON.stringify(v));
+      Object.defineProperty(res, 'url', { value: url });
+      return res;
+    }) as unknown as typeof fetch;
+  };
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    history.pushState({}, '', '/');
+  });
+
+  it('lists what the page announces: Open Graph, JSON-LD and alternate links (method "metadata")', () => {
+    setBody(`
+      <meta property="og:title" content="Launch">
+      <meta property="og:video" content="https://cdn.example/launch.mp4">
+      <meta property="og:video:type" content="video/mp4">
+      <script type="application/ld+json">{"@type":"VideoObject","name":"Launch 2","contentUrl":"/two.webm"}</script>
+      <link rel="alternate" type="audio/mpeg" href="/talk.mp3">
+      <link rel="alternate" type="application/rss+xml" href="/feed.xml">`);
+    const r = scan();
+    const meta = r.candidates.filter((c) => c.method === 'metadata');
+    expect(meta.map((c) => c.url)).toEqual([
+      'https://cdn.example/launch.mp4',
+      `${location.origin}/two.webm`,
+      `${location.origin}/talk.mp3`,
+    ]);
+    expect(meta[0]).toMatchObject({ title: 'Launch', mimeType: 'video/mp4', mediaType: 'video' });
+    expect(requested).toEqual([]); // the synchronous scan makes no request at all
+  });
+
+  it("asks a PeerTube-shaped page for its own video, anonymously and only on the page's origin", async () => {
+    history.pushState({}, '', '/w/kkGMgK9ZtnKfYAgnEtQxbv');
+    setBody('<p>watch</p>');
+    answer({
+      '/api/v1/videos/kkGMgK9ZtnKfYAgnEtQxbv': {
+        uuid: '9c9de5e8',
+        name: 'Clip',
+        duration: 10,
+        files: [
+          {
+            resolution: { id: 720, label: '720p' },
+            fileUrl: `${location.origin}/static/c-720.mp4`,
+            width: 1280,
+            height: 720,
+          },
+        ],
+        streamingPlaylists: [],
+      },
+    });
+    const r = await scanAsync();
+    expect(requested).toEqual([`${location.origin}/api/v1/videos/kkGMgK9ZtnKfYAgnEtQxbv credentials=omit`]);
+    expect(r.candidates.filter((c) => c.method === 'site-api')).toMatchObject([
+      { url: `${location.origin}/static/c-720.mp4`, title: 'Clip (720p)', mediaType: 'video', width: 1280 },
+    ]);
+  });
+
+  it('reads a feed the page offers (same origin only) and lists its enclosures', async () => {
+    setBody(
+      `<link rel="alternate" type="application/rss+xml" href="/feed.xml"><link rel="alternate" type="application/rss+xml" href="https://other.example/feed.xml">`,
+    );
+    answer({
+      '/feed.xml': `<rss><channel><item><title>Ep</title><enclosure url="https://cdn.example/e.mp3" type="audio/mpeg"/></item></channel></rss>`,
+    });
+    const r = await scanAsync();
+    expect(requested).toEqual([`${location.origin}/feed.xml credentials=omit`]); // the other origin is never contacted
+    expect(r.candidates).toContainEqual(
+      expect.objectContaining({ url: 'https://cdn.example/e.mp3', method: 'metadata', title: 'Ep' }),
+    );
+  });
+
+  it('makes no request on an ordinary page, and ignores a site that answers wrongly or from elsewhere', async () => {
+    setBody('<p>hello</p>');
+    answer({});
+    await scanAsync();
+    expect(requested).toEqual([]);
+
+    history.pushState({}, '', '/w/kkGMgK9ZtnKfYAgnEtQxbv');
+    answer({ '/api/v1/videos/kkGMgK9ZtnKfYAgnEtQxbv': 'not json' });
+    expect((await scanAsync()).candidates.filter((c) => c.method === 'site-api')).toEqual([]);
+    answer({ '/api/v1/videos/kkGMgK9ZtnKfYAgnEtQxbv': { uuid: 'x', name: 'n', files: [] } });
+    expect((await scanAsync()).candidates.filter((c) => c.method === 'site-api')).toEqual([]);
+  });
+});

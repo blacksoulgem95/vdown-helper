@@ -1,0 +1,43 @@
+{
+  "id": 42,
+  "uuid": "9c9de5e8-0a1e-484a-b099-e80766180a6d",
+  "shortUUID": "kkGMgK9ZtnKfYAgnEtQxbv",
+  "name": "A PeerTube video",
+  "duration": 125,
+  "isLive": false,
+  "thumbnailPath": "/lazy-static/thumbnails/9c9de5e8.jpg",
+  "privacy": { "id": 1, "label": "Public" },
+  "files": [
+    {
+      "id": 1,
+      "resolution": { "id": 360, "label": "360p" },
+      "size": 4000000,
+      "width": 640,
+      "height": 360,
+      "fileUrl": "https://peertube.example/static/web-videos/9c9de5e8-360.mp4",
+      "fileDownloadUrl": "https://peertube.example/download/web-videos/9c9de5e8-360.mp4"
+    },
+    {
+      "id": 2,
+      "resolution": { "id": 720, "label": "720p" },
+      "size": 12000000,
+      "width": 1280,
+      "height": 720,
+      "fileUrl": "https://peertube.example/static/web-videos/9c9de5e8-720.mp4"
+    },
+    {
+      "id": 3,
+      "resolution": { "id": 0, "label": "Audio" },
+      "size": 900000,
+      "fileUrl": "https://peertube.example/static/web-videos/9c9de5e8-0.m4a"
+    }
+  ],
+  "streamingPlaylists": [
+    {
+      "id": 1,
+      "type": 1,
+      "playlistUrl": "https://peertube.example/static/streaming-playlists/hls/9c9de5e8/master.m3u8",
+      "files": []
+    }
+  ]
+}

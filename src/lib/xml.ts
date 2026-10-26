@@ -67,7 +67,7 @@ export function parseXml(input: string, limits: Partial<XmlLimits> = {}): XmlNod
   const stack: XmlNode[] = [];
   let root: XmlNode | undefined;
 
-  const isNameChar = (c: string) => /[A-Za-z0-9_:.\-·-￿]/.test(c);
+  const isNameChar = (c: string) => /[A-Za-z0-9_:.\-\u00B7-\uFFFD]/.test(c);
 
   while (i < n) {
     const lt = src.indexOf('<', i);

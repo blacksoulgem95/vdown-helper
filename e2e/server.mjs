@@ -147,6 +147,45 @@ export function startServers(root, pagesDir) {
       return void createReadStream(lib).pipe(res);
     }
 
+    // A PeerTube-shaped instance on the "website" origin: the watch page, the public API and a podcast feed.
+    if (origin === 'A' && /^\/w\/[A-Za-z0-9-]{8,40}$/.test(path)) path = '/pages/peertube.html';
+    if (origin === 'A' && /^\/api\/v1\/videos\/[A-Za-z0-9-]{8,40}$/.test(path)) {
+      state.hits.push(`peertube-api cookie=${req.headers.cookie ?? '-'}`);
+      const base = `http://${req.headers.host}`;
+      const body = {
+        id: 42,
+        uuid: '9c9de5e8-0a1e-484a-b099-e80766180a6d',
+        name: 'A PeerTube video',
+        duration: 6,
+        isLive: false,
+        thumbnailPath: '/files/photo.jpg',
+        files: [
+          {
+            resolution: { id: 360, label: '360p' },
+            width: 640,
+            height: 360,
+            fileUrl: `${base}/media/sample.mp4?r=360`,
+          },
+          {
+            resolution: { id: 720, label: '720p' },
+            width: 1280,
+            height: 720,
+            fileUrl: `${base}/media/sample.mp4?r=720`,
+          },
+        ],
+        streamingPlaylists: [{ id: 1, type: 1, playlistUrl: `${base}/hls/master.m3u8`, files: [] }],
+      };
+      return void res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(body));
+    }
+    if (origin === 'A' && path === '/feed.xml') {
+      const base = `http://${req.headers.host}`;
+      return void res
+        .writeHead(200, { 'Content-Type': 'application/rss+xml' })
+        .end(
+          `<?xml version="1.0"?><rss version="2.0"><channel><title>Podcast</title><item><title>Episode one</title><enclosure url="${base}/formats/clip.opus" type="audio/ogg" length="1"/></item></channel></rss>`,
+        );
+    }
+
     // Live streams (see liveResponse), only on the "website" origin.
     if (origin === 'A' && path.startsWith('/__live/')) {
       if (req.method === 'POST' && path === '/__live/start') {

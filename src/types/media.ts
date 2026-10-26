@@ -54,6 +54,10 @@ export type DetectionMethod =
   | 'dom-image'
   | 'dom-style'
   | 'dom-meta'
+  /** Standard page metadata: Open Graph, JSON-LD, <link rel="alternate">, podcast feeds. */
+  | 'metadata'
+  /** The public API of an open site the page belongs to (Wikimedia Commons, Internet Archive, PeerTube). */
+  | 'site-api'
   | 'performance'
   | 'network'
   | 'hook'

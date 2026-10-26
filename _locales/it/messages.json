@@ -970,5 +970,11 @@
   },
   "jobGaps": {
     "message": "$1 segmento/i non erano più disponibili al momento previsto e mancano nella registrazione."
+  },
+  "detectMetadata": {
+    "message": "Metadati della pagina (Open Graph, JSON-LD, feed)"
+  },
+  "detectSiteApi": {
+    "message": "API pubblica del sito"
   }
 }

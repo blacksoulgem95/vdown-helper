@@ -25,6 +25,8 @@ import {
   type RecordResult,
 } from './capture';
 import { pumpBlob, pumpData, type PumpResult } from './ingest';
+import { collectMetadata, feedMedia, siteMedia } from './metadata';
+import type { MetaMedia } from '@/lib/metadata';
 import type { DetectionMethod, RawCandidate, ScanReport } from '@/types/media';
 
 const MEDIA_EXT =
@@ -323,6 +325,23 @@ function scanPerformance(c: Collector, base: string): void {
   }
 }
 
+/** Feeds the last scan's page offered; read (same origin only) by scanAsync(). */
+let pendingFeeds: string[] = [];
+
+/** A media address announced by metadata or an open site's API, as a candidate. */
+function metaCandidate(m: MetaMedia, method: 'metadata' | 'site-api'): RawCandidate {
+  return {
+    url: m.url,
+    method,
+    ...(m.title ? { title: m.title } : {}),
+    ...(m.mimeType ? { mimeType: m.mimeType } : {}),
+    ...(m.mediaType ? { mediaType: m.mediaType } : {}),
+    ...(m.durationSec ? { durationSec: m.durationSec } : {}),
+    ...(m.width && m.height ? { width: m.width, height: m.height } : {}),
+    ...(m.poster ? { poster: m.poster } : {}),
+  };
+}
+
 export function scan(): ScanReport {
   heldData.clear();
   streamMedia.clear();
@@ -337,6 +356,9 @@ export function scan(): ScanReport {
   const doc = document;
   scanElements(c, doc);
   scanFiles(c, doc);
+  const meta = collectMetadata(doc);
+  pendingFeeds = meta.feeds;
+  for (const m of meta.media) add(c, metaCandidate(m, 'metadata'));
   // Same-origin iframes are readable here; every frame is also scanned by its own copy of this script (allFrames).
   // Frames this script cannot read are reported by origin so the user can allow them.
   const blocked = new Set<string>();
@@ -402,6 +424,8 @@ export async function scanAsync(): Promise<ScanReport> {
   heldBlobs.clear();
   mseVideos.clear();
   const report = scan();
+  // Open sites and the page's own podcast feeds: a few anonymous same-origin requests, in parallel with the blobs below.
+  const lookups = Promise.all([siteMedia(), feedMedia(pendingFeeds)]);
   const pending = pendingBlobs;
   pendingBlobs = [];
   const urls = [...new Set(pending.map((p) => p.url))];
@@ -449,6 +473,12 @@ export async function scanAsync(): Promise<ScanReport> {
       ...(kind ? { fileKind: kind } : {}),
     });
   }
+  const [site, feeds] = await lookups;
+  const have = new Set(report.candidates.map((x) => `${x.url}|${x.method}`));
+  for (const m of site)
+    if (!have.has(`${m.url}|site-api`)) report.candidates.push(metaCandidate(m, 'site-api'));
+  for (const m of feeds)
+    if (!have.has(`${m.url}|metadata`)) report.candidates.push(metaCandidate(m, 'metadata'));
   return report;
 }
 

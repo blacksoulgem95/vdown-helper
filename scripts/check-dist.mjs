@@ -93,6 +93,14 @@ for (const file of walk(dist).filter((f) => f.endsWith('.html'))) {
 for (const file of walk(dist).filter((f) => f.endsWith('.js') && !f.includes(`${join(dist, 'vendor')}`))) {
   const code = readFileSync(file, 'utf8');
   const rel = file.slice(dist.length + 1);
+  // Chrome refuses to load an extension script that contains a Unicode noncharacter ("isn't UTF-8 encoded"), even
+  // though the file is valid UTF-8: a regex written with a literal U+FFFF once broke every scan this way.
+  if (
+    /[\uFDD0-\uFDEF]|[\uD83F\uD87F\uD8BF\uD8FF\uD93F\uD97F\uD9BF\uD9FF\uDA3F\uDA7F\uDABF\uDAFF\uDB3F\uDB7F\uDBBF\uDBFF][\uDFFE\uDFFF]|\uFFFE|\uFFFF/.test(
+      code,
+    )
+  )
+    fail(`${rel}: contains a Unicode noncharacter (Chrome cannot load it as a script)`);
   if (/\beval\s*\(/.test(code) || /new Function\(/.test(code)) fail(`${rel}: eval/new Function present`);
   if (/importScripts\(\s*["']https?:/.test(code) || /import\(\s*["']https?:/.test(code))
     fail(`${rel}: remote import`);

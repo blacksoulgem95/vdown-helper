@@ -1,7 +1,7 @@
 ---
 id: VDH-042
 title: Tabbed popup with frame grouping
-status: in-progress
+status: done
 priority: P1
 area: ui
 depends_on: [VDH-037]
@@ -27,5 +27,4 @@ Popup tabs by type (Video, Audio, Subtitles, Images, Files, Assets) with counts;
 - Large lists: scans are capped per kind (VDH-037), the popup renders 40 rows at a time with "Show N more", and the stored tab state stays small
   (320 images: 152 KB, scan + render about 1 s in the E2E).
 - The headline count and the toolbar badge count video, audio and subtitles only; images and files have their own tab counts.
-- Capture (fast) and Record (real time) buttons exist on MediaSource cards (VDH-038, verified in the E2E). The **Stop** control for live recording belongs to
-  VDH-040; this task stays `in-progress` until it is added.
+- Capture (fast), Record (real time / MediaStream / live) and "Stop and save" (queue) exist and are verified in the E2E (VDH-038, VDH-039, VDH-040).

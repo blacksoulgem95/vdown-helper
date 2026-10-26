@@ -970,5 +970,11 @@
   },
   "jobGaps": {
     "message": "$1 segment(s) were no longer available when due and are missing from the recording."
+  },
+  "detectMetadata": {
+    "message": "Page metadata (Open Graph, JSON-LD, feed)"
+  },
+  "detectSiteApi": {
+    "message": "The site's public API"
   }
 }

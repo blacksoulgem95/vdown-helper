@@ -1,0 +1,46 @@
+{
+  "batchcomplete": true,
+  "query": {
+    "pages": [
+      {
+        "pageid": 12345,
+        "ns": 6,
+        "title": "File:Example clip.webm",
+        "videoinfo": [
+          {
+            "size": 2345678,
+            "width": 1280,
+            "height": 720,
+            "duration": 14.5,
+            "url": "https://upload.wikimedia.org/wikipedia/commons/a/ab/Example_clip.webm",
+            "descriptionurl": "https://commons.wikimedia.org/wiki/File:Example_clip.webm",
+            "mime": "video/webm; codecs=\"vp9, opus\"",
+            "mediatype": "VIDEO",
+            "extmetadata": { "ObjectName": { "value": "Example clip", "source": "commons-desc-page" } },
+            "derivatives": [
+              {
+                "src": "//upload.wikimedia.org/wikipedia/commons/transcoded/a/ab/Example_clip.webm/Example_clip.webm.480p.vp9.webm",
+                "type": "video/webm; codecs=\"vp9, opus\"",
+                "title": "VP9 480P",
+                "shorttitle": "VP9 480P",
+                "transcodekey": "480p.vp9.webm",
+                "width": 854,
+                "height": 480
+              },
+              {
+                "src": "//upload.wikimedia.org/wikipedia/commons/transcoded/a/ab/Example_clip.webm/Example_clip.webm.360p.mp4",
+                "type": "video/mp4; codecs=\"avc1.42E01E, mp4a.40.2\"",
+                "title": "360P",
+                "shorttitle": "MP4 360P",
+                "transcodekey": "360p.mp4",
+                "width": 640,
+                "height": 360
+              },
+              { "src": "javascript:alert(1)", "type": "video/mp4", "title": "evil" }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

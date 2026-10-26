@@ -53,6 +53,8 @@ const DETECTION_KEY = {
   'dom-image': 'detectDomImage',
   'dom-style': 'detectDomStyle',
   'dom-meta': 'detectDomMeta',
+  metadata: 'detectMetadata',
+  'site-api': 'detectSiteApi',
   performance: 'detectPerformance',
   network: 'detectNetwork',
   hook: 'detectHook',

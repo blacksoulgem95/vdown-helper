@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Metadata fixture</title>
+    <meta property="og:title" content="OG clip" />
+    <meta property="og:video" content="/media/sample.mp4?via=og" />
+    <meta property="og:video:type" content="video/mp4" />
+    <meta property="og:video:width" content="640" />
+    <meta property="og:video:height" content="360" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "VideoObject",
+        "name": "LD clip",
+        "contentUrl": "/media/sample.mp4?via=ld",
+        "embedUrl": "https://player.example/embed/1",
+        "duration": "PT6S"
+      }
+    </script>
+    <link rel="alternate" type="application/rss+xml" href="/feed.xml" title="Podcast" />
+    <link rel="alternate" type="application/rss+xml" href="https://elsewhere.invalid/feed.xml" />
+  </head>
+  <body>
+    <h1>A page that announces its media only through metadata</h1>
+  </body>
+</html>

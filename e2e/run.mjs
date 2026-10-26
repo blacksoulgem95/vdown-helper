@@ -3212,6 +3212,83 @@ await step('live: a recording stops by itself at the configured limit and is sav
   }
 });
 
+// ---- Metadata and open sites (VDH-041)
+await step(
+  "metadata: Open Graph, JSON-LD and a podcast feed on the page's own origin are listed; nothing leaves the origin",
+  async () => {
+    const mp = await ctx.newPage();
+    await mp.goto(`${A}/pages/meta.html`);
+    const id = await ext(
+      async (u) => (await chrome.tabs.query({})).filter((t) => t.url?.startsWith(u)).at(-1)?.id,
+      `${A}/pages/meta.html`,
+    );
+    const hitsBefore = servers.state.hits.length;
+    const pop = await openPopup(id);
+    await pop.getByRole('status').filter({ hasText: 'READY' }).waitFor({ timeout: 45000 });
+    const st = (await ext((i) => chrome.storage.session.get(`tab:${i}`), id))[`tab:${id}`];
+    const find = (frag) => st.resources.find((r) => r.url.includes(frag));
+    const og = find('via=og');
+    const ld = find('via=ld');
+    const feed = find('/formats/clip.opus');
+    assert(og && ld && feed, `saw ${st.resources.map((r) => r.url)}`);
+    for (const r of [og, ld, feed]) {
+      assert(r.detectedBy.includes('metadata'), `${r.url} detectedBy ${r.detectedBy}`);
+      assert(r.downloadability.status === 'downloadable', `${r.url}: ${JSON.stringify(r.downloadability)}`);
+    }
+    assert(
+      og.title === 'OG clip' && ld.title === 'LD clip' && feed.title === 'Episode one',
+      `titles ${og.title} / ${ld.title} / ${feed.title}`,
+    );
+    assert(feed.mediaType === 'audio', `feed item is ${feed.mediaType}`);
+    assert(!st.resources.some((r) => r.url.includes('player.example')), 'an embed page is not a media file');
+    const hits = servers.state.hits.slice(hitsBefore).join('\n');
+    assert(!/invalid|elsewhere/.test(hits), 'the foreign feed must never be contacted');
+    await shot(pop, 'popup-metadata');
+    await pop.close();
+    await mp.close();
+  },
+);
+
+await step(
+  "open site (PeerTube-shaped): the public API of the page's own site lists the video files, anonymously",
+  async () => {
+    const pt = await ctx.newPage();
+    await pt.goto(`${A}/w/kkGMgK9ZtnKfYAgnEtQxbv`);
+    const id = await ext(
+      async (u) => (await chrome.tabs.query({})).filter((t) => t.url?.startsWith(u)).at(-1)?.id,
+      `${A}/w/kkGMgK9ZtnKfYAgnEtQxbv`,
+    );
+    const known = servers.state.hits.length;
+    const pop = await openPopup(id);
+    await pop.getByRole('status').filter({ hasText: 'READY' }).waitFor({ timeout: 45000 });
+    const st = (await ext((i) => chrome.storage.session.get(`tab:${i}`), id))[`tab:${id}`];
+    const hd = st.resources.find((r) => r.url.includes('r=720'));
+    const sd = st.resources.find((r) => r.url.includes('r=360'));
+    assert(hd && sd, `saw ${st.resources.map((r) => r.url)}`);
+    assert(
+      hd.detectedBy.includes('site-api') && hd.title === 'A PeerTube video (720p)',
+      `${hd.detectedBy} ${hd.title}`,
+    );
+    assert(hd.downloadability.status === 'downloadable', JSON.stringify(hd.downloadability));
+    assert(
+      st.resources.some((r) => r.kind === 'hls-master' && r.detectedBy.includes('site-api')),
+      'the HLS playlist is listed too',
+    );
+    const api = servers.state.hits.slice(known).filter((h) => h.startsWith('peertube-api'));
+    assert(
+      api.length >= 1 && api.every((h) => h.endsWith('cookie=-')),
+      `the API was asked with cookies: ${api}`,
+    );
+    // and it downloads like any other file
+    await pop.locator(`[data-resource-id="${hd.id}"]`).getByRole('button', { name: 'DOWNLOAD' }).click();
+    const job = await jobFinished((j) => j.request.resourceId === hd.id, 90000);
+    assert(job.stage === 'completed', `stage ${job.stage}: ${JSON.stringify(job.error)}`);
+    assert(probe(fileOf(job)).codecs.includes('h264'), 'not a valid MP4');
+    await pop.close();
+    await pt.close();
+  },
+);
+
 await step('capture: EME-protected playback is never captured', async () => {
   const { pg, id } = await openMse('?eme=1');
   await pg.waitForFunction(() => document.getElementById('v').mediaKeys !== null, null, { timeout: 10000 });
