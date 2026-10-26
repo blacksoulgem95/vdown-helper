@@ -157,7 +157,13 @@ const ILLEGAL_CHARS = /[<>:"/\\|?*\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-
  * Result is never empty and is safe on Windows, macOS and Linux.
  */
 export function sanitizeFilename(name: string, fallback = 'video', maxLength = 150): string {
-  let out = name.normalize('NFC').replace(ILLEGAL_CHARS, '_').replace(/\s+/g, ' ').trim();
+  // "Live: the show" reads better as "Live - the show" than "Live_ the show" (a colon is not allowed on Windows).
+  let out = name
+    .normalize('NFC')
+    .replace(/\s*:\s+/g, ' - ')
+    .replace(ILLEGAL_CHARS, '_')
+    .replace(/\s+/g, ' ')
+    .trim();
   out = out.replace(/_{2,}/g, '_');
   out = out.replace(/^[.\s_]+|[.\s]+$/g, '');
   if (out.length > maxLength) out = out.slice(0, maxLength).replace(/[.\s]+$/, '');

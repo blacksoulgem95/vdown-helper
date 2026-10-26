@@ -64,20 +64,33 @@ async function updateBadge(tabId: number, state: TabState): Promise<void> {
  * (with access granted, an iframe that was reported unreadable by its parent has its own report).
  */
 export function mergeNotes(reports: ScanReport[]): ScanNotes {
+  const originOf = (r: ScanReport): string | undefined => {
+    try {
+      return new URL(r.pageUrl).origin;
+    } catch {
+      return undefined; // about:blank / srcdoc frames have no usable origin
+    }
+  };
   const scanned = new Set<string>();
   for (const r of reports) {
-    try {
-      scanned.add(new URL(r.pageUrl).origin);
-    } catch {
-      // about:blank / srcdoc frames have no usable origin
-    }
+    const o = originOf(r);
+    if (o) scanned.add(o);
   }
+  // A parent counts every cross-origin child as unreadable; the children that reported on their own were read after all.
+  const top = originOf(reports.find((r) => r.frameId === 0) ?? (reports[0] as ScanReport));
+  const readCrossOrigin = reports.filter((r) => {
+    const o = originOf(r);
+    return o !== undefined && o !== top;
+  }).length;
   const blocked = new Set<string>();
   for (const r of reports)
     for (const o of r.notes.blockedFrameOrigins ?? []) if (!scanned.has(o)) blocked.add(o);
   return {
     blobSources: reports.reduce((n, r) => n + r.notes.blobSources, 0),
-    inaccessibleFrames: reports.reduce((n, r) => n + r.notes.inaccessibleFrames, 0),
+    inaccessibleFrames: Math.max(
+      0,
+      reports.reduce((n, r) => n + r.notes.inaccessibleFrames, 0) - readCrossOrigin,
+    ),
     blockedFrameOrigins: [...blocked].slice(0, 20),
   };
 }

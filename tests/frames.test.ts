@@ -162,9 +162,18 @@ describe('mergeNotes (several frames)', () => {
     ]);
     expect(notes).toEqual({
       blobSources: 3,
-      inaccessibleFrames: 2,
+      inaccessibleFrames: 1, // the embed reported on its own: only the ad frame stayed unread
       blockedFrameOrigins: ['https://ads.example'],
     });
+  });
+  it('does not call a nested frame unreadable once it has reported (A -> C -> D, all scanned)', () => {
+    const notes = mergeNotes([
+      report('https://a.example/', ['https://c.example'], 0, 1),
+      report('https://c.example/mid', ['https://d.example'], 0, 1),
+      report('https://d.example/leaf', [], 0, 0),
+    ]);
+    expect(notes.inaccessibleFrames).toBe(0);
+    expect(notes.blockedFrameOrigins).toEqual([]);
   });
   it('tolerates frames without a usable URL and old reports', () => {
     const old = {
