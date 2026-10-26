@@ -74,3 +74,4 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-054](VDH-054-paste-stream-link.md) | Add a stream link by hand (.m3u8, .m3u, .mpd, media files) | in-progress | P1 | ui | VDH-050 |
 | [VDH-055](VDH-055-ts-saved-as-txt.md) | Streams saved as .txt on Linux (untyped staged file) | in-progress | P0 | offscreen | VDH-047 |
 | [VDH-056](VDH-056-frame-note-and-colon-names.md) | No false "frames could not be inspected" note; colons in titles become " - " in file names | in-progress | P2 | ui | VDH-033 |
+| [VDH-057](VDH-057-settings-flash-defaults.md) | Settings page showed the defaults until the stored settings loaded | in-progress | P2 | ui | VDH-010 |
