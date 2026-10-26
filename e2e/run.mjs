@@ -2252,6 +2252,13 @@ let gatedResource;
 await step(
   'nested cross-origin iframes (A -> C -> D) are scanned and each resource knows its frame',
   async () => {
+    // Control for the hook step below, so the hook (on by default) is switched off here.
+    await ext(() => chrome.storage.local.set({ settings: { schemaVersion: 1, pageHook: false } }));
+    await until(
+      async () => (await ext(() => chrome.scripting.getRegisteredContentScripts())).length === 0,
+      'hook removal',
+      10000,
+    );
     const fp = await ctx.newPage();
     await fp.goto(framesUrl);
     await fp.waitForTimeout(2500); // nested frames load
