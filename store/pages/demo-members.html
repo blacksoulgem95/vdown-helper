@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en" data-it-title="Anteprima (solo iscritti) · Demo Gallery">
+  <head>
+    <meta charset="utf-8" />
+    <title>Premiere (members only) · Demo Gallery</title>
+    <link rel="stylesheet" href="demo.css" />
+  </head>
+  <body>
+    <header>
+      <div class="brand">Demo<span>Gallery</span></div>
+      <span class="demo" data-it="Pagina demo">Demo page</span>
+      <nav>
+        <span data-it="Esplora">Explore</span><span data-it="Iscritti">Members</span
+        ><span data-it="Info">About</span>
+      </nav>
+    </header>
+    <main>
+      <section>
+        <video
+          controls
+          muted
+          preload="metadata"
+          title="Premiere trailer"
+          data-it-attr-title="Trailer dell'anteprima"
+          poster="/demo/poster.jpg"
+          src="/demo/behind-the-scenes-720.mp4"
+        ></video>
+        <h1 data-it="Anteprima: il film completo">Premiere: the full film</h1>
+        <div class="meta" data-it="Solo iscritti · il film è protetto da DRM; il trailer è libero">
+          Members only · the film itself is DRM-protected; the trailer is free
+        </div>
+      </section>
+      <aside>
+        <div class="card">
+          <h2 data-it="Iscritti">Members</h2>
+          <p data-it="Il film completo passa da uno stream protetto (DRM). Il trailer è un normale file.">
+            The full film plays through a protected (DRM) stream. Its trailer is a regular file.
+          </p>
+        </div>
+      </aside>
+      <p
+        class="note"
+        data-it='Questa pagina serve a mostrare vdown-helper al lavoro. Il "film" è uno stream di prova che dichiara il DRM.'
+      >
+        This page exists to show vdown-helper at work. The "film" is a test stream that declares DRM.
+      </p>
+    </main>
+    <script>
+      // The protected film's manifest, as a player would request it.
+      fetch('/hls-drm/index.m3u8').then(() => (window.ready = true));
+    </script>
+    <script src="demo-i18n.js"></script>
+  </body>
+</html>

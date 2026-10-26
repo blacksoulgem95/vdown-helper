@@ -17,7 +17,9 @@
     "test:e2e": "node e2e/run.mjs",
     "check:dist": "node scripts/check-dist.mjs",
     "serve:fixtures": "node e2e/serve.mjs",
-    "package": "node scripts/build.mjs && node scripts/check-dist.mjs && node scripts/package.mjs"
+    "package": "node scripts/build.mjs && node scripts/check-dist.mjs && node scripts/package.mjs",
+    "store:assets": "node scripts/store-assets.mjs",
+    "site:build": "node scripts/build-site.mjs"
   },
   "dependencies": {
     "@ffmpeg/core": "^0.12.10",

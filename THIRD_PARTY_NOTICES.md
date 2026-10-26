@@ -11,8 +11,8 @@ against the upstream source, so check them before redistributing.
 | fflate (ZIP writer)                                             | 0.8.3   | MIT                  | offscreen bundle                                     |
 | React / React DOM                                               | 19.3.1  | MIT                  | popup, options, side panel                           |
 | lucide-react (icons)                                            | 1.61.0  | ISC                  | popup, options, side panel                           |
-| Inter (variable, latin subset) via `@fontsource-variable/inter` | 5.3.0   | SIL OFL-1.1          | `dist/assets/*.woff2`                                |
-| JetBrains Mono (latin 400/700) via `@fontsource/jetbrains-mono` | 5.3.0   | SIL OFL-1.1          | `dist/assets/*.woff2`                                |
+| Inter (variable, latin subset) via `@fontsource-variable/inter` | 5.3.0   | SIL OFL-1.1          | `dist/assets/*.woff2`, website `assets/fonts/`       |
+| JetBrains Mono (latin 400/700) via `@fontsource/jetbrains-mono` | 5.3.0   | SIL OFL-1.1          | `dist/assets/*.woff2`, website `assets/fonts/`       |
 
 ## About the GPL FFmpeg core
 

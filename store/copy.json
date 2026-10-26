@@ -1,0 +1,150 @@
+{
+  "en": {
+    "address": "demo page · served locally",
+    "screenshots": [
+      {
+        "slug": "detect",
+        "kind": "popup",
+        "page": "page-demo",
+        "panel": "popup-detect",
+        "eyebrow": "Detect",
+        "title": ["Every video on the page.", "One click."],
+        "body": "Files, HLS and DASH streams, subtitles, images — even players embedded from other sites. The best match comes first.",
+        "points": ["Best quality on top", "Size and length before you download", "Embedded players included"]
+      },
+      {
+        "slug": "decode",
+        "kind": "sidepanel",
+        "page": "page-demo",
+        "panel": "studio",
+        "eyebrow": "Decode",
+        "title": ["Streams in.", "One clean file out."],
+        "body": "Pick quality, audio track and format. Video is never re-encoded: segments are joined as they are, and audio conversion runs inside your browser.",
+        "points": ["No video re-encoding", "MP4 · MKV · MP3 · M4A · WAV", "FFmpeg runs locally"]
+      },
+      {
+        "slug": "download",
+        "kind": "popup",
+        "page": "page-demo",
+        "panel": "popup-queue",
+        "eyebrow": "Download",
+        "title": ["Real progress.", "Real files."],
+        "body": "Every stage is shown as it happens, with speed and time left. Open the file or its folder straight from the popup.",
+        "points": [
+          "Pause, resume, retry",
+          "Joined with no quality loss",
+          "Saved by Chrome's download manager"
+        ]
+      },
+      {
+        "slug": "record",
+        "kind": "popup",
+        "page": "page-live",
+        "panel": "popup-live",
+        "eyebrow": "Record",
+        "title": ["Live right now?", "Record it."],
+        "body": "Live HLS and DASH streams, camera, screen-share and call streams are recorded as they play. Stop whenever you want: what was recorded is saved.",
+        "points": [
+          "Stop and save at any time",
+          "Time and size limits you set",
+          "Gaps are counted, never hidden"
+        ]
+      },
+      {
+        "slug": "private",
+        "kind": "popup",
+        "page": "page-members",
+        "panel": "popup-members",
+        "eyebrow": "Respect",
+        "title": ["Private by design.", "Honest about DRM."],
+        "body": "No account, no analytics, nothing sent anywhere: everything happens in your browser. Streams protected by DRM are marked and left alone.",
+        "points": ["Zero tracking", "Permissions only when you click", "DRM is never bypassed"]
+      }
+    ],
+    "promo": {
+      "title": ["Every video.", "One click."],
+      "tagline": "Detect · Decode · Download"
+    },
+    "marquee": {
+      "title": ["Every video on the page.", "Saved in one click."],
+      "body": "Streams, embedded players and live broadcasts — joined without re-encoding, entirely in your browser.",
+      "chips": ["HLS & DASH", "Live recording", "Zero tracking"]
+    }
+  },
+  "it": {
+    "address": "pagina demo · servita in locale",
+    "screenshots": [
+      {
+        "slug": "rileva",
+        "kind": "popup",
+        "page": "page-demo",
+        "panel": "popup-detect",
+        "eyebrow": "Rileva",
+        "title": ["Ogni video della pagina.", "Un clic."],
+        "body": "File, stream HLS e DASH, sottotitoli, immagini — anche i player incorporati da altri siti. La scelta migliore è in cima.",
+        "points": [
+          "La qualità migliore in cima",
+          "Dimensione e durata prima di scaricare",
+          "Anche i player incorporati"
+        ]
+      },
+      {
+        "slug": "decodifica",
+        "kind": "sidepanel",
+        "page": "page-demo",
+        "panel": "studio",
+        "eyebrow": "Decodifica",
+        "title": ["Entrano gli stream.", "Esce un file pulito."],
+        "body": "Scegli qualità, traccia audio e formato. Il video non viene mai ricodificato: i segmenti si uniscono così come sono, e la conversione audio avviene nel browser.",
+        "points": ["Video mai ricodificato", "MP4 · MKV · MP3 · M4A · WAV", "FFmpeg gira in locale"]
+      },
+      {
+        "slug": "scarica",
+        "kind": "popup",
+        "page": "page-demo",
+        "panel": "popup-queue",
+        "eyebrow": "Scarica",
+        "title": ["Avanzamento vero.", "File veri."],
+        "body": "Ogni fase si vede mentre accade, con velocità e tempo rimanente. Apri il file o la sua cartella direttamente dal popup.",
+        "points": [
+          "Pausa, ripresa, riprova",
+          "Unione senza perdita di qualità",
+          "Salvato dal download manager di Chrome"
+        ]
+      },
+      {
+        "slug": "registra",
+        "kind": "popup",
+        "page": "page-live",
+        "panel": "popup-live",
+        "eyebrow": "Registra",
+        "title": ["È in diretta?", "Registrala."],
+        "body": "Dirette HLS e DASH, webcam, condivisioni schermo e chiamate vengono registrate mentre vanno in onda. Fermati quando vuoi: ciò che è registrato viene salvato.",
+        "points": [
+          "Ferma e salva quando vuoi",
+          "Limiti di durata e dimensione",
+          "I buchi sono contati, mai nascosti"
+        ]
+      },
+      {
+        "slug": "privato",
+        "kind": "popup",
+        "page": "page-members",
+        "panel": "popup-members",
+        "eyebrow": "Rispetto",
+        "title": ["Privato per progetto.", "Onesto sul DRM."],
+        "body": "Nessun account, nessuna statistica, niente inviato a nessuno: tutto avviene nel tuo browser. Gli stream protetti da DRM vengono segnalati e lasciati stare.",
+        "points": ["Zero tracciamento", "Permessi solo quando clicchi", "Il DRM non viene mai aggirato"]
+      }
+    ],
+    "promo": {
+      "title": ["Ogni video.", "Un clic."],
+      "tagline": "Rileva · Decodifica · Scarica"
+    },
+    "marquee": {
+      "title": ["Ogni video della pagina.", "Salvato con un clic."],
+      "body": "Stream, player incorporati e dirette — uniti senza ricodifica, interamente nel tuo browser.",
+      "chips": ["HLS e DASH", "Registrazione live", "Zero tracciamento"]
+    }
+  }
+}

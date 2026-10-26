@@ -18,6 +18,12 @@ on:
       - 'BACKLOG/**'
       - 'docs/**'
       - '.claude/**'
+      - 'site/**' # the website and the store images ship separately (pages.yml)
+      - 'store/**'
+      - 'store-assets/**'
+      - 'scripts/build-site.mjs'
+      - 'scripts/store-assets.mjs'
+      - '.github/workflows/pages.yml'
   workflow_dispatch:
     inputs:
       bump:
@@ -112,10 +118,13 @@ jobs:
           VERSION: ${{ needs.package.outputs.version }}
         run: |
           set -euo pipefail
+          # The same zip under a fixed name, so the website can link releases/latest/download/vdown-helper-chrome.zip.
+          cp "release/vdown-helper-$VERSION.zip" release/vdown-helper-chrome.zip
           # Creates the tag v$VERSION on this exact commit. Fails (rather than overwrite) if the release exists.
           gh release create "v$VERSION" \
             "release/vdown-helper-$VERSION.zip" \
             "release/vdown-helper-$VERSION.zip.sha256" \
+            release/vdown-helper-chrome.zip \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "vdown-helper $VERSION" \
