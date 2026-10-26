@@ -42,6 +42,9 @@ interface Entry {
 
 const PLAYLIST_FORMATS: ReadonlySet<MediaFormat> = new Set(['hls', 'm3u', 'dash']);
 const MAX_VARIANTS = 50;
+const MAX_AUDIO_TRACKS = 50;
+const MAX_TEXT = 200;
+const clip = (s: string): string => (s.length > MAX_TEXT ? `${s.slice(0, MAX_TEXT)}…` : s);
 
 function collectEntries(cands: RawCandidate[]): Entry[] {
   const map = new Map<string, Entry>();
@@ -97,7 +100,7 @@ function skeleton(e: Entry, ctx: AnalyzeContext, format: MediaFormat): MediaReso
   const pageHost = parseUrl(ctx.pageUrl)?.hostname ?? parseUrl(e.url)?.hostname ?? '';
   const titleOpts: { url: string; elementTitle?: string; pageTitle?: string } = {
     url: e.url,
-    pageTitle: ctx.pageTitle,
+    pageTitle: clip(ctx.pageTitle),
   };
   if (e.hints.title) titleOpts.elementTitle = e.hints.title;
   const r: MediaResource = {
@@ -105,9 +108,9 @@ function skeleton(e: Entry, ctx: AnalyzeContext, format: MediaFormat): MediaReso
     url: e.url,
     tabId: ctx.tabId,
     pageUrl: ctx.pageUrl,
-    pageTitle: ctx.pageTitle,
+    pageTitle: clip(ctx.pageTitle),
     host: pageHost,
-    title: inferTitle(titleOpts),
+    title: clip(inferTitle(titleOpts)),
     kind: 'file',
     format,
     mediaType: e.hints.mediaType ?? mediaTypeOf(format),
@@ -211,7 +214,10 @@ async function finishMaster(
 ): Promise<MediaResource> {
   r.kind = 'hls-master';
   r.variants = pl.variants.slice(0, MAX_VARIANTS);
-  r.audioTracks = pl.renditions.filter((x) => x.type === 'AUDIO' && x.uri);
+  r.audioTracks = pl.renditions
+    .filter((x) => x.type === 'AUDIO' && x.uri)
+    .slice(0, MAX_AUDIO_TRACKS)
+    .map((a) => ({ ...a, name: clip(a.name), groupId: clip(a.groupId) }));
   applyVariantTop(r, r.variants[0]);
   const audioOnly = r.variants.length === 0 && r.audioTracks.length > 0;
   if (audioOnly) r.mediaType = 'audio';

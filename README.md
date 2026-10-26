@@ -142,7 +142,8 @@ code (`npm run check:dist` enforces this).
   player. Downloading segments happens from the extension, which is subject to CORS unless you grant that site. A
   `403`/CORS failure is shown as such; it is never hidden or retried forever. Fetch failures cannot distinguish "CORS
   refused" from "network down" (a browser limitation), so the message says both.
-- **Authenticated media.** Cookies are sent only to sites you granted access to. Streams that need custom headers,
+- **Authenticated media.** Cookies are sent only to the origin of the page you are on, never to other hosts a
+  playlist mentions (those are fetched anonymously). Streams that need custom headers,
   tokens injected by page scripts, or short-lived signed URLs may fail or expire between detection and download.
 - **Encrypted HLS.** Plain **AES-128** (key URL fetchable by the page itself) is decrypted, as any player would.
   **SAMPLE-AES, Widevine, FairPlay, PlayReady and any other DRM are detected and refused**; there is no workaround
@@ -190,7 +191,7 @@ document (segments → OPFS → optional FFmpeg.wasm → blob URL → `chrome.do
 ```bash
 npm run typecheck      # strict TypeScript
 npm run lint           # ESLint (bans dangerouslySetInnerHTML, eval, any)
-npm test               # Vitest: 230+ unit tests
+npm test               # Vitest: 250+ unit tests
 npm run build && npm run check:dist
 npm run test:e2e       # real Chromium + fixtures + ffprobe verification (needs ffmpeg/ffprobe on PATH)
 npm run serve:fixtures # the E2E fixture sites, for manual testing
@@ -203,7 +204,7 @@ scanner (jsdom) and i18n catalog parity.
 
 **End-to-end tests** (`e2e/run.mjs`) load the production build unpacked in Chromium and verify, with real files
 inspected by `ffprobe`/`ffmpeg`: detection and classification, direct MP4 download, HLS concatenation (fully decodable),
-AES-128 decryption, CORS-open CDN, merge of separate audio/video via FFmpeg.wasm, MP3 transcode (bitrate checked),
+AES-128 decryption (including encrypted fMP4 init sections), a server that ignores `Range`, a server that stalls, CORS-open CDN, merge of separate audio/video via FFmpeg.wasm, MP3 transcode (bitrate checked),
 AAC→M4A copy, WAV, TS→MP4 remux, FFmpeg progress events on a 5-minute encode, pause/resume, cancel (no file produced),
 failure → retry, the memory guard (a 140 MB stream is refused for MP4 but saved as TS), DRM and unsafe-input refusal,
 empty and restricted pages, every popup control, keyboard focus order, settings persistence, a forced service-worker
@@ -271,6 +272,10 @@ toolbar icon.
   allow-listed (`http`/`https`); file names and sub-folders are sanitised twice (UI and background) against path
   traversal, reserved names and control/bidi characters; every message is validated and must come from this
   extension; the background re-checks DRM, live status and size limits no matter what the UI sent.
+- **No confused deputy.** Extension-origin requests (the only ones exempt from CORS) never carry cookies to other
+  sites, never target loopback / private-network / `.local` hosts on behalf of a public page, and are never made
+  during an automatic scan. Responses are bounded in size, time and count, so a hostile playlist or server cannot
+  exhaust memory, disk or a download slot.
 - **Logs are redacted** (query strings and credentials removed from every logged URL).
 - **Protected content stays protected.** DRM/SAMPLE-AES streams are refused in the UI _and_ in the background.
 - You are responsible for having the right to save what you download.

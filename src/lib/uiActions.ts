@@ -7,7 +7,7 @@ import { originsOf } from './inspect';
 import { probeHeaders } from './netprobe';
 import { send } from './messaging';
 import { audioOptions, buildRequest, defaultChoices, type Choices } from './request';
-import { parseUrl } from './security';
+import { mayExtensionFetch, parseUrl } from './security';
 
 export type StartOutcome = { ok: true; jobId: string } | { ok: false; error: string; needsAccess?: string[] };
 
@@ -127,7 +127,7 @@ export function originsFor(inspections: Inspections): string[] {
  * Origins the extension still cannot read. A site that already allows cross-origin reads (typical CDNs send
  * `Access-Control-Allow-Origin: *`) needs no permission prompt, so each missing origin is probed first.
  */
-export async function originsNeedingAccess(inspections: Inspections): Promise<string[]> {
+export async function originsNeedingAccess(inspections: Inspections, pageUrl: string): Promise<string[]> {
   const samples = {
     ...(inspections.audio?.originSamples ?? {}),
     ...(inspections.video?.originSamples ?? {}),
@@ -136,7 +136,9 @@ export async function originsNeedingAccess(inspections: Inspections): Promise<st
   for (const origin of originsFor(inspections)) {
     if (await hasAccess([origin])) continue;
     const sample = samples[origin];
-    const probe = sample ? await probeHeaders(sample, fetch, 'omit') : undefined;
+    // Never probe private-network targets on a page's say-so.
+    const probe =
+      sample && mayExtensionFetch(sample, pageUrl) ? await probeHeaders(sample, fetch, 'omit') : undefined;
     // Any HTTP response (even 4xx) means the request was readable; only a blocked fetch needs permission.
     if (!probe || (!probe.ok && probe.kind !== 'http')) missing.push(origin);
   }
@@ -156,16 +158,16 @@ export async function startFromChoices(
   if ('ok' in insp && insp.ok === false) return { ok: false, error: describeError(insp.error) };
   const inspections: Inspections = 'inspections' in insp ? insp.inspections : (insp as Inspections);
 
-  const missing = await originsNeedingAccess(inspections);
+  const missing = await originsNeedingAccess(inspections, resource.pageUrl);
   if (missing.length > 0 && !(await requestAccess(missing))) {
     return { ok: false, error: t('errAccessDenied'), needsAccess: missing };
   }
   const request = buildRequest(resource, settings, choices, inspections.video);
-  const granted: string[] = [];
-  for (const o of originsFor(inspections)) if (await hasAccess([o])) granted.push(o);
-  request.credentialedOrigins = granted;
+  // Cookies only for the page's own origin; other hosts the playlist names are fetched anonymously.
+  request.credentialedOrigins = originOf(resource.pageUrl) ? [originOf(resource.pageUrl) as string] : [];
   // Merge the audio inspection's live/DRM facts conservatively.
   if (inspections.audio?.live) request.live = true;
+  if (inspections.audio?.protectedByDrm) return { ok: false, error: t('errProtected') };
   const res = await send('start-download', { request });
   return res.ok ? { ok: true, jobId: res.jobId } : { ok: false, error: describeError(res.error) };
 }

@@ -22,6 +22,56 @@ export function isBlobUrl(input: string): boolean {
 }
 
 /**
+ * True for loopback, private (RFC 1918), link-local, unique-local and "local network" host names. Requests to such
+ * hosts carry the user's network position and cookies, so a hostile page must not be able to aim the extension at them.
+ */
+export function isPrivateHost(hostname: string): boolean {
+  const h = hostname
+    .toLowerCase()
+    .replace(/^\[|\]$/g, '')
+    .replace(/\.$/, '');
+  if (
+    h === 'localhost' ||
+    h.endsWith('.localhost') ||
+    h.endsWith('.local') ||
+    h.endsWith('.internal') ||
+    h.endsWith('.lan') ||
+    h.endsWith('.home.arpa')
+  ) {
+    return true;
+  }
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h);
+  if (v4) {
+    const a = Number(v4[1]);
+    const b = Number(v4[2]);
+    return (
+      a === 10 ||
+      a === 127 ||
+      a === 0 ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 100 && b >= 64 && b <= 127)
+    );
+  }
+  if (h.includes(':'))
+    return h === '::1' || h === '::' || /^f[cd]/.test(h) || /^fe[89ab]/.test(h) || h.startsWith('::ffff:');
+  return !h.includes('.'); // single-label intranet names
+}
+
+/**
+ * Whether the extension itself may fetch `target` on behalf of the page at `pageUrl`: private-network targets are
+ * only allowed when the page is itself on a private host (a local media server the user is browsing).
+ */
+export function mayExtensionFetch(target: string, pageUrl: string): boolean {
+  const t = parseUrl(target);
+  if (!t || (t.protocol !== 'http:' && t.protocol !== 'https:')) return false;
+  if (!isPrivateHost(t.hostname)) return true;
+  const page = parseUrl(pageUrl);
+  return page !== undefined && isPrivateHost(page.hostname);
+}
+
+/**
  * Canonical form used for deduplication: no fragment, no userinfo, default port dropped,
  * query parameters sorted. The path is left untouched because paths are case/slash sensitive.
  */

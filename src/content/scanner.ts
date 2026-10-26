@@ -80,7 +80,7 @@ function scanElements(c: Collector, doc: Document): void {
         extra.height = media.videoHeight;
       }
       const title = media.getAttribute('title') ?? media.getAttribute('aria-label') ?? undefined;
-      if (title) extra.title = title;
+      if (title) extra.title = title.slice(0, 300);
       if (isVideo && media.poster) {
         const poster = abs(media.poster, base);
         if (poster && /^https?:/i.test(poster)) extra.poster = poster;
@@ -140,7 +140,12 @@ export function scan(): ScanReport {
     }
   }
   scanPerformance(c, doc.baseURI);
-  return { pageUrl: location.href, pageTitle: document.title, candidates: c.candidates, notes: c.notes };
+  return {
+    pageUrl: location.href,
+    pageTitle: document.title.slice(0, 300),
+    candidates: c.candidates,
+    notes: c.notes,
+  };
 }
 
 export interface VdhApi {

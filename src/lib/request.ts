@@ -10,7 +10,14 @@ import type { VariantInspection } from '@/types/messages';
 import type { MediaResource } from '@/types/media';
 import type { Settings } from '@/types/settings';
 import { planOutput, type Plan, type PlanInput } from './compat';
-import { describeCodecs, estimateBytes, resolutionLabel, type AudioFamily, type VideoFamily } from './media';
+import {
+  describeCodecs,
+  estimateBytes,
+  formatFromMime,
+  resolutionLabel,
+  type AudioFamily,
+  type VideoFamily,
+} from './media';
 import { pickVariantIndex } from './settings';
 import {
   isSafeFetchUrl,
@@ -18,6 +25,7 @@ import {
   sanitizeFilename,
   sanitizeSubfolder,
   withExtension,
+  parseUrl,
 } from './security';
 
 export interface Choices {
@@ -143,7 +151,11 @@ export function buildRequest(
     subfolder: sanitizeSubfolder(settings.subfolder),
     saveAs: choices.saveAs ?? settings.askWhereToSave,
     qualityLabel: '',
-    sourceFormat: isHls ? 'hls' : resource.format,
+    sourceFormat: isHls
+      ? 'hls'
+      : resource.format !== 'unknown'
+        ? resource.format
+        : (formatFromMime(resource.mimeType) ?? 'unknown'),
     isHls,
     hasMuxedAudio,
     hasVideo,
@@ -166,7 +178,8 @@ export function buildRequest(
     maxMemoryMb: settings.maxMemoryMb,
     maxEncodeDurationSec: settings.maxEncodeDurationSec,
   });
-  const ext = plan.extension || (isHls ? 'ts' : resource.format === 'unknown' ? 'mp4' : resource.format);
+  // May be empty for a source of unknown type: the file then keeps no extension and Chrome picks one.
+  const ext = plan.extension;
   const base = choices.filename.trim()
     ? sanitizeFilename(choices.filename)
     : renderNameTemplate(settings.namingTemplate, {
@@ -177,7 +190,7 @@ export function buildRequest(
         format: ext,
         id: resource.id,
       });
-  req.filename = withExtension(base, ext);
+  req.filename = ext ? withExtension(base, ext) : base;
   req.qualityLabel = qualityLabelFor(req, height);
   return req;
 }
@@ -234,9 +247,11 @@ export function sanitizeRequest(req: DownloadRequest): DownloadRequest | undefin
           .toLowerCase()
       : '';
   const base = sanitizeFilename(dot > 0 ? req.filename.slice(0, dot) : req.filename);
-  const origins = (req.credentialedOrigins ?? [])
-    .filter((o) => typeof o === 'string' && /^https?:\/\/[^/]+$/.test(o))
-    .slice(0, 24);
+  // Cookies may only accompany requests to the page's own origin (never an origin the page merely names).
+  const pageOrigin = parseUrl(req.pageUrl)?.origin;
+  const origins = (req.credentialedOrigins ?? []).filter(
+    (o) => o === pageOrigin && /^https?:\/\/[^/]+$/.test(o),
+  );
   return {
     ...req,
     filename: ext ? `${base}.${ext}` : base,

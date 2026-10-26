@@ -30,7 +30,7 @@ async function updateBadge(tabId: number, state: TabState): Promise<void> {
   }
 }
 
-async function runScan(tabId: number): Promise<TabState> {
+async function runScan(tabId: number, automatic: boolean): Promise<TabState> {
   let tab: chrome.tabs.Tab;
   try {
     tab = await chrome.tabs.get(tabId);
@@ -79,7 +79,9 @@ async function runScan(tabId: number): Promise<TabState> {
       resources: provisional,
     });
 
-    const resources = sortResources(await analyzeCandidates(candidates, ctx, combinedFetcher(tabId)));
+    const resources = sortResources(
+      await analyzeCandidates(candidates, ctx, combinedFetcher(tabId, report.pageUrl, !automatic)),
+    );
     const done: TabState = {
       ...base,
       status: 'ready',
@@ -111,10 +113,10 @@ async function runScan(tabId: number): Promise<TabState> {
 }
 
 /** Scan a tab. Concurrent requests for the same tab share one scan. */
-export function scanTab(tabId: number): Promise<TabState> {
+export function scanTab(tabId: number, automatic = false): Promise<TabState> {
   const running = inFlight.get(tabId);
   if (running) return running;
-  const p = runScan(tabId).finally(() => inFlight.delete(tabId));
+  const p = runScan(tabId, automatic).finally(() => inFlight.delete(tabId));
   inFlight.set(tabId, p);
   return p;
 }
@@ -122,7 +124,8 @@ export function scanTab(tabId: number): Promise<TabState> {
 /** Fetch and summarise one HLS media playlist (a chosen variant or audio rendition) for the Studio. */
 export async function inspectVariant(tabId: number, url: string): Promise<VariantInspection> {
   if (!isSafeFetchUrl(url)) throw new Error('unsafe-url');
-  const res = await combinedFetcher(tabId).text(url);
+  const tab = await chrome.tabs.get(tabId).catch(() => undefined);
+  const res = await combinedFetcher(tabId, tab?.url ?? '').text(url);
   if (!res.ok) throw new Error(res.kind === 'http' ? `http-${res.status ?? 0}` : 'blocked');
   const parsed = parseHls(res.text ?? '', res.finalUrl || url);
   if (!parsed.ok) throw new Error(`parse-${parsed.error.code}`);

@@ -7,8 +7,16 @@ export async function getTabState(tabId: number): Promise<TabState | null> {
   return (stored[key(tabId)] as TabState | undefined) ?? null;
 }
 
+/** chrome.storage.session holds 10 MB in total; one tab may use at most this much of it. */
+const MAX_STATE_BYTES = 1_000_000;
+
 export async function setTabState(state: TabState): Promise<void> {
-  await chrome.storage.session.set({ [key(state.tabId)]: state });
+  let next = state;
+  // Drop the least relevant resources (the list is ranked best-first) until the state fits.
+  while (next.resources.length > 1 && JSON.stringify(next).length > MAX_STATE_BYTES) {
+    next = { ...next, resources: next.resources.slice(0, Math.floor(next.resources.length / 2)) };
+  }
+  await chrome.storage.session.set({ [key(state.tabId)]: next });
 }
 
 export async function clearTabState(tabId: number): Promise<void> {

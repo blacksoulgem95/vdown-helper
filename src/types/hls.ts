@@ -23,6 +23,8 @@ export interface HlsByteRange {
 export interface HlsMap {
   uri: string;
   byteRange?: HlsByteRange;
+  /** Key in effect where the EXT-X-MAP tag appears; it also encrypts the init section. */
+  key?: HlsKey;
 }
 
 export interface HlsSegment {

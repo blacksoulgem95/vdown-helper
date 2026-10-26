@@ -170,12 +170,13 @@ describe('sanitizeRequest', () => {
     expect(out?.filename).not.toMatch(/[\\/]/);
     expect(out?.subfolder).toBe('etc');
   });
-  it('keeps only well-formed origins in credentialedOrigins', () => {
+  it('keeps cookies for the page origin only', () => {
     const out = sanitizeRequest({
       ...base,
+      pageUrl: 'https://a.com/watch',
       credentialedOrigins: ['https://a.com', 'javascript:x', 'https://b.com/path', 'http://c.com:8080'],
     });
-    expect(out?.credentialedOrigins).toEqual(['https://a.com', 'http://c.com:8080']);
+    expect(out?.credentialedOrigins).toEqual(['https://a.com']);
   });
   it('rejects unsafe URLs', () => {
     expect(sanitizeRequest({ ...base, sourceUrl: 'javascript:alert(1)' })).toBeUndefined();

@@ -96,6 +96,11 @@ export function audioFitsContainer(
   return TS_AUDIO.has(family);
 }
 
+/** File extension for a source format. Unknown sources get none: Chrome names them from the response instead. */
+export function fileExtension(format: MediaFormat): string {
+  return format === 'unknown' || format === 'blob' || format === 'm3u' || format === 'dash' ? '' : format;
+}
+
 export function audioExtension(format: AudioFormat): string {
   return format === 'm4a' ? 'm4a' : format;
 }
@@ -162,7 +167,7 @@ export function planOutput(i: PlanInput): Plan {
     if (target && !videoFitsContainer(i.videoFamily, target)) issues.push('video-codec-container');
     if (issues.length) return base;
     const hlsCopy = i.isHls;
-    const ext = target ?? (i.isHls ? (i.fragmented ? 'mp4' : 'ts') : i.sourceFormat);
+    const ext = target ?? (i.isHls ? (i.fragmented ? 'mp4' : 'ts') : fileExtension(i.sourceFormat));
     // Muxed sources need FFmpeg to drop the audio; a native download would keep it.
     const mustStripAudio = i.hasMuxedAudio || (!i.isHls && !sourceIsAudioFile);
     return finalize(
@@ -186,7 +191,7 @@ export function planOutput(i: PlanInput): Plan {
 
   if (wantsOriginal && !mergeNeeded) {
     // Preserve the source container: nothing is re-encoded.
-    const ext = i.isHls ? (i.fragmented ? 'mp4' : 'ts') : i.sourceFormat;
+    const ext = i.isHls ? (i.fragmented ? 'mp4' : 'ts') : fileExtension(i.sourceFormat);
     return finalize(
       {
         ...base,

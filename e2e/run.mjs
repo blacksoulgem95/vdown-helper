@@ -879,6 +879,78 @@ await step(
   },
 );
 
+await step('AES-128 fMP4: the encrypted init section is decrypted too (decodable MP4 output)', async () => {
+  const r = byPath(state, '/hls-aes-fmp4/index.m3u8');
+  assert(r && r.downloadability.status === 'downloadable', `card ${JSON.stringify(r?.downloadability)}`);
+  const res = await send({
+    ...baseRequest,
+    resourceId: 'fmp4',
+    sourceUrl: r.url,
+    filename: 'aes-fmp4.mp4',
+    container: 'original',
+    fragmented: true,
+  });
+  assert(res.ok, JSON.stringify(res));
+  const job = await jobFinished((j) => j.request.filename === 'aes-fmp4.mp4', 90000);
+  assert(job.stage === 'completed', `stage ${job.stage}: ${JSON.stringify(job.error)}`);
+  const file = fileOf(job);
+  assert(probe(file).codecs.includes('h264'), 'not a valid MP4 (init section not decrypted?)');
+  assert(decodeErrors(file) === '', 'decode errors');
+});
+
+await step(
+  'byte-range HLS works even when the server ignores Range (whole file returned, slice kept)',
+  async () => {
+    const normal = byPath(state, '/hls-range/index.m3u8');
+    assert(
+      normal && normal.downloadability.status === 'downloadable',
+      `card ${JSON.stringify(normal?.downloadability)}`,
+    );
+    for (const [label, base] of [
+      ['range-aware', A],
+      ['range-ignoring', `${A}/__norange`],
+    ]) {
+      const name = `range-${label}.ts`;
+      const res = await send({
+        ...baseRequest,
+        resourceId: name,
+        sourceUrl: `${base}/hls-range/index.m3u8`,
+        filename: name,
+        container: 'ts',
+      });
+      assert(res.ok, `${label}: ${JSON.stringify(res)}`);
+      const job = await jobFinished((j) => j.request.filename === name, 90000);
+      assert(job.stage === 'completed', `${label}: ${job.stage} ${JSON.stringify(job.error)}`);
+      const file = fileOf(job);
+      assert(decodeErrors(file) === '', `${label}: decode errors`);
+      assert(Math.abs(probe(file).duration - 6) < 0.8, `${label}: duration ${probe(file).duration}`);
+      assert(statSync(file).size < 5 * 1024 * 1024, `${label}: file far too large (${statSync(file).size})`);
+    }
+  },
+);
+
+await step(
+  'a server that stalls mid-body fails the job within the idle timeout instead of hanging',
+  async () => {
+    // The playlist itself comes from the normal fixture server; only its segment stalls.
+    const res = await send({
+      ...baseRequest,
+      resourceId: 'stall',
+      sourceUrl: `${A}/stall/index.m3u8`,
+      filename: 'stall.ts',
+      container: 'ts',
+    });
+    assert(res.ok, JSON.stringify(res));
+    const t0 = Date.now();
+    const job = await jobFinished((j) => j.request.filename === 'stall.ts', 90000);
+    assert(
+      job.stage === 'failed' && job.error.code === 'network',
+      `got ${job.stage} ${JSON.stringify(job.error)}`,
+    );
+    console.log(`        stalled job failed after ${((Date.now() - t0) / 1000).toFixed(0)} s`);
+  },
+);
+
 await step('DRM-protected requests are refused by the background even if the UI is bypassed', async () => {
   const res = await send({
     ...baseRequest,
@@ -946,6 +1018,15 @@ await step('settings persist across reloads, validate input, and reset', async (
   await opt.getByLabel('Default download mode').selectOption('audio-only');
   await opt.getByLabel('Naming template').fill('{host} - {title}');
   await opt.getByLabel('Maximum concurrent downloads').fill('99');
+  // A person needs far longer than a storage write between editing and reloading; wait for the writes to land.
+  await until(async () => {
+    const st = (await ext(() => chrome.storage.local.get('settings'))).settings;
+    return (
+      st?.defaultMode === 'audio-only' &&
+      st?.namingTemplate === '{host} - {title}' &&
+      st?.maxConcurrentDownloads === 5
+    );
+  }, 'settings to be written to storage');
   await opt.reload();
   assert((await opt.getByLabel('Default download mode').inputValue()) === 'audio-only', 'mode not persisted');
   assert(

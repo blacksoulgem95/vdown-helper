@@ -79,6 +79,11 @@ export async function submit(raw: DownloadRequest): Promise<Result<{ jobId: stri
       const ins = await inspectVariant(req.tabId, req.sourceUrl);
       if (ins.protectedByDrm) return fail('protected');
       req = { ...req, fragmented: ins.fragmented, live: ins.live, durationSec: ins.durationSec };
+      if (req.audioUrl) {
+        const aud = await inspectVariant(req.tabId, req.audioUrl);
+        if (aud.protectedByDrm) return fail('protected');
+        if (aud.live) req = { ...req, live: true };
+      }
     } catch (e) {
       return fail(`inspect:${e instanceof Error ? e.message : 'failed'}`);
     }

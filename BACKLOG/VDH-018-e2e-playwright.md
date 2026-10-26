@@ -22,4 +22,4 @@ Playwright loads the unpacked build (`--load-extension`) against local fixture s
 
 ## Notes
 
-`npm run test:e2e` builds, validates and drives the real build against local fixtures. 41 steps, passing on consecutive runs. Not covered: Chrome's permission prompts, real toolbar popup/activeTab, `sidePanel.open()`, branded Chrome, Windows/macOS (VDH-028).
+`npm run test:e2e` builds, validates and drives the real build against local fixtures. 44 steps, passing on consecutive runs. Not covered: Chrome's permission prompts, real toolbar popup/activeTab, `sidePanel.open()`, branded Chrome, Windows/macOS (VDH-028).

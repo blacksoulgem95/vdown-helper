@@ -26,6 +26,18 @@ export function startServers(root, pagesDir) {
     let path = decodeURIComponent(url.pathname);
     state.hits.push(`${origin} ${req.method} ${path}`);
     const headers = {};
+    let ignoreRange = false;
+    // /__norange/<path> serves <path> but pretends Range is unsupported (always answers 200 with the whole file).
+    if (origin === 'A' && path.startsWith('/__norange/')) {
+      path = path.slice('/__norange'.length);
+      ignoreRange = true;
+    }
+    // /__stall/<path>: sends the first bytes, then goes silent.
+    if (origin === 'A' && path.startsWith('/__stall/')) {
+      res.writeHead(200, { 'Content-Type': 'video/mp2t', 'Content-Length': 1000000 });
+      res.write(Buffer.alloc(1000, 1));
+      return;
+    }
 
     if (origin === 'B') {
       const m = /^\/(open|closed|slow)(\/.*)$/.exec(path);
@@ -84,7 +96,7 @@ export function startServers(root, pagesDir) {
     headers['Content-Type'] = type;
     headers['Accept-Ranges'] = 'bytes';
     headers['Cache-Control'] = 'no-store';
-    const range = /^bytes=(\d+)-(\d*)$/.exec(req.headers.range ?? '');
+    const range = ignoreRange ? null : /^bytes=(\d+)-(\d*)$/.exec(req.headers.range ?? '');
     if (range) {
       const start = Number(range[1]);
       const end = range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;

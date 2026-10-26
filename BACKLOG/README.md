@@ -46,3 +46,6 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-026](VDH-026-popup-premature-ready.md) | Popup showed READY before its first scan | done | P2 | ui | VDH-014 |
 | [VDH-027](VDH-027-publish-branch.md) | Publish the branch to GitHub | blocked | P0 | build | - |
 | [VDH-028](VDH-028-manual-chrome-verification.md) | Manual verification in branded Google Chrome | todo | P1 | test | VDH-018 |
+| [VDH-029](VDH-029-credential-and-ssrf-hardening.md) | Cookies and extension fetches limited to what the user chose | done | P0 | security | VDH-008, VDH-011 |
+| [VDH-030](VDH-030-resource-limits-hostile-servers.md) | Byte, time and count limits against hostile servers and playlists | done | P1 | security | VDH-011 |
+| [VDH-031](VDH-031-hls-correctness-fixes.md) | HLS correctness: encrypted init sections, ignored Range, unusable keys | done | P1 | lib | VDH-011 |

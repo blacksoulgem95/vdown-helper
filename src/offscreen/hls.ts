@@ -53,33 +53,54 @@ const sleep = (ms: number, signal: AbortSignal) =>
     signal.addEventListener('abort', () => (clearTimeout(t), reject(new CancelledError())), { once: true });
   });
 
+/** Hard limits against hostile or broken servers (a playlist is attacker-controlled data). */
+const MAX_RESOURCE_BYTES = 256 * 1024 * 1024; // one segment, key or init section
+const MAX_SEGMENTS = 20_000;
+const MAX_TOTAL_BYTES = 20 * 1024 * 1024 * 1024; // everything staged for one playlist
+const HEADERS_TIMEOUT_MS = 30_000;
+const IDLE_TIMEOUT_MS = 30_000;
+
+/** An AbortSignal that follows `parent` and can also be aborted on its own (for timeouts). */
+function childSignal(parent: AbortSignal): { signal: AbortSignal; abort: () => void } {
+  const c = new AbortController();
+  if (parent.aborted) c.abort();
+  else parent.addEventListener('abort', () => c.abort(), { once: true });
+  return { signal: c.signal, abort: () => c.abort() };
+}
+
 /**
  * fetch() that classifies failures. A rejected fetch to another origin means CORS refusal or a network error;
  * the browser does not distinguish them, so the message says both and the UI explains how to grant access.
+ * The returned response must be consumed with readCapped(), which enforces the size and stall limits.
  */
 async function request(
   url: string,
   signal: AbortSignal,
   creds: Creds,
   range?: { offset: number; length: number },
-): Promise<Response> {
+): Promise<{ res: Response; abort: () => void; signal: AbortSignal }> {
   const headers: Record<string, string> = {};
   if (range) headers['Range'] = `bytes=${range.offset}-${range.offset + range.length - 1}`;
   let lastErr: PipelineError = new PipelineError('network', 'Request failed');
   for (let attempt = 0; attempt <= RETRIES; attempt++) {
     check(signal);
+    const child = childSignal(signal);
+    const timer = setTimeout(child.abort, HEADERS_TIMEOUT_MS);
     let res: Response | undefined;
     try {
-      res = await fetch(url, { cache: 'no-store', headers, signal, credentials: creds(url) });
+      res = await fetch(url, { cache: 'no-store', headers, signal: child.signal, credentials: creds(url) });
     } catch {
       if (signal.aborted) throw new CancelledError();
       lastErr = new PipelineError(
         'cors',
-        'The request was blocked: the site refused cross-origin access or the network failed',
+        'The request was blocked: the site refused cross-origin access, did not answer in time, or the network failed',
       );
+    } finally {
+      clearTimeout(timer);
     }
     if (res) {
-      if (res.ok || res.status === 206) return res;
+      if (res.ok || res.status === 206) return { res, abort: child.abort, signal: child.signal };
+      void res.body?.cancel().catch(() => undefined);
       lastErr = new PipelineError('http-error', `HTTP ${res.status}`);
       // Client errors (403, 404 ...) will not fix themselves; server errors and throttling might.
       if (res.status < 500 && res.status !== 429) throw lastErr;
@@ -89,14 +110,94 @@ async function request(
   throw lastErr;
 }
 
+/** Read a body with a byte cap and a stall (idle) timeout. */
+async function readCapped(
+  res: Response,
+  abort: () => void,
+  signal: AbortSignal,
+  maxBytes: number,
+  onChunk?: (chunk: Uint8Array) => Promise<void> | void,
+  /** Stop reading successfully once this many bytes arrived (the rest is not wanted, and is not an error). */
+  stopAt?: number,
+): Promise<Uint8Array | undefined> {
+  const reader = res.body?.getReader();
+  if (!reader) throw new PipelineError('network', 'The response has no body');
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      let idle: ReturnType<typeof setTimeout> | undefined;
+      let timedOut = false;
+      const stalled = new Promise<never>((_, reject) => {
+        idle = setTimeout(() => {
+          timedOut = true;
+          abort();
+          reject(new PipelineError('network', 'The server stopped sending data'));
+        }, IDLE_TIMEOUT_MS);
+      });
+      let step: ReadableStreamReadResult<Uint8Array>;
+      try {
+        step = await Promise.race([reader.read(), stalled]);
+      } catch (e) {
+        // `signal` follows the user's cancel button; our own timeout also aborts the request, so tell them apart.
+        if (!timedOut && signal.aborted) throw new CancelledError();
+        throw e instanceof PipelineError ? e : new PipelineError('network', 'The download was interrupted');
+      } finally {
+        clearTimeout(idle);
+      }
+      if (step.done) break;
+      total += step.value.byteLength;
+      if (stopAt !== undefined && total >= stopAt) {
+        chunks.push(step.value);
+        abort();
+        break;
+      }
+      if (total > maxBytes) {
+        abort();
+        throw new PipelineError('too-large', 'A file on the server is larger than the allowed size');
+      }
+      if (onChunk) await onChunk(step.value);
+      else chunks.push(step.value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  if (onChunk) return undefined;
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const c of chunks) {
+    out.set(c, offset);
+    offset += c.byteLength;
+  }
+  return out;
+}
+
 async function getBytes(
   url: string,
   signal: AbortSignal,
   creds: Creds,
   range?: { offset: number; length: number },
+  maxBytes = MAX_RESOURCE_BYTES,
 ): Promise<Uint8Array> {
-  const res = await request(url, signal, creds, range);
-  return new Uint8Array(await res.arrayBuffer());
+  const { res, abort, signal: s } = await request(url, signal, creds, range);
+  // A server that ignores Range answers 200 with the whole resource: keep only the requested slice.
+  const ignoredRange = range !== undefined && res.status === 200;
+  const stopAt = ignoredRange ? range.offset + range.length : undefined;
+  if (stopAt !== undefined && stopAt > maxBytes) {
+    abort();
+    throw new PipelineError('too-large', 'A file on the server is larger than the allowed size');
+  }
+  const body = (await readCapped(res, abort, s, maxBytes, undefined, stopAt)) as Uint8Array;
+  if (!ignoredRange) {
+    if (range && body.byteLength !== range.length) {
+      throw new PipelineError('invalid', 'The server returned a different byte range than requested');
+    }
+    return body;
+  }
+  if (body.byteLength < range.offset + range.length) {
+    throw new PipelineError('invalid', 'The server ignored the byte range and the data is too short');
+  }
+  return body.slice(range.offset, range.offset + range.length);
 }
 
 export async function loadMediaPlaylist(
@@ -122,6 +223,8 @@ export async function loadMediaPlaylist(
       'This stream uses DRM or SAMPLE-AES encryption, which is not supported',
     );
   if (!p.endList) throw new PipelineError('invalid', 'Live streams cannot be downloaded');
+  if (p.segments.length > MAX_SEGMENTS)
+    throw new PipelineError('invalid', 'The playlist has too many segments');
   return p;
 }
 
@@ -155,7 +258,7 @@ export async function stageHlsPlaylist(opts: StageOptions): Promise<StagedMedia>
     let p = keys.get(uri);
     if (!p) {
       p = (async () => {
-        const raw = await getBytes(uri, signal, creds);
+        const raw = await getBytes(uri, signal, creds, undefined, 1024);
         if (raw.byteLength !== 16)
           throw new PipelineError('decrypt', 'The decryption key has an unexpected size');
         return crypto.subtle.importKey('raw', raw as Uint8Array<ArrayBuffer>, 'AES-CBC', false, ['decrypt']);
@@ -196,24 +299,26 @@ export async function stageHlsPlaylist(opts: StageOptions): Promise<StagedMedia>
     opts.onProgress(p);
   };
 
+  const decryptBytes = async (key: HlsKey, data: Uint8Array, sequence: number): Promise<Uint8Array> => {
+    try {
+      const ck = await keyFor(key);
+      const clear = await crypto.subtle.decrypt(
+        { name: 'AES-CBC', iv: ivFor(key, sequence) as Uint8Array<ArrayBuffer> },
+        ck,
+        data as Uint8Array<ArrayBuffer>,
+      );
+      return new Uint8Array(clear);
+    } catch (e) {
+      if (e instanceof PipelineError || e instanceof CancelledError) throw e;
+      throw new PipelineError('decrypt', 'Failed to decrypt data (wrong key or corrupted data)');
+    }
+  };
+
   const fetchSegment = async (seg: HlsSegment): Promise<Uint8Array> => {
     let data = await getBytes(seg.uri, signal, creds, seg.byteRange);
     downloadedBytes += data.byteLength;
     const key = seg.key;
-    if (key && key.method === 'AES-128') {
-      try {
-        const ck = await keyFor(key);
-        const clear = await crypto.subtle.decrypt(
-          { name: 'AES-CBC', iv: ivFor(key, seg.sequence) as Uint8Array<ArrayBuffer> },
-          ck,
-          data as Uint8Array<ArrayBuffer>,
-        );
-        data = new Uint8Array(clear);
-      } catch (e) {
-        if (e instanceof PipelineError || e instanceof CancelledError) throw e;
-        throw new PipelineError('decrypt', 'Failed to decrypt a segment (wrong key or corrupted data)');
-      }
-    }
+    if (key && key.method === 'AES-128') data = await decryptBytes(key, data, seg.sequence);
     return data;
   };
 
@@ -227,14 +332,18 @@ export async function stageHlsPlaylist(opts: StageOptions): Promise<StagedMedia>
         if (seg.map) {
           const mapKey = `${seg.map.uri}|${seg.map.byteRange?.offset ?? ''}`;
           if (mapKey !== lastMapKey) {
-            await out.write(await getBytes(seg.map.uri, signal, creds, seg.map.byteRange));
+            let init = await getBytes(seg.map.uri, signal, creds, seg.map.byteRange);
+            // RFC 8216 4.3.2.5: a key in effect at the EXT-X-MAP also encrypts the initialisation section.
+            if (seg.map.key && seg.map.key.method === 'AES-128')
+              init = await decryptBytes(seg.map.key, init, seg.sequence);
+            await out.write(init);
             lastMapKey = mapKey;
           }
         }
         await out.write(data);
         writeIdx++;
-        if (opts.maxBytes !== undefined && out.bytes > opts.maxBytes) {
-          throw new PipelineError('too-large', 'The download exceeds the configured memory limit');
+        if (out.bytes > (opts.maxBytes ?? MAX_TOTAL_BYTES)) {
+          throw new PipelineError('too-large', 'The download exceeds the configured size limit');
         }
         for (const w of waiters.splice(0)) w();
       }
@@ -278,24 +387,19 @@ export async function stageDirectFile(
   opts: Omit<StageOptions, 'playlistUrl' | 'concurrency' | 'fileName'> & { url: string; fileName: string },
 ): Promise<{ file: File; bytes: number }> {
   const { signal } = opts;
-  const res = await request(opts.url, signal, credentialsFor(opts.credentialedOrigins));
+  const { res, abort, signal: s } = await request(opts.url, signal, credentialsFor(opts.credentialedOrigins));
   const total = Number(res.headers.get('content-length')) || undefined;
-  if (opts.maxBytes !== undefined && total !== undefined && total > opts.maxBytes) {
-    throw new PipelineError('too-large', 'The file exceeds the configured memory limit');
+  const cap = opts.maxBytes ?? MAX_TOTAL_BYTES;
+  if (total !== undefined && total > cap) {
+    abort();
+    throw new PipelineError('too-large', 'The file exceeds the configured size limit');
   }
   const out = await createStageFile(opts.jobId, opts.fileName);
   const meter = new SpeedMeter();
   try {
-    const reader = res.body?.getReader();
-    if (!reader) throw new PipelineError('network', 'The response has no body');
-    for (;;) {
+    await readCapped(res, abort, s, cap, async (value) => {
       check(signal);
-      const { done, value } = await reader.read();
-      if (done) break;
       await out.write(value);
-      if (opts.maxBytes !== undefined && out.bytes > opts.maxBytes) {
-        throw new PipelineError('too-large', 'The file exceeds the configured memory limit');
-      }
       meter.update(out.bytes, Date.now());
       const p: JobProgress = { bytesDone: out.bytes };
       if (total !== undefined) {
@@ -307,7 +411,7 @@ export async function stageDirectFile(
       const eta = meter.etaSeconds(total === undefined ? undefined : total - out.bytes);
       if (eta !== undefined) p.etaSeconds = eta;
       opts.onProgress(p);
-    }
+    });
     const file = await out.finish();
     return { file, bytes: out.bytes };
   } catch (e) {

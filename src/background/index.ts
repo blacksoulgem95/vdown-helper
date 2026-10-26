@@ -56,7 +56,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       const settings = await loadSettings();
       if (settings.autoScan && (await hasHostAccess(tab.url ?? ''))) {
         await new Promise((r) => setTimeout(r, 1500)); // let players attach their sources
-        await scanTab(tabId);
+        await scanTab(tabId, true);
       }
     })().catch((e: unknown) => log.warn('auto-scan failed:', e));
   }

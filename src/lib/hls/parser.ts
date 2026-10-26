@@ -97,7 +97,8 @@ function parseKey(attrs: Record<string, string>, base: string): HlsKey | undefin
     method,
     keyFormat,
     // Only plain AES-128 with the identity key format is decryptable by a regular client.
-    protectedByDrm: method !== 'AES-128' || !DRM_KEYFORMATS_ALLOWED.has(keyFormat),
+    // Only plain AES-128 with the identity key format and a fetchable http(s) key can be decrypted by a normal client.
+    protectedByDrm: method !== 'AES-128' || !DRM_KEYFORMATS_ALLOWED.has(keyFormat) || !uri,
   };
   if (uri) key.uri = uri;
   if (attrs['IV']) key.iv = attrs['IV'];
@@ -230,6 +231,7 @@ function parseMedia(lines: string[], url: string): HlsParseResult {
       const uri = resolveUri(uriRaw, url);
       if (!uri) return fail('unsafe-url', 'Init-section URI is invalid or uses a disallowed scheme', idx + 1);
       const map: HlsMap = { uri };
+      if (currentKey) map.key = currentKey;
       if (a['BYTERANGE']) {
         const br = parseByteRange(a['BYTERANGE']);
         if (br) map.byteRange = { length: br.length, offset: br.offset ?? 0 };

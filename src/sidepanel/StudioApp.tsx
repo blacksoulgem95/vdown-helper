@@ -149,7 +149,7 @@ function StudioForm({ resource }: { resource: MediaResource }) {
   const [origins, setOrigins] = useState<string[]>([]);
   useEffect(() => {
     let alive = true;
-    void originsNeedingAccess(inspections).then((missing) => {
+    void originsNeedingAccess(inspections, resource.pageUrl).then((missing) => {
       if (!alive) return;
       setOrigins(missing);
       setGranted(missing.length === 0);
@@ -157,7 +157,7 @@ function StudioForm({ resource }: { resource: MediaResource }) {
     return () => {
       alive = false;
     };
-  }, [inspections, result]);
+  }, [inspections, result, resource.pageUrl]);
 
   const evaluate = (c: Choices): { plan: Plan; req: ReturnType<typeof buildRequest> } => {
     const req = buildRequest(resource, settings, c, inspections.video);
@@ -528,6 +528,5 @@ function sameSite(url: string, r: MediaResource): boolean {
   const u = parseUrl(url);
   if (!u || u.protocol !== 'https:') return false;
   const page = parseUrl(r.pageUrl);
-  const media = parseUrl(r.url);
-  return u.hostname === page?.hostname || u.hostname === media?.hostname;
+  return u.hostname === page?.hostname;
 }
