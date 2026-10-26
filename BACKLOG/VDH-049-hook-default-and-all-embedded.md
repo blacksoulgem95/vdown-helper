@@ -1,7 +1,7 @@
 ---
 id: VDH-049
 title: Page hook on by default, one grant for all embedded players
-status: done
+status: in-progress
 priority: P1
 area: security
 depends_on: [VDH-033]
@@ -23,13 +23,16 @@ of every site is scanned without asking again.
 - [x] The popup's embedded-players button asks once for all sites (`<all_urls>` + header replay) (payload: unit; button: E2E). The reload offer after a real grant needs Chrome's prompt -> VDH-028
 - [x] Settings: the hook switch only stores the setting (no prompt) and _Revoke access_ keeps it (typecheck; the stored setting drives registration: E2E). The new _Allow all sites and embedded players_ switch needs Chrome's prompt -> VDH-028
 - [x] en/it strings, README, `docs/store-policy.md`, `CLAUDE.md` updated
-- [x] CI green on the PR head (runs 40319349333 / 40319846825 on `468b02d`: `check` and `e2e` 108/108)
+- [ ] CI green on the PR head
 
 ## Notes
 
-- Verified: 614 unit tests; full local E2E 108/108 (a fresh install records the migration and registers the hook for the allowed
-  test origins, off removes it, the blocked-frames notice shows `ALLOW ALL EMBEDDED PLAYERS`); the same on GitHub CI.
+- Verified: 615 unit tests; full local E2E 108/108 (a fresh install records the migration and registers the hook for the allowed
+  test origins, off removes it, the blocked-frames notice shows `ALLOW ALL EMBEDDED PLAYERS`).
 - `<all_urls>` stays in `optional_host_permissions`: nothing new at install, and existing installs are not disabled by the update.
+- Found on CI (run 40321369144): with the hook on by default, two overlapping `syncHook()` calls could finish out of order and
+  leave the hook registered after it was turned off ("timed out waiting for hook removal"). Calls now run one after another;
+  `tests/hook-sync.test.ts` reproduces the race (fails without the fix).
 - Not automatable: Chrome's permission prompt itself and a real update from an older version (the migration is unit-tested) -> VDH-028.
 - DRM refusal, header replay limits and the http/https-only rule are unchanged. Nothing site-specific; nothing clicks through link
   protectors or captchas.

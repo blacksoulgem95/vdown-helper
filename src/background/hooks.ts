@@ -14,11 +14,21 @@ export async function grantedWebPatterns(): Promise<string[]> {
   }
 }
 
+let syncing: Promise<boolean> = Promise.resolve(false);
+
 /**
  * Keep the page hook registered exactly while the user wants it AND has granted site access. It is registered only
  * for the granted patterns, so revoking access removes it from those sites too. Safe to call at any time.
+ * Calls run one after another: two overlapping ones could otherwise finish in the wrong order and leave the hook
+ * registered after the user turned it off.
  */
-export async function syncHook(): Promise<boolean> {
+export function syncHook(): Promise<boolean> {
+  const run = syncing.then(syncHookNow, syncHookNow);
+  syncing = run;
+  return run;
+}
+
+async function syncHookNow(): Promise<boolean> {
   try {
     const settings = await loadSettings();
     const matches = settings.pageHook ? await grantedWebPatterns() : [];
