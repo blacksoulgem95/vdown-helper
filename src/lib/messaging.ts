@@ -1,3 +1,4 @@
+import { isExtensionPage } from './security';
 import type { Envelope, RequestMap, RequestType, Result } from '@/types/messages';
 
 /** Typed wrapper over chrome.runtime.sendMessage. Never throws: transport failures become `{ ok: false }`. */
@@ -79,7 +80,7 @@ export type Handlers = { [K in RequestType]: Handler<K> };
 export function registerHandlers(handlers: Handlers): void {
   chrome.runtime.onMessage.addListener((raw, sender, sendResponse) => {
     // Only this extension's own pages may drive it (no externally_connectable is declared).
-    if (sender.id !== chrome.runtime.id) return false;
+    if (!isExtensionPage(sender)) return false;
     const envelope = parseEnvelope(raw);
     if (!envelope) return false;
     const handler = handlers[envelope.type] as Handler<RequestType>;

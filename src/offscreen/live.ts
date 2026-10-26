@@ -1,7 +1,13 @@
 import type { JobProgress } from '@/types/download';
 import type { HlsSegment } from '@/types/hls';
 import { CancelledError, PipelineError } from './errors';
-import { credentialsFor, loadMediaPlaylist, writeSegments, type SegmentSinkState } from './hls';
+import {
+  credentialsFor,
+  loadMediaPlaylist,
+  writeSegments,
+  type NetContext,
+  type SegmentSinkState,
+} from './hls';
 import { createStageFile } from './opfs';
 import { pollDashRepresentation } from './dash';
 
@@ -17,8 +23,13 @@ export interface LivePoll {
 
 export type LiveSource = () => Promise<LivePoll>;
 
-export function hlsLiveSource(url: string, signal: AbortSignal, credentialedOrigins: string[]): LiveSource {
-  const creds = credentialsFor(credentialedOrigins);
+export function hlsLiveSource(
+  url: string,
+  signal: AbortSignal,
+  credentialedOrigins: string[],
+  net?: NetContext,
+): LiveSource {
+  const creds = credentialsFor(credentialedOrigins, net);
   return async () => {
     const p = await loadMediaPlaylist(url, signal, creds, true);
     return {
@@ -31,8 +42,13 @@ export function hlsLiveSource(url: string, signal: AbortSignal, credentialedOrig
   };
 }
 
-export function dashLiveSource(ref: string, signal: AbortSignal, credentialedOrigins: string[]): LiveSource {
-  const creds = credentialsFor(credentialedOrigins);
+export function dashLiveSource(
+  ref: string,
+  signal: AbortSignal,
+  credentialedOrigins: string[],
+  net?: NetContext,
+): LiveSource {
+  const creds = credentialsFor(credentialedOrigins, net);
   return async () => {
     const p = await pollDashRepresentation(ref, signal, creds);
     return { ...p, sequenced: false, fragmented: true };
@@ -46,6 +62,7 @@ export interface LiveTrackOptions {
   source: LiveSource;
   concurrency: number;
   credentialedOrigins: string[];
+  net?: NetContext;
   /** Cancel: everything is discarded. */
   signal: AbortSignal;
   /** Stop: no more is fetched, and what has been recorded is kept. Aborted by the user or by a limit. */
@@ -106,8 +123,14 @@ export async function recordLiveTrack(opts: LiveTrackOptions): Promise<LiveTrack
   let gaps = 0;
   let failures = 0;
   let idleSec = 0;
-  let progressedAt = Date.now();
-  let lastSeconds = 0;
+  const startedAt = Date.now();
+  let progressedAt = startedAt;
+  let lastBytes = 0;
+  /** A limit the recording has reached: media seconds, bytes, or the wall clock (a hostile playlist can declare tiny EXTINFs). */
+  const limitReached = () =>
+    (state.seconds ?? 0) >= opts.maxSeconds ||
+    (out?.bytes ?? 0) >= opts.maxBytes ||
+    Date.now() - startedAt >= opts.maxSeconds * 1000;
 
   const report = () =>
     opts.onProgress({ seconds: state.seconds ?? 0, bytes: out?.bytes ?? 0, gaps: gaps + state.skipped });
@@ -116,7 +139,7 @@ export async function recordLiveTrack(opts: LiveTrackOptions): Promise<LiveTrack
     while (!stop.aborted) {
       if (signal.aborted) throw new CancelledError();
       // Segments keep being listed but none can be had (the server dropped them all): nothing is being recorded.
-      if (out && out.bytes > 0 && Date.now() - progressedAt > STALL_MS) {
+      if (Date.now() - progressedAt > STALL_MS) {
         endedBy = 'stalled';
         break;
       }
@@ -162,19 +185,21 @@ export async function recordLiveTrack(opts: LiveTrackOptions): Promise<LiveTrack
               durationSec: 0,
               concurrency: opts.concurrency,
               credentialedOrigins: opts.credentialedOrigins,
+              ...(opts.net ? { net: opts.net } : {}),
               signal,
               tolerateMissing: true,
+              shouldStop: () => stop.aborted || limitReached(),
               onProgress: () => undefined,
             },
             out,
             state,
           );
           report();
-          if ((state.seconds ?? 0) > lastSeconds) {
-            lastSeconds = state.seconds ?? 0;
+          if (out.bytes > lastBytes) {
+            lastBytes = out.bytes;
             progressedAt = Date.now();
           }
-          if ((state.seconds ?? 0) >= opts.maxSeconds || out.bytes >= opts.maxBytes) {
+          if (limitReached()) {
             endedBy = 'limit';
             opts.onLimit();
             break;

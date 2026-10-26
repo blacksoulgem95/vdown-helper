@@ -1,6 +1,7 @@
 import { parseHls } from '@/lib/hls/parser';
 import { fetchText } from '@/lib/netprobe';
 import { SpeedMeter } from '@/lib/queue';
+import { mayExtensionFetch } from '@/lib/security';
 import type { HlsKey, HlsMediaPlaylist, HlsSegment } from '@/types/hls';
 import type { JobProgress } from '@/types/download';
 import { CancelledError, PipelineError } from './errors';
@@ -13,6 +14,8 @@ export interface StageOptions {
   fileName: string | ((fragmented: boolean) => string);
   concurrency: number;
   credentialedOrigins?: string[];
+  /** Who is asking (see NetContext); omitted only by tests. */
+  net?: NetContext;
   signal: AbortSignal;
   /** Abort when staged bytes exceed this (used when FFmpeg must later hold the result in memory). */
   maxBytes?: number;
@@ -31,16 +34,44 @@ const RETRIES = 3;
  * Cookies are only sent to origins the user granted access to (DownloadRequest.credentialedOrigins). Everything
  * else is fetched without credentials, which is also what wildcard-CORS CDNs require.
  */
-type Creds = (url: string) => RequestCredentials;
-export function credentialsFor(origins: string[] | undefined): Creds {
+type Creds = ((url: string) => RequestCredentials) & { allowed?: (url: string) => boolean };
+
+/**
+ * Who is asking, for two rules that a hostile manifest must not be able to bend:
+ *  - `pageUrl`: the extension (which is exempt from CORS) never fetches a private-network or loopback address named by
+ *    a manifest on behalf of a public page;
+ *  - `owner`: the address of the manifest or document that names the URLs. Cookies follow it: a URL on a granted origin
+ *    gets them only if the thing that listed it is on a granted origin too, so a third party's playlist cannot make
+ *    the extension send the user's cookies to the page's site.
+ */
+export interface NetContext {
+  pageUrl: string;
+  owner: string;
+}
+
+export function credentialsFor(origins: string[] | undefined, net?: NetContext): Creds {
   const granted = new Set(origins ?? []);
-  return (url) => {
+  const originOf = (u: string): string | undefined => {
     try {
-      return granted.has(new URL(url).origin) ? 'include' : 'omit';
+      return new URL(u).origin;
     } catch {
-      return 'omit';
+      return undefined;
     }
   };
+  const ownerOrigin = net ? originOf(net.owner) : undefined;
+  const ownerGranted = !net || (ownerOrigin !== undefined && granted.has(ownerOrigin));
+  const creds: Creds = (url) => {
+    const o = originOf(url);
+    return ownerGranted && o !== undefined && granted.has(o) ? 'include' : 'omit';
+  };
+  if (net) creds.allowed = (url) => mayExtensionFetch(url, net.pageUrl);
+  return creds;
+}
+
+/** Refuse an address the extension must not visit on behalf of this page (see NetContext). */
+function guard(creds: Creds, url: string): void {
+  if (creds.allowed && !creds.allowed(url))
+    throw new PipelineError('invalid', 'A private-network address named by a stream was not fetched');
 }
 
 function check(signal: AbortSignal): void {
@@ -81,6 +112,7 @@ async function request(
 ): Promise<{ res: Response; abort: () => void; signal: AbortSignal }> {
   const headers: Record<string, string> = {};
   if (range) headers['Range'] = `bytes=${range.offset}-${range.offset + range.length - 1}`;
+  guard(creds, url);
   let lastErr: PipelineError = new PipelineError('network', 'Request failed');
   for (let attempt = 0; attempt <= RETRIES; attempt++) {
     check(signal);
@@ -208,6 +240,7 @@ export async function loadMediaPlaylist(
   allowLive = false,
 ): Promise<HlsMediaPlaylist> {
   check(signal);
+  guard(creds, url);
   const res = await fetchText(url, fetch, creds(url));
   if (!res.ok) {
     throw new PipelineError(
@@ -237,6 +270,7 @@ export async function fetchManifestText(
   creds: Creds,
 ): Promise<{ text: string; url: string }> {
   check(signal);
+  guard(creds, url);
   const res = await fetchText(url, fetch, creds(url));
   if (!res.ok) {
     throw new PipelineError(
@@ -263,7 +297,7 @@ export async function stageHlsPlaylist(opts: StageOptions): Promise<StagedMedia>
   const playlist = await loadMediaPlaylist(
     opts.playlistUrl,
     opts.signal,
-    credentialsFor(opts.credentialedOrigins),
+    credentialsFor(opts.credentialedOrigins, opts.net),
   );
   return stageSegmentList({
     ...opts,
@@ -320,12 +354,14 @@ export async function writeSegments(
   opts: Omit<SegmentListOptions, 'fileName'> & {
     fileName?: SegmentListOptions['fileName'];
     tolerateMissing?: boolean;
+    /** Checked before every fetch and after every write: when true nothing more is fetched or written (a limit was reached). */
+    shouldStop?: () => boolean;
   },
   out: SegmentSink,
   state: SegmentSinkState,
 ): Promise<void> {
   const { signal, segs } = opts;
-  const creds = credentialsFor(opts.credentialedOrigins);
+  const creds = credentialsFor(opts.credentialedOrigins, opts.net);
   if (segs.length > MAX_SEGMENTS) throw new PipelineError('invalid', 'The stream has too many segments');
 
   const free = await freeBytes();
@@ -411,6 +447,7 @@ export async function writeSegments(
   const flush = (): Promise<void> => {
     writing = writing.then(async () => {
       for (;;) {
+        if (opts.shouldStop?.()) break;
         if (!done.has(writeIdx)) break;
         const data = done.get(writeIdx) ?? null;
         done.delete(writeIdx);
@@ -449,6 +486,7 @@ export async function writeSegments(
   const worker = async () => {
     for (;;) {
       check(signal);
+      if (opts.shouldStop?.()) return;
       const i = nextIdx;
       if (i >= segs.length) return;
       if (i >= writeIdx + window) {
@@ -476,7 +514,11 @@ export async function stageDirectFile(
   opts: Omit<StageOptions, 'playlistUrl' | 'concurrency' | 'fileName'> & { url: string; fileName: string },
 ): Promise<{ file: File; bytes: number }> {
   const { signal } = opts;
-  const { res, abort, signal: s } = await request(opts.url, signal, credentialsFor(opts.credentialedOrigins));
+  const {
+    res,
+    abort,
+    signal: s,
+  } = await request(opts.url, signal, credentialsFor(opts.credentialedOrigins, opts.net));
   const total = Number(res.headers.get('content-length')) || undefined;
   const cap = opts.maxBytes ?? MAX_TOTAL_BYTES;
   if (total !== undefined && total > cap) {

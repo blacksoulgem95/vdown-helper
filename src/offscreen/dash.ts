@@ -71,7 +71,7 @@ export async function stageDashRepresentation(
   const expanded = await loadDashRepresentation(
     opts.ref,
     opts.signal,
-    credentialsFor(opts.credentialedOrigins),
+    credentialsFor(opts.credentialedOrigins, opts.net),
   );
   return stageSegmentList({
     ...opts,

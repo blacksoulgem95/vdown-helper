@@ -28,7 +28,7 @@ export async function buildSubtitle(
   onProgress: (p: JobProgress) => void,
 ): Promise<SubtitleResult> {
   const output = req.subtitle?.output ?? 'original';
-  const creds = credentialsFor(req.credentialedOrigins);
+  const creds = credentialsFor(req.credentialedOrigins, { pageUrl: req.pageUrl, owner: req.sourceUrl });
   const check = () => {
     if (signal.aborted) throw new CancelledError();
   };

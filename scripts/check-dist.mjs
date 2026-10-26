@@ -27,6 +27,33 @@ if (!/^\d+(\.\d+){0,3}$/.test(manifest.version)) fail(`invalid version ${manifes
 for (const [size, p] of Object.entries(manifest.icons ?? {})) need(p, `icon ${size}`);
 for (const p of Object.values(manifest.action?.default_icon ?? {})) need(p, 'action icon');
 need(manifest.action?.default_popup, 'popup');
+
+// The permission surface is fixed: anything new must be a deliberate change to these lists (and to docs/store-policy.md).
+const ALLOWED = {
+  permissions: [
+    'activeTab',
+    'scripting',
+    'downloads',
+    'downloads.open',
+    'storage',
+    'offscreen',
+    'notifications',
+    'sidePanel',
+  ],
+  optional_permissions: ['webRequest', 'declarativeNetRequestWithHostAccess'],
+  optional_host_permissions: ['<all_urls>'],
+};
+for (const [key, allowed] of Object.entries(ALLOWED))
+  for (const p of manifest[key] ?? [])
+    if (!allowed.includes(p)) fail(`manifest ${key} contains "${p}", which is not on the allow-list`);
+for (const key of [
+  'host_permissions',
+  'externally_connectable',
+  'web_accessible_resources',
+  'content_scripts',
+])
+  if (manifest[key] !== undefined)
+    fail(`manifest has "${key}": the extension declares none of these (scripts are injected on demand)`);
 need(manifest.background?.service_worker, 'service worker');
 need(manifest.options_ui?.page, 'options page');
 need(manifest.side_panel?.default_path, 'side panel');

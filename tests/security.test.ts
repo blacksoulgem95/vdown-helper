@@ -132,3 +132,40 @@ describe('asciiFileName (fallback when Chrome rejects a name)', () => {
     expect(asciiFileName('vdown/My Clip [720p].mp4')).toBe('vdown/My Clip [720p].mp4');
   });
 });
+
+describe('who may drive the extension (security review L4)', () => {
+  const real = (globalThis as { chrome?: unknown }).chrome;
+  afterEach(() => {
+    (globalThis as { chrome?: unknown }).chrome = real;
+  });
+  const stub = () => {
+    (globalThis as { chrome?: unknown }).chrome = {
+      runtime: { id: 'abc', getURL: (p: string) => `chrome-extension://abc/${p}` },
+    };
+  };
+  it("accepts this extension's own pages and refuses its content scripts, other extensions and web pages", async () => {
+    stub();
+    const { isExtensionPage } = await import('@/lib/security');
+    expect(isExtensionPage({ id: 'abc', url: 'chrome-extension://abc/popup/popup.html' })).toBe(true);
+    expect(isExtensionPage({ id: 'abc', url: 'chrome-extension://abc/background.js' })).toBe(true);
+    expect(isExtensionPage({ id: 'abc', url: 'https://evil.example/page' })).toBe(false); // a content script
+    expect(isExtensionPage({ id: 'abc' })).toBe(false);
+    expect(isExtensionPage({ id: 'other', url: 'chrome-extension://abc/popup/popup.html' })).toBe(false);
+    expect(isExtensionPage({ id: 'abc', url: 'chrome-extension://abcd/x.html' })).toBe(false);
+  });
+  it('lets only a blob made by this extension reach the download manager', async () => {
+    stub();
+    const { isOwnBlobUrl } = await import('@/lib/security');
+    expect(isOwnBlobUrl('blob:chrome-extension://abc/6f1c0e1e-0000')).toBe(true);
+    for (const bad of [
+      'blob:https://evil.example/6f1c',
+      'blob:chrome-extension://abcd/x',
+      'https://evil.example/f',
+      'data:text/plain,x',
+      'file:///etc/passwd',
+      undefined,
+      5,
+    ])
+      expect(isOwnBlobUrl(bad)).toBe(false);
+  });
+});

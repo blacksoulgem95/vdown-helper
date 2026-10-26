@@ -408,3 +408,26 @@ describe('dynamic (live) manifests', () => {
     expect(r.ok && mainPeriodIndex(r.manifest)).toBe(1);
   });
 });
+
+describe('hostile manifests cannot amplify memory (security review M2)', () => {
+  const run = (media: string, extra = '') => {
+    const r = parseDash(
+      mpd(
+        `<Period><AdaptationSet mimeType="video/mp4"><SegmentTemplate timescale="1" duration="1" media="${media}" ${extra}/><Representation id="v" bandwidth="1"/></AdaptationSet></Period>`,
+        'type="static" mediaPresentationDuration="PT10S"',
+      ),
+      URL0,
+    );
+    if (!r.ok) return undefined;
+    const p = r.manifest.periods[0]!;
+    return expandSegments(r.manifest, p, p.representations[0]!);
+  };
+  it('clamps the printf width of $Number%0Nd$', () => {
+    const e = run('s-$Number%050000000d$.m4s')!;
+    expect(Math.max(...e.segments.map((s) => s.uri.length))).toBeLessThan(200);
+  });
+  it('refuses a template longer than a URL may be, and a huge address', () => {
+    expect(run(`https://x.test/${'a'.repeat(9000)}$Number$`)).toBeUndefined();
+    expect(substitute('$Number%020d$', { Number: 5 })).toBe('00000000000000000005');
+  });
+});

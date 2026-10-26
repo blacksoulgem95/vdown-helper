@@ -16,7 +16,7 @@ import {
   transition,
   withProgress,
 } from '@/lib/queue';
-import { asciiFileName, log, mayExtensionFetch, parseUrl, withExtension } from '@/lib/security';
+import { asciiFileName, isOwnBlobUrl, log, mayExtensionFetch, parseUrl, withExtension } from '@/lib/security';
 import type { Plan } from '@/lib/compat';
 import type { DownloadJob, DownloadRequest, JobErrorCode } from '@/types/download';
 import type { MediaResource } from '@/types/media';
@@ -103,6 +103,8 @@ export async function submit(raw: DownloadRequest): Promise<Result<{ jobId: stri
   const resource = (await getTabState(clean.tabId))?.resources.find((r) => r.id === clean.resourceId);
   let req: DownloadRequest = { ...clean, credentialedOrigins: credentialedFor(clean, resource) };
   const involved: string[] = [];
+  // Whatever the request says, a resource the scan found protected (e.g. the page uses EME) is never downloaded.
+  if (resource?.downloadability.status === 'protected') return fail('protected');
   if (req.isHls || req.isDash) {
     try {
       const ins = await inspectVariant(req.tabId, req.sourceUrl, resource?.frameId);
@@ -444,6 +446,9 @@ export async function handleOffscreenEvent(ev: OffscreenEvent): Promise<void> {
         for (const p of ev.extraParts ?? []) await releaseInOffscreen(p.jobId);
         return void (await releaseInOffscreen(ev.jobId));
       }
+      // Only a blob this extension's own offscreen document made may be handed to Chrome's download manager.
+      if (!isOwnBlobUrl(ev.blobUrl) || (ev.extraParts ?? []).some((p) => !isOwnBlobUrl(p.blobUrl)))
+        return void (await settle(ev.jobId, 'unknown', 'The converted file did not come from the extension'));
       // A capture that switched quality becomes several files: each further part is a job of its own, recorded before
       // any download starts so the offscreen document is not closed while one of them is still being saved.
       const total = 1 + (ev.extraParts?.length ?? 0);

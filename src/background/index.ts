@@ -1,6 +1,6 @@
 import { registerHandlers } from '@/lib/messaging';
 import { SETTINGS_KEY, loadSettings } from '@/lib/settings';
-import { isSafeFetchUrl, log } from '@/lib/security';
+import { isExtensionPage, isSafeFetchUrl, log } from '@/lib/security';
 import type { OffscreenEvent } from '@/types/messages';
 import { inspectVariant, scanTab } from './detect';
 import { listJobs } from './jobStore';
@@ -36,7 +36,7 @@ registerHandlers({
 // Events from the offscreen document (segment downloader / FFmpeg).
 chrome.runtime.onMessage.addListener((raw: unknown, sender) => {
   const ev = raw as Partial<OffscreenEvent> | null;
-  if (!ev || ev.channel !== 'vdown-offscreen-event' || sender.id !== chrome.runtime.id) return false;
+  if (!ev || ev.channel !== 'vdown-offscreen-event' || !isExtensionPage(sender)) return false;
   void handleOffscreenEvent(ev as OffscreenEvent).catch((e: unknown) =>
     log.error('offscreen event failed:', e),
   );

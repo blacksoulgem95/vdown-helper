@@ -98,9 +98,12 @@ async function recordLive(
     recordLiveTrack({
       jobId,
       fileName: (frag) => `${i === 0 ? 'video' : 'audio'}.${frag ? 'mp4' : 'ts'}`,
-      source: req.isDash ? dashLiveSource(url, signal, origins) : hlsLiveSource(url, signal, origins),
+      source: req.isDash
+        ? dashLiveSource(url, signal, origins, { pageUrl: req.pageUrl, owner: url })
+        : hlsLiveSource(url, signal, origins, { pageUrl: req.pageUrl, owner: url }),
       concurrency: plan.segmentConcurrency,
       credentialedOrigins: origins,
+      net: { pageUrl: req.pageUrl, owner: url },
       signal,
       stop: stop.signal,
       onLimit: () => stop.abort(),
@@ -406,6 +409,7 @@ async function execute(
         fileName: (frag) => `video.${ext(frag)}`,
         concurrency: plan.segmentConcurrency,
         credentialedOrigins,
+        net: { pageUrl: req.pageUrl, owner: req.sourceUrl },
         signal,
         ...(maxBytes !== undefined ? { maxBytes } : {}),
         onProgress: (p) =>
@@ -423,6 +427,7 @@ async function execute(
           fileName: (frag) => `audio.${frag ? 'mp4' : 'ts'}`,
           concurrency: plan.segmentConcurrency,
           credentialedOrigins,
+          net: { pageUrl: req.pageUrl, owner: req.audioUrl },
           signal,
           ...(maxBytes !== undefined ? { maxBytes: Math.max(0, maxBytes - video.bytes) } : {}),
           onProgress: (p) =>
@@ -442,6 +447,7 @@ async function execute(
       url: req.sourceUrl,
       fileName: `source.${req.sourceFormat === 'unknown' ? 'bin' : req.sourceFormat}`,
       credentialedOrigins,
+      net: { pageUrl: req.pageUrl, owner: req.sourceUrl },
       signal,
       ...(maxBytes !== undefined ? { maxBytes } : {}),
       onProgress: send,

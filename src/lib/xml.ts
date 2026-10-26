@@ -50,12 +50,19 @@ export const localName = (name: string): string => name.slice(name.indexOf(':') 
 
 /** After the root element only whitespace, comments and processing instructions may follow. */
 function onlyTrailingNoise(src: string, from: number): boolean {
-  return (
-    src
-      .slice(from)
-      .replace(/<!--[\s\S]*?-->|<\?[\s\S]*?\?>/g, '')
-      .trim() === ''
-  );
+  // Linear: every step either advances past something well-formed or stops. (A global lazy regex over "<!--<!--<!--..."
+  // restarts a scan to the end of the text at every repeat, which is quadratic.)
+  let i = from;
+  for (;;) {
+    while (i < src.length && /\s/.test(src[i] as string)) i++;
+    if (i >= src.length) return true;
+    let end: number;
+    if (src.startsWith('<!--', i)) end = src.indexOf('-->', i + 4) + 3;
+    else if (src.startsWith('<?', i)) end = src.indexOf('?>', i + 2) + 2;
+    else return false;
+    if (end < i + 2) return false; // indexOf found nothing (-1 + 3 or -1 + 2)
+    i = end;
+  }
 }
 
 export function parseXml(input: string, limits: Partial<XmlLimits> = {}): XmlNode | undefined {

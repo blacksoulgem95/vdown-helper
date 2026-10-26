@@ -203,7 +203,6 @@ function StudioForm({ resource }: { resource: MediaResource }) {
     if (!ok) setResult({ tone: 'danger', text: t('errAccessDenied') });
   };
 
-  const poster = resource.poster && sameSite(resource.poster, resource) ? resource.poster : undefined;
   const estimated = req.estimatedBytes;
   const videoMode = choices.mode !== 'audio-only';
   const showBitrate = bitrateOptions(plan).length > 0;
@@ -215,17 +214,14 @@ function StudioForm({ resource }: { resource: MediaResource }) {
       <Panel className="overflow-hidden">
         <div className="flex gap-3 p-3">
           <div className="relative h-[72px] w-[116px] shrink-0 overflow-hidden rounded-md border border-neon/20 bg-void">
-            {poster ? (
-              <img src={poster} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-neon/60">
-                {resource.mediaType === 'audio' ? (
-                  <AudioLines size={26} aria-hidden="true" />
-                ) : (
-                  <Film size={26} aria-hidden="true" />
-                )}
-              </div>
-            )}
+            {/* No remote poster: loading one would make the extension request an address the page chose. */}
+            <div className="flex h-full w-full items-center justify-center text-neon/60">
+              {resource.mediaType === 'audio' ? (
+                <AudioLines size={26} aria-hidden="true" />
+              ) : (
+                <Film size={26} aria-hidden="true" />
+              )}
+            </div>
             <div
               aria-hidden="true"
               className="pointer-events-none absolute inset-0 bg-[repeating-linear-gradient(0deg,rgba(0,0,0,0.18)_0_1px,transparent_1px_3px)]"
@@ -538,12 +534,4 @@ function pipelineText(plan: Plan): string {
     case 'live':
       return t('pipeLive');
   }
-}
-
-/** Only load a poster from a site the user is already on (it was loaded by the page itself). */
-function sameSite(url: string, r: MediaResource): boolean {
-  const u = parseUrl(url);
-  if (!u || u.protocol !== 'https:') return false;
-  const page = parseUrl(r.pageUrl);
-  return u.hostname === page?.hostname;
 }

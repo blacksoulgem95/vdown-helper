@@ -9,7 +9,7 @@ import type {
 } from '@/types/media';
 import { classifyPlaylist, parseHls } from './hls/parser';
 import { dashRef } from './dash/ref';
-import { extensionForMime, fileStem, urlExtension, type FileKind } from './filetypes';
+import { extensionForMime, fileKindOfExtension, fileStem, urlExtension, type FileKind } from './filetypes';
 import { exceedsHeldLimit, isDataLabel } from './dataUrl';
 import { heldLimit } from '@/types/ingest';
 import {
@@ -193,7 +193,11 @@ function skeleton(e: Entry, ctx: AnalyzeContext, format: MediaFormat): MediaReso
     r.kind = e.hints.fileKind;
     r.format = 'unknown';
     r.mediaType = 'unknown';
-    r.ext = (e.held ? '' : urlExtension(e.url)) || extensionForMime(e.hints.mimeType) || '';
+    // The extension must belong to the kind the file was filed under: a <script src=".../Setup.exe"> is not an "asset"
+    // that may be saved as Setup.exe. (Chrome's own warnings for dangerous files still apply to what is left.)
+    const inKind = (x: string | undefined): string =>
+      x && fileKindOfExtension(x) === e.hints.fileKind ? x : '';
+    r.ext = inKind(e.held ? '' : urlExtension(e.url)) || inKind(extensionForMime(e.hints.mimeType));
     r.title = clip((e.held ? `inline-${e.held.id}` : fileStem(e.url)) || pageHost || clip(ctx.pageTitle));
     if (e.hints.sizeBytes) r.sizeBytes = e.hints.sizeBytes;
   } else if (e.hints.role === 'subtitle') {
@@ -493,7 +497,10 @@ async function analyzeFileKind(
     return r;
   }
   if (mime) r.mimeType = mime;
-  if (!r.ext) r.ext = extensionForMime(mime) ?? '';
+  if (!r.ext) {
+    const fromType = extensionForMime(mime);
+    r.ext = fromType && fileKindOfExtension(fromType) === kind ? fromType : '';
+  }
   if (head.contentLength !== undefined) r.sizeBytes = head.contentLength;
   r.downloadability = verdict('downloadable', 'ok');
   return r;

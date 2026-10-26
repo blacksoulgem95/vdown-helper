@@ -32,7 +32,7 @@ export async function buildZip(
   const items = req.zip?.items ?? [];
   if (items.length === 0) throw new PipelineError('invalid', 'There is nothing to put in the ZIP');
   const limit = zipLimitBytes(maxMemoryMb);
-  const creds = credentialsFor(req.credentialedOrigins);
+  const creds = credentialsFor(req.credentialedOrigins, { pageUrl: req.pageUrl, owner: req.pageUrl });
   const out = await createStageFile(jobId, 'bundle.zip');
 
   let writing: Promise<void> = Promise.resolve();

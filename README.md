@@ -275,7 +275,7 @@ extension fetches: the content script of the owning frame streams them to the of
 ```bash
 npm run typecheck      # strict TypeScript
 npm run lint           # ESLint (bans dangerouslySetInnerHTML, eval, any)
-npm test               # Vitest: 590 unit tests
+npm test               # Vitest: 600+ unit tests
 npm run build && npm run check:dist   # also fails if test-only tooling or a Unicode noncharacter is in dist/
 npm run test:e2e       # real Chromium + fixtures + ffprobe verification (needs ffmpeg/ffprobe on PATH)
 E2E_ONLY='^live' npm run test:e2e     # only the steps whose name matches

@@ -1,11 +1,12 @@
 import type { OffscreenCommand } from '@/types/messages';
+import { isExtensionPage } from '@/lib/security';
 import { handleIngestPort } from './ingest';
 import { cancelJob, releaseJob, startJob, stopJob } from './jobs';
 import './startup';
 
 chrome.runtime.onMessage.addListener((raw: unknown, sender) => {
   const cmd = raw as Partial<OffscreenCommand> | null;
-  if (!cmd || cmd.channel !== 'vdown-offscreen' || sender.id !== chrome.runtime.id) return false;
+  if (!cmd || cmd.channel !== 'vdown-offscreen' || !isExtensionPage(sender)) return false;
   switch (cmd.type) {
     case 'run-job':
       if (cmd.jobId && cmd.request && cmd.plan) startJob(cmd.jobId, cmd.request, cmd.plan);

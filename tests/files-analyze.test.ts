@@ -161,3 +161,36 @@ describe('plain file requests', () => {
     expect(sanitizeRequest({ ...req, file: { kind: 'exe' as 'image' } })?.file).toBeUndefined();
   });
 });
+
+describe('the extension of a plain file belongs to its kind (security review L6)', () => {
+  it('does not let a script or stylesheet address carry an executable extension into a file name', async () => {
+    const urls = [
+      'https://evil.example/Setup.exe',
+      'https://evil.example/run.scr',
+      'https://evil.example/x.pdf.exe',
+      'https://evil.example/app.js',
+    ];
+    const out = await analyzeCandidates(
+      urls.map((u) => file(u, 'asset', { method: 'dom-element' })),
+      ctx,
+      fetcher(Object.fromEntries(urls.map((u) => [u, head('application/octet-stream', 10)]))),
+    );
+    const ext = Object.fromEntries(out.map((r) => [new URL(r.url).pathname.slice(1), r.ext]));
+    expect(ext).toEqual({ 'Setup.exe': '', 'run.scr': '', 'x.pdf.exe': '', 'app.js': 'js' });
+  });
+  it('falls back to the type the server declares, only when it fits the kind', async () => {
+    const url = 'https://cdn.example/download?id=7';
+    const [pdf] = await analyzeCandidates(
+      [file(url, 'document', { method: 'dom-link', mimeType: 'application/pdf' })],
+      ctx,
+      fetcher({ [url]: head('application/pdf', 10) }),
+    );
+    expect(pdf?.ext).toBe('pdf');
+    const [wrong] = await analyzeCandidates(
+      [file(url, 'document', { method: 'dom-link', mimeType: 'image/png' })],
+      ctx,
+      fetcher({ [url]: head('image/png', 10) }),
+    );
+    expect(wrong?.ext).toBe('');
+  });
+});

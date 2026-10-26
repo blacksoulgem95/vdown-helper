@@ -10,10 +10,12 @@ import type {
   DashRepresentation,
   DashSegmentRef,
 } from '@/types/dash';
-import { isSafeFetchUrl, parseUrl } from '../security';
+import { MAX_URL_LENGTH, isSafeFetchUrl, parseUrl } from '../security';
 import { childrenNamed, firstChild, localName, parseXml, type XmlNode } from '../xml';
 
 const MAX_SEGMENTS = 50_000;
+/** Total characters of segment addresses one representation may hold. */
+const MAX_URI_CHARS = 8_000_000;
 
 /** ISO 8601 duration ("PT1H2M3.5S") in seconds. Years and months are approximations, as the DASH spec allows. */
 export function parseIsoDuration(value: string | undefined): number | undefined {
@@ -79,6 +81,7 @@ function lastDefined<T>(items: Array<T | undefined>): T | undefined {
 }
 
 function resolve(ref: string, base: string): string | undefined {
+  if (ref.length > MAX_URL_LENGTH || base.length > MAX_URL_LENGTH) return undefined;
   const u = parseUrl(ref.trim(), base);
   return u && isSafeFetchUrl(u.href) ? u.href : undefined;
 }
@@ -122,7 +125,7 @@ function addressingOf(
       templates.map((t) => (t ? firstChild(t, 'SegmentTimeline') : undefined)),
     );
     const media = a['media'];
-    if (!media) return undefined;
+    if (!media || media.length > MAX_URL_LENGTH) return undefined;
     const t: DashAddressing = {
       kind: 'template',
       media,
@@ -130,7 +133,8 @@ function addressingOf(
       timescale: Math.max(1, num(a['timescale']) ?? 1),
       presentationTimeOffset: num(a['presentationTimeOffset']) ?? 0,
     };
-    if (a['initialization']) t.initialization = a['initialization'];
+    if (a['initialization'] && a['initialization'].length <= MAX_URL_LENGTH)
+      t.initialization = a['initialization'];
     const d = num(a['duration']);
     if (d && d > 0) t.duration = d;
     if (timelineNode) {
@@ -313,7 +317,8 @@ export function substitute(template: string, vars: Record<string, string | numbe
     const v = vars[name];
     if (v === undefined) return whole;
     const s = String(v);
-    return width ? s.padStart(Number(width), '0') : s;
+    // the printf width is the manifest's to choose: never let it build a huge string
+    return width ? s.padStart(Math.min(Number(width), 20), '0') : s;
   });
 }
 
@@ -336,8 +341,12 @@ export function expandSegments(
   const a = rep.addressing;
   const segments: HlsSegment[] = [];
   let init: HlsMap | undefined;
+  let uriChars = 0;
   const push = (uri: string, duration: number, range?: { offset: number; length: number }) => {
     if (segments.length >= MAX_SEGMENTS) throw new DashExpandError('The manifest lists too many segments');
+    // many long addresses are as costly as many segments: bound what a manifest can make the extension hold
+    uriChars += uri.length;
+    if (uriChars > MAX_URI_CHARS) throw new DashExpandError('The manifest lists too much address data');
     const seg: HlsSegment = { uri, duration, sequence: segments.length, discontinuity: false };
     if (range) seg.byteRange = range;
     segments.push(seg);

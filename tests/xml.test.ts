@@ -47,3 +47,22 @@ describe('parseXml', () => {
     expect(parseXml('<!DOCTYPE MPD><MPD/>')?.name).toBe('MPD');
   });
 });
+
+describe('hostile trailing content (security review M1)', () => {
+  it('parses a document followed by many comments / instructions in linear time', () => {
+    for (const unit of ['<!--', '<?', '<!-- x --><?p ?>']) {
+      const t0 = performance.now();
+      const doc = `<MPD/>${unit.repeat(150_000)}`;
+      const r = parseXml(doc);
+      expect(performance.now() - t0).toBeLessThan(500);
+      // the first unterminated one is not well-formed trailing content
+      expect(r === undefined).toBe(unit !== '<!-- x --><?p ?>');
+    }
+  });
+  it('still accepts well-formed trailing comments and instructions', () => {
+    expect(parseXml('<a/> <!-- c --> <?pi x?>\n')?.name).toBe('a');
+    expect(parseXml('<a></a><!-- c -->')?.name).toBe('a');
+    expect(parseXml('<a/>junk')).toBeUndefined();
+    expect(parseXml('<a/><b/>')).toBeUndefined();
+  });
+});

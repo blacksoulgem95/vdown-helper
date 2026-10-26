@@ -149,6 +149,37 @@ describe('live recording (one track)', () => {
     expect(r.gaps).toBeGreaterThan(0);
   });
 
+  it('does not run for ever on a playlist that only lists segments that do not exist (security review L3)', async () => {
+    vi.useFakeTimers();
+    let n = 0;
+    const run = options(async () => {
+      for (let k = n; k < n + 2; k++) missing.add(`https://cdn.example/seg${k}.ts`);
+      const p = poll([n, n + 1], { refreshSec: 2 });
+      n += 2;
+      return p;
+    }).run();
+    run.catch(() => undefined);
+    await vi.advanceTimersByTimeAsync(200_000);
+    await expect(run).rejects.toMatchObject({ code: 'capture' });
+    vi.useRealTimers();
+    expect(aborted).toBe(true);
+  });
+
+  it('stops at the wall-clock limit even when the playlist declares tiny durations', async () => {
+    vi.useFakeTimers();
+    let n = 0;
+    const run = options(
+      async () => poll([n++], { refreshSec: 1, segments: [{ ...seg(n), duration: 0.001 }] }),
+      {
+        maxSeconds: 30,
+      },
+    ).run();
+    await vi.advanceTimersByTimeAsync(60_000);
+    const r = await run;
+    vi.useRealTimers();
+    expect(r.endedBy).toBe('limit');
+  });
+
   it('fails when the stream cannot be read at all, and keeps going through short outages', async () => {
     const down = options(async () => {
       throw new Error('offline');

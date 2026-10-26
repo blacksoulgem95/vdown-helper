@@ -183,3 +183,20 @@ describe('invalid and unsupported input', () => {
     }
   });
 });
+
+describe('hostile playlists (security review M3)', () => {
+  it('does not multiply a long base address into every segment, and caps the segment count', () => {
+    const lines = Array.from({ length: 2000 }, () => '#EXTINF:1,\nx').join('\n');
+    const longBase = `https://evil.test/${'a'.repeat(100_000)}/p.m3u8`;
+    const t0 = performance.now();
+    const r = parseHls(`#EXTM3U\n#EXT-X-TARGETDURATION:1\n${lines}\n#EXT-X-ENDLIST\n`, longBase);
+    expect(performance.now() - t0).toBeLessThan(1000);
+    expect(r.ok).toBe(false); // every segment address would be too long: nothing usable, and nothing held
+    const many = Array.from({ length: 20_500 }, (_, i) => `#EXTINF:1,\ns${i}.ts`).join('\n');
+    const big = parseHls(
+      `#EXTM3U\n#EXT-X-TARGETDURATION:1\n${many}\n#EXT-X-ENDLIST\n`,
+      'https://a.test/p.m3u8',
+    );
+    expect(big.ok).toBe(false);
+  });
+});

@@ -9,6 +9,7 @@
  * playback and is refused.
  */
 import { dataHandle } from '@/lib/dataUrl';
+import { log } from '@/lib/security';
 import { INGEST_PORT_PREFIX, MAX_CAPTURE_TRACKS, type IngestDown, type IngestUp } from '@/types/ingest';
 
 export interface BannerLabels {
@@ -323,7 +324,7 @@ export async function startCapture(
     await expect('done');
     return { ok: true, chunks: sent, bytes };
   } catch (e) {
-    if (!cancelled) console.warn('[vdown] capture failed during', phase, e instanceof Error ? e.stack : e);
+    if (!cancelled) log.warn('capture failed during', phase, e instanceof Error ? e.message : '');
     const code = (e as { code?: CaptureResult extends { code: infer C } ? C : never }).code;
     try {
       send({ t: 'error', message: e instanceof Error ? e.message.slice(0, 200) : 'failed' });

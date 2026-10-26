@@ -1,7 +1,7 @@
 import { Archive, Download, FileCode2, FileText, Image as ImageIcon } from 'lucide-react';
 import { t } from '@/lib/i18n';
 import { formatBytes } from '@/lib/media';
-import { parseUrl, redactUrl } from '@/lib/security';
+import { redactUrl } from '@/lib/security';
 import type { MediaResource } from '@/types/media';
 import { heldSource } from './MediaCard';
 import { reasonText } from './labels';
@@ -13,14 +13,6 @@ function Icon({ r }: { r: MediaResource }) {
   if (r.kind === 'archive') return <Archive {...common} />;
   if (r.kind === 'document') return <FileText {...common} />;
   return <FileCode2 {...common} />;
-}
-
-/** A thumbnail is only fetched for an image on the very site the user is on (the page loaded it already). */
-function thumbnailUrl(r: MediaResource): string | undefined {
-  if (r.kind !== 'image' || r.held) return undefined;
-  const u = parseUrl(r.url);
-  const page = parseUrl(r.pageUrl);
-  return u && page && u.protocol === 'https:' && u.hostname === page.hostname ? r.url : undefined;
 }
 
 export interface FileCardProps {
@@ -36,7 +28,6 @@ export interface FileCardProps {
 export function FileCard({ resource: r, selected, busy, feedback, onToggle, onDownload }: FileCardProps) {
   const ok = r.downloadability.status === 'downloadable';
   const name = r.ext ? `${r.title}.${r.ext}` : r.title;
-  const thumb = thumbnailUrl(r);
   const meta = [
     r.width && r.height ? t('dimensionsPx', r.width, r.height) : '',
     r.sizeBytes !== undefined ? formatBytes(r.sizeBytes) : '',
@@ -57,11 +48,8 @@ export function FileCard({ resource: r, selected, busy, feedback, onToggle, onDo
           ok ? 'border-neon/30 text-neon' : 'border-white/12 text-muted',
         )}
       >
-        {thumb ? (
-          <img src={thumb} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
-        ) : (
-          <Icon r={r} />
-        )}
+        {/* No remote thumbnail: loading one would make the extension request an address the page chose. */}
+        <Icon r={r} />
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-[12.5px] text-fg" title={name}>
