@@ -1,9 +1,9 @@
-import { Eraser, RefreshCw, Settings, ShieldCheck } from 'lucide-react';
-import { useCallback, useMemo, useState } from 'react';
+import { Eraser, Link2, RefreshCw, Settings, ShieldCheck } from 'lucide-react';
+import { useCallback, useMemo, useState, type FormEvent } from 'react';
 import { EmptyState } from '@/components/EmptyState';
 import { Logo } from '@/components/Logo';
 import { QueueItem, type JobAction } from '@/components/QueueItem';
-import { Button, IconButton, Notice, cx } from '@/components/ui';
+import { Button, IconButton, Notice, TextField, cx } from '@/components/ui';
 import { useJobs } from '@/hooks/useJobs';
 import { useSettings } from '@/hooks/useSettings';
 import { useActiveTabId, useTabMedia } from '@/hooks/useTabMedia';
@@ -12,6 +12,7 @@ import { send } from '@/lib/messaging';
 import { popupQueue } from '@/lib/queue';
 import { emptyCause, tabOf } from '@/lib/tabs';
 import {
+  describeError,
   openDownloadedFile,
   originOf,
   quickDownload,
@@ -148,6 +149,23 @@ export function PopupApp() {
   // The hook only sees players that start after it is registered, so a grant made with the hook on offers a reload.
   const [offerReload, setOfferReload] = useState(false);
   const [showAllJobs, setShowAllJobs] = useState(false);
+  // A link pasted by hand (a stream address seen elsewhere): added to this tab's scan.
+  const [adding, setAdding] = useState(false);
+  const [link, setLink] = useState('');
+  const [linkNote, setLinkNote] = useState<Feedback | undefined>();
+  const onAddLink = useCallback(
+    async (e: FormEvent) => {
+      e.preventDefault();
+      if (tabId === undefined || !link.trim()) return;
+      setLinkNote(undefined);
+      const res = await send('add-url', { tabId, url: link.trim() });
+      if (res.ok) {
+        setLink('');
+        setAdding(false);
+      } else setLinkNote({ tone: 'danger', text: describeError(res.error) });
+    },
+    [tabId, link],
+  );
   const onAllowFrames = useCallback(async () => {
     if (!(await requestAllSites())) return;
     if (settings.pageHook) setOfferReload(true);
@@ -254,6 +272,14 @@ export function PopupApp() {
             </p>
           </div>
           <IconButton
+            label={t('addLink')}
+            aria-expanded={adding}
+            onClick={() => setAdding((v) => !v)}
+            className={adding ? 'text-neon' : ''}
+          >
+            <Link2 size={15} aria-hidden="true" />
+          </IconButton>
+          <IconButton
             label={t('rescanPage')}
             onClick={() => void rescan()}
             disabled={scanning || tabId === undefined}
@@ -262,6 +288,31 @@ export function PopupApp() {
           </IconButton>
         </section>
 
+        {adding && (
+          <form className="flex items-end gap-2" onSubmit={(e) => void onAddLink(e)}>
+            <div className="min-w-0 flex-1">
+              <TextField
+                label={t('addLinkLabel')}
+                type="url"
+                inputMode="url"
+                required
+                autoFocus
+                spellCheck={false}
+                placeholder="https://…/master.m3u8"
+                value={link}
+                onChange={(e) => setLink(e.target.value)}
+              />
+            </div>
+            <Button variant="primary" type="submit" disabled={!link.trim() || scanning}>
+              {t('addLinkButton')}
+            </Button>
+          </form>
+        )}
+        {linkNote && (
+          <Notice tone={linkNote.tone} role="alert">
+            {linkNote.text}
+          </Notice>
+        )}
         {state && state.notes.blobSources > 0 && (
           <Notice tone="magenta">{t('noteBlob', state.notes.blobSources)}</Notice>
         )}

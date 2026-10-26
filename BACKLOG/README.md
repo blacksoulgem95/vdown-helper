@@ -67,5 +67,7 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-047](VDH-047-security-review-fixes.md) | Fixes from the independent security review | done | P0 | security | VDH-044 |
 | [VDH-048](VDH-048-ci-green-and-pr-flow.md) | CI green on GitHub, release bump rule, PR-and-merge flow | done | P0 | build | VDH-022, VDH-032, VDH-047 |
 | [VDH-049](VDH-049-hook-default-and-all-embedded.md) | Page hook on by default, one grant for all embedded players | done | P1 | security | VDH-033 |
-| [VDH-050](VDH-050-popup-funnel.md) | Popup funnel - from opening the popup to the right download in one click | in-progress | P1 | ui | VDH-049 |
-| [VDH-051](VDH-051-mse-player-fix-action.md) | MediaSource players say what is missing and offer the one fix | in-progress | P1 | ui | VDH-049 |
+| [VDH-050](VDH-050-popup-funnel.md) | Popup funnel - from opening the popup to the right download in one click | done | P1 | ui | VDH-049 |
+| [VDH-051](VDH-051-mse-player-fix-action.md) | MediaSource players say what is missing and offer the one fix | done | P1 | ui | VDH-049 |
+| [VDH-053](VDH-053-observer-misses-requests.md) | Network observer missed requests (sleeping worker, lost writes) | in-progress | P0 | background | VDH-012 |
+| [VDH-054](VDH-054-paste-stream-link.md) | Add a stream link by hand (.m3u8, .m3u, .mpd, media files) | in-progress | P1 | ui | VDH-050 |

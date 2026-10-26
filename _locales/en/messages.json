@@ -180,7 +180,7 @@
     "message": "Network observer"
   },
   "detectManual": {
-    "message": "Manual rescan"
+    "message": "Added by you"
   },
   "reasonOk": {
     "message": "Ready to download."
@@ -1036,5 +1036,14 @@
   },
   "sourceMse": {
     "message": "a player in the page (Media Source)"
+  },
+  "addLink": {
+    "message": "Add a stream link"
+  },
+  "addLinkLabel": {
+    "message": "Stream or file link (.m3u8, .m3u, .mpd, video, audio)"
+  },
+  "addLinkButton": {
+    "message": "ADD"
   }
 }

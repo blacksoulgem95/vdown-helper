@@ -32,6 +32,7 @@ const BITRATES = [128, 192, 256, 320];
 /** Runtime validation of untrusted message payloads (anything can message an extension from its own pages). */
 const validators: { [K in RequestType]: (p: unknown) => p is RequestMap[K]['req'] } = {
   scan: (p): p is RequestMap['scan']['req'] => isObj(p) && isInt(p['tabId']),
+  'add-url': (p): p is RequestMap['add-url']['req'] => isObj(p) && isInt(p['tabId']) && isStr(p['url']),
   'get-state': (p): p is RequestMap['get-state']['req'] => isObj(p) && isInt(p['tabId']),
   'inspect-variant': (p): p is RequestMap['inspect-variant']['req'] =>
     isObj(p) && isInt(p['tabId']) && isStr(p['url']) && (p['frameId'] === undefined || isInt(p['frameId'])),

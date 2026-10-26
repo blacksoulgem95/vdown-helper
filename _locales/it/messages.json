@@ -180,7 +180,7 @@
     "message": "Osservatore di rete"
   },
   "detectManual": {
-    "message": "Riscansione manuale"
+    "message": "Aggiunto da te"
   },
   "reasonOk": {
     "message": "Pronto per il download."
@@ -1036,5 +1036,14 @@
   },
   "sourceMse": {
     "message": "un player nella pagina (Media Source)"
+  },
+  "addLink": {
+    "message": "Aggiungi un link di stream"
+  },
+  "addLinkLabel": {
+    "message": "Link di stream o file (.m3u8, .m3u, .mpd, video, audio)"
+  },
+  "addLinkButton": {
+    "message": "AGGIUNGI"
   }
 }

@@ -17,6 +17,7 @@ import { tabOf } from '@/lib/tabs';
 import type { VariantInspection, TabState } from '@/types/messages';
 import type { MediaResource, RawCandidate, ScanNotes, ScanReport } from '@/types/media';
 import { readHookReports } from './hooks';
+import { getManual } from './manual';
 import { getObserved, isObserving } from './observer';
 import { combinedFetcher, hasHostAccess, injectScanner, pageScanAll } from './pageFetch';
 import { emptyState, getTabState, setTabState } from './tabState';
@@ -137,7 +138,7 @@ async function runScan(tabId: number, automatic: boolean): Promise<TabState> {
       const bad = protectedKeySystems(h.report.emeKeySystems);
       if (bad.length > 0) protectedFrames.set(h.frameId, bad);
     }
-    const candidates: RawCandidate[] = [...framed, ...hooked, ...observed];
+    const candidates: RawCandidate[] = [...framed, ...hooked, ...observed, ...(await getManual(tabId))];
     const notes = mergeNotes(reports);
     const ctx: AnalyzeContext = {
       tabId,
@@ -194,6 +195,12 @@ async function runScan(tabId: number, automatic: boolean): Promise<TabState> {
     await setTabState(s);
     return s;
   }
+}
+
+/** Scan again after the inputs changed (a pasted link): a scan already running may have started without them. */
+export async function rescanTab(tabId: number): Promise<TabState> {
+  await inFlight.get(tabId)?.catch(() => undefined);
+  return scanTab(tabId);
 }
 
 /** Scan a tab. Concurrent requests for the same tab share one scan. */
