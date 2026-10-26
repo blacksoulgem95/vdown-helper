@@ -65,4 +65,4 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-045](VDH-045-clearkey-cenc.md) | ClearKey / CENC decryption for DASH | todo | P3 | lib | VDH-034 |
 | [VDH-046](VDH-046-verify-site-adapters.md) | Verify the open-site adapters against the real services | todo | P3 | test | VDH-041 |
 | [VDH-047](VDH-047-security-review-fixes.md) | Fixes from the independent security review | done | P0 | security | VDH-044 |
-| [VDH-048](VDH-048-ci-green-and-pr-flow.md) | CI green on GitHub, release bump rule, PR-and-merge flow | in-progress | P0 | build | VDH-022, VDH-032, VDH-047 |
+| [VDH-048](VDH-048-ci-green-and-pr-flow.md) | CI green on GitHub, release bump rule, PR-and-merge flow | done | P0 | build | VDH-022, VDH-032, VDH-047 |
