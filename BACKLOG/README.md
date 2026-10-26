@@ -39,12 +39,12 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-019](VDH-019-readme-docs.md) | README and documentation | done | P1 | docs | VDH-018 |
 | [VDH-020](VDH-020-native-companion-doc.md) | Native companion architecture doc | done | P3 | docs | VDH-019 |
 | [VDH-021](VDH-021-i18n-en-it.md) | Internationalisation (en, it) | done | P1 | ui | VDH-003 |
-| [VDH-022](VDH-022-ci-and-tooling.md) | CI workflow and lint/format tooling | blocked | P2 | build | VDH-001 |
+| [VDH-022](VDH-022-ci-and-tooling.md) | CI workflow and lint/format tooling | in-progress | P2 | build | VDH-001 |
 | [VDH-023](VDH-023-branding-icons.md) | Logo and icons | done | P2 | ui | VDH-001 |
 | [VDH-024](VDH-024-license-notices.md) | License and third-party notices | done | P2 | docs | VDH-012 |
 | [VDH-025](VDH-025-open-file-needs-gesture.md) | Open / show downloaded file needs a user gesture | done | P1 | ui | VDH-014 |
 | [VDH-026](VDH-026-popup-premature-ready.md) | Popup showed READY before its first scan | done | P2 | ui | VDH-014 |
-| [VDH-027](VDH-027-publish-branch.md) | Publish the branch to GitHub | blocked | P0 | build | - |
+| [VDH-027](VDH-027-publish-branch.md) | Publish the branch to GitHub | done | P0 | build | - |
 | [VDH-028](VDH-028-manual-chrome-verification.md) | Manual verification in branded Google Chrome | todo | P1 | test | VDH-018 |
 | [VDH-029](VDH-029-credential-and-ssrf-hardening.md) | Cookies and extension fetches limited to what the user chose | done | P0 | security | VDH-008, VDH-011 |
 | [VDH-030](VDH-030-resource-limits-hostile-servers.md) | Byte, time and count limits against hostile servers and playlists | done | P1 | security | VDH-011 |
