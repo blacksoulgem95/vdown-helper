@@ -1,4 +1,4 @@
-import type { HlsMasterPlaylist, HlsMediaPlaylist, HlsVariant } from '@/types/hls';
+import type { HlsMasterPlaylist, HlsMediaPlaylist, HlsRendition, HlsVariant } from '@/types/hls';
 import type {
   Downloadability,
   MediaFormat,
@@ -7,6 +7,15 @@ import type {
   RawCandidate,
 } from '@/types/media';
 import { classifyPlaylist, parseHls } from './hls/parser';
+import { dashRef } from './dash/ref';
+import {
+  DashExpandError,
+  expandSegments,
+  mainPeriodIndex,
+  parseDash,
+  periodDuration,
+  protectionsOf,
+} from './dash/parser';
 import { estimateBytes, formatFromMime, formatFromUrl, inferTitle, mediaTypeOf } from './media';
 import type { ProbeResult } from './netprobe';
 import { dedupeResources, hideCoveredVariants, resourceId } from './resources';
@@ -181,6 +190,7 @@ async function analyzePlaylist(r: MediaResource, fetcher: Fetcher): Promise<Medi
     return r;
   }
   const text = res.text ?? '';
+  if (classifyPlaylist(text) === 'dash') return analyzeDash(r, text, res.finalUrl || r.url);
   const parsed = parseHls(text, res.finalUrl || r.url);
   if (!parsed.ok) {
     const e = parsed.error;
@@ -344,4 +354,104 @@ export function provisionalResources(candidates: RawCandidate[], ctx: AnalyzeCon
       skeleton(e, ctx, formatFromMime(e.hints.mimeType) ?? formatFromUrl(e.url) ?? 'unknown'),
     ),
   );
+}
+
+/** Describe an MPEG-DASH manifest: its real representations, duration, protection and addressing. */
+function analyzeDash(r: MediaResource, text: string, url: string): MediaResource {
+  r.format = 'dash';
+  const parsed = parseDash(text, url);
+  if (!parsed.ok) {
+    r.kind = 'unsupported-playlist';
+    r.playlist = { playlistClass: 'dash', encryption: [] };
+    r.downloadability =
+      parsed.error.code === 'unsafe-url'
+        ? verdict('unsupported', 'unsafe-url')
+        : verdict('unsupported', 'malformed', parsed.error.code);
+    return r;
+  }
+  const m = parsed.manifest;
+  const period = m.periods[mainPeriodIndex(m)];
+  if (!period) {
+    r.kind = 'unsupported-playlist';
+    r.downloadability = verdict('unsupported', 'malformed');
+    return r;
+  }
+  r.kind = 'dash';
+  const videos = period.representations
+    .filter((x) => x.content === 'video')
+    .sort((a, b) => (b.height ?? 0) - (a.height ?? 0) || b.bandwidth - a.bandwidth)
+    .slice(0, MAX_VARIANTS);
+  const audios = period.representations.filter((x) => x.content === 'audio').slice(0, MAX_AUDIO_TRACKS);
+  const hasAudioCodec = (codecs: string | undefined) => /mp4a|ac-3|ec-3|opus|vorbis|flac/i.test(codecs ?? '');
+  r.variants = videos.map((x) => {
+    const v: HlsVariant = { uri: dashRef(url, x.id), bandwidth: x.bandwidth };
+    if (x.width) v.width = x.width;
+    if (x.height) v.height = x.height;
+    if (x.frameRate) v.frameRate = x.frameRate;
+    if (x.codecs) v.codecs = x.codecs;
+    // Separate audio is only offered for video that does not already carry it.
+    if (audios.length > 0 && !hasAudioCodec(x.codecs)) v.audioGroup = 'dash-audio';
+    return v;
+  });
+  r.audioTracks = audios.map((x, i) => {
+    const t: HlsRendition = {
+      type: 'AUDIO',
+      groupId: 'dash-audio',
+      name: clip(x.label ?? x.lang ?? x.id),
+      uri: dashRef(url, x.id),
+      isDefault: i === 0,
+      autoSelect: true,
+    };
+    if (x.lang) t.language = x.lang;
+    if (x.codecs) t.codecs = x.codecs;
+    return t;
+  });
+  r.mediaType = videos.length > 0 ? 'video' : 'audio';
+  applyVariantTop(r, r.variants[0]);
+  if (videos.length === 0 && audios[0]) r.bitrate = audios[0].bandwidth;
+  const dur = periodDuration(m, period);
+  if (dur !== undefined) r.durationSec = dur;
+
+  const top = videos[0] ?? audios[0];
+  let segmentCount: number | undefined;
+  if (top && m.type === 'static') {
+    try {
+      segmentCount = expandSegments(m, period, top).segments.length;
+    } catch (e) {
+      r.downloadability = verdict(
+        'unsupported',
+        'malformed',
+        e instanceof DashExpandError ? 'segments' : 'expand',
+      );
+      r.playlist = { playlistClass: 'dash', encryption: [], periods: m.periods.length };
+      return r;
+    }
+  }
+  r.playlist = {
+    playlistClass: 'dash',
+    encryption: [],
+    fragmented: true,
+    live: m.type === 'dynamic',
+    periods: m.periods.length,
+    ...(segmentCount !== undefined ? { segmentCount } : {}),
+  };
+  const prot = protectionsOf(period.representations);
+  if (prot.drm) {
+    r.downloadability = verdict('protected', 'drm', prot.systems.join(','));
+  } else if (prot.clearKey) {
+    // Encrypted with ClearKey: only downloadable once its key can be obtained (not implemented yet).
+    r.downloadability = verdict('unsupported', 'dash-clearkey');
+  } else if (m.type === 'dynamic') {
+    r.downloadability = verdict('unsupported', 'live', 'live-or-event');
+  } else if (!top) {
+    r.downloadability = verdict('unsupported', 'no-segments');
+  } else {
+    r.downloadability = verdict('downloadable', 'ok');
+    const size = estimateBytes(r.bitrate, dur);
+    if (size !== undefined) {
+      r.sizeBytes = size;
+      r.sizeIsEstimate = true;
+    }
+  }
+  return r;
 }

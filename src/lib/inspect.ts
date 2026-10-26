@@ -1,5 +1,7 @@
 import type { HlsMediaPlaylist } from '@/types/hls';
 import type { VariantInspection } from '@/types/messages';
+import type { DashManifest, DashPeriod, DashRepresentation } from '@/types/dash';
+import { expandSegments, protectionsOf } from './dash/parser';
 import { extensionOf } from './media';
 import { parseUrl } from './security';
 
@@ -50,4 +52,30 @@ export function inspectMediaPlaylist(p: HlsMediaPlaylist): VariantInspection {
   };
   if (p.targetDuration !== undefined) out.targetDuration = p.targetDuration;
   return out;
+}
+
+/** Summary of one DASH representation, shaped like the HLS one so the rest of the app treats them alike. */
+export function inspectDashRepresentation(
+  m: DashManifest,
+  period: DashPeriod,
+  rep: DashRepresentation,
+): VariantInspection {
+  const e = expandSegments(m, period, rep);
+  const urls = new Set<string>([m.url, ...e.segments.map((s) => s.uri)]);
+  if (e.init) urls.add(e.init.uri);
+  const prot = protectionsOf(period.representations);
+  return {
+    url: m.url,
+    segmentCount: e.segments.length,
+    durationSec: e.durationSec,
+    live: m.type === 'dynamic',
+    fragmented: true,
+    encryption: prot.systems.length > 0 ? prot.systems.map((x) => x.toUpperCase()) : [],
+    // ClearKey is not DRM but its key cannot be obtained yet, so it is refused the same way.
+    protectedByDrm: prot.drm || prot.clearKey,
+    keyUris: [],
+    origins: originsOf(urls),
+    originSamples: sampleByOrigin(urls),
+    firstSegmentExt: extensionOf(e.segments[0]?.uri ?? '') || 'm4s',
+  };
 }

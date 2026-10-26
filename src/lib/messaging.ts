@@ -48,7 +48,8 @@ const validators: { [K in RequestType]: (p: unknown) => p is RequestMap[K]['req'
       CONTAINERS.includes(r['container'] as string) &&
       AUDIO.includes(r['audioFormat'] as string) &&
       BITRATES.includes(r['audioBitrate'] as number) &&
-      typeof r['isHls'] === 'boolean'
+      typeof r['isHls'] === 'boolean' &&
+      (r['isDash'] === undefined || typeof r['isDash'] === 'boolean')
     );
   },
   'job-action': (p): p is RequestMap['job-action']['req'] =>

@@ -51,7 +51,7 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-031](VDH-031-hls-correctness-fixes.md) | HLS correctness: encrypted init sections, ignored Range, unusable keys | done | P1 | lib | VDH-011 |
 | [VDH-032](VDH-032-release-pipeline.md) | Release pipeline for main (Chrome package + tag + GitHub Release) | in-progress | P1 | build | VDH-022, VDH-002 |
 | [VDH-033](VDH-033-frames-hook-foundation.md) | All-frame scanning, opt-in page hook, header replay | done | P0 | content | VDH-008 |
-| [VDH-034](VDH-034-dash-support.md) | MPEG-DASH support | todo | P0 | lib | VDH-033 |
+| [VDH-034](VDH-034-dash-support.md) | MPEG-DASH support | done | P0 | lib | VDH-033 |
 | [VDH-035](VDH-035-subtitles.md) | Subtitles and captions | todo | P1 | lib | VDH-034 |
 | [VDH-036](VDH-036-more-formats-data-urls.md) | More container/audio formats and data: URLs | todo | P1 | lib | VDH-033 |
 | [VDH-037](VDH-037-file-types-tabs-zip.md) | Images, documents, archives and page assets with ZIP download | todo | P1 | ui | VDH-033 |
@@ -62,3 +62,4 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-042](VDH-042-tabbed-popup.md) | Tabbed popup with frame grouping | todo | P1 | ui | VDH-037 |
 | [VDH-043](VDH-043-test-players-fixtures.md) | Realistic test players and fixtures | in-progress | P1 | test | VDH-033 |
 | [VDH-044](VDH-044-docs-store-policy.md) | Docs, store policy and constraints update | todo | P1 | docs | VDH-043 |
+| [VDH-045](VDH-045-clearkey-cenc.md) | ClearKey / CENC decryption for DASH | todo | P3 | lib | VDH-034 |

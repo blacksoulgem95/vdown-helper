@@ -83,10 +83,12 @@ export function buildRequest(
   choices: Choices,
   inspection?: VariantInspection,
 ): DownloadRequest {
-  const variant = resource.kind === 'hls-master' ? resource.variants[choices.variantIndex] : undefined;
+  const isMaster = resource.kind === 'hls-master' || resource.kind === 'dash';
+  const isDash = resource.kind === 'dash';
+  const variant = isMaster ? resource.variants[choices.variantIndex] : undefined;
   const audioOpts = audioOptions(resource, variant);
   const audioTrack = choices.audioIndex >= 0 ? audioOpts[choices.audioIndex] : undefined;
-  const audioOnlyMaster = resource.kind === 'hls-master' && resource.variants.length === 0;
+  const audioOnlyMaster = isMaster && resource.variants.length === 0;
   const isHls = resource.kind === 'hls-master' || resource.kind === 'hls-media';
 
   let sourceUrl = resource.url;
@@ -103,12 +105,13 @@ export function buildRequest(
   } else if (audioOnlyMaster) {
     sourceUrl = audioTrack?.uri ?? audioOpts[0]?.uri ?? resource.url;
   }
-  if (choices.mode === 'audio-only' && resource.kind === 'hls-master') {
+  if (choices.mode === 'audio-only' && isMaster) {
     if (audioUrl) {
       // Fetch only the audio rendition instead of the whole video.
       sourceUrl = audioUrl;
       audioUrl = undefined;
-      codecs = audioTrack ? undefined : codecs;
+      // The track's own codec when the manifest states it (DASH); unknown (never assumed) otherwise.
+      codecs = audioTrack ? audioTrack.codecs : codecs;
     } else if (variant) {
       // Audio is muxed into the video stream: use the lightest variant that carries audio.
       const lightest = [...resource.variants]
@@ -135,7 +138,7 @@ export function buildRequest(
     audioOnlyMaster || audioFromRendition ? true : separateAudio ? false : !audioCodecKnownMissing;
 
   const duration = inspection?.durationSec ?? resource.durationSec;
-  const estimated = isHls ? estimateBytes(bandwidth, duration) : resource.sizeBytes;
+  const estimated = isHls || isDash ? estimateBytes(bandwidth, duration) : resource.sizeBytes;
 
   const req: DownloadRequest = {
     resourceId: resource.id,
@@ -153,15 +156,19 @@ export function buildRequest(
     qualityLabel: '',
     sourceFormat: isHls
       ? 'hls'
-      : resource.format !== 'unknown'
-        ? resource.format
-        : (formatFromMime(resource.mimeType) ?? 'unknown'),
+      : isDash
+        ? 'dash'
+        : resource.format !== 'unknown'
+          ? resource.format
+          : (formatFromMime(resource.mimeType) ?? 'unknown'),
     isHls,
     hasMuxedAudio,
     hasVideo,
   };
   if (audioUrl) req.audioUrl = audioUrl;
-  if (isHls && resource.kind === 'hls-master') req.masterUrl = resource.url;
+  if (isDash) req.isDash = true;
+  if (isMaster && (isHls || isDash)) req.masterUrl = resource.url;
+  if (isDash) req.fragmented = true; // DASH segments are fragmented MP4
   if (inspection) {
     req.fragmented = inspection.fragmented;
     req.live = inspection.live;
@@ -170,7 +177,9 @@ export function buildRequest(
     if (resource.playlist.live !== undefined) req.live = resource.playlist.live;
   }
   if (fam.video) req.videoCodec = fam.video;
-  if (fam.audio) req.audioCodec = fam.audio;
+  // A separate audio track carries its own codec when the manifest says so.
+  const trackAudio = separateAudio && audioTrack?.codecs ? familyOf(audioTrack.codecs).audio : undefined;
+  if (fam.audio ?? trackAudio) req.audioCodec = (fam.audio ?? trackAudio) as string;
   if (duration) req.durationSec = duration;
   if (estimated !== undefined) req.estimatedBytes = estimated;
 
@@ -209,9 +218,10 @@ export function planFromRequest(
   req: DownloadRequest,
   limits: { maxMemoryMb: number; maxEncodeDurationSec: number },
 ): Plan {
+  const segmented = req.isHls || req.isDash === true;
   const input: PlanInput = {
-    isHls: req.isHls,
-    sourceFormat: req.sourceFormat,
+    isHls: segmented, // the planner's "isHls" means: a segmented stream (HLS or DASH)
+    sourceFormat: req.isDash ? 'hls' : req.sourceFormat,
     hasMuxedAudio: req.hasMuxedAudio,
     separateAudio: req.audioUrl !== undefined,
     hasVideo: req.hasVideo,

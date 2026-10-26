@@ -95,7 +95,7 @@ export async function submit(raw: DownloadRequest): Promise<Result<{ jobId: stri
   const resource = (await getTabState(clean.tabId))?.resources.find((r) => r.id === clean.resourceId);
   let req: DownloadRequest = { ...clean, credentialedOrigins: credentialedFor(clean, resource) };
   const involved: string[] = [];
-  if (req.isHls) {
+  if (req.isHls || req.isDash) {
     try {
       const ins = await inspectVariant(req.tabId, req.sourceUrl, resource?.frameId);
       if (ins.protectedByDrm) return fail('protected');

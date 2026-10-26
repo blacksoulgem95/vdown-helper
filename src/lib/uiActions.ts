@@ -104,7 +104,7 @@ export async function inspectForChoices(
   allowPrompt: boolean,
 ): Promise<{ ok: true; inspections: Inspections } | { ok: false; error: string }> {
   const draft = buildRequest(resource, settings, choices);
-  if (!draft.isHls) return { ok: true, inspections: {} };
+  if (!draft.isHls && !draft.isDash) return { ok: true, inspections: {} };
   const out: Inspections = {};
   for (const [slot, url] of [
     ['video', draft.sourceUrl],

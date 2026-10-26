@@ -151,6 +151,7 @@ export function canRestage(job: DownloadJob, chromeError: string | undefined): b
     !job.staged &&
     job.request.replay !== undefined &&
     !job.request.isHls &&
+    !job.request.isDash &&
     chromeError !== undefined &&
     REFUSED_BY_SERVER.includes(chromeError)
   );

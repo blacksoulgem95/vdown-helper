@@ -694,5 +694,17 @@
   },
   "optPageHookHint": {
     "message": "Esegue uno script di sola lettura all'inizio di ogni pagina che visiti, in ogni frame, per notare manifest e file che i player caricano da script e per riconoscere la riproduzione protetta. Non modifica nulla e non invia nulla; richiede l'accesso a tutti i siti, che puoi revocare in qualsiasi momento. Disattivato per impostazione predefinita."
+  },
+  "kindDashStream": {
+    "message": "STREAM DASH"
+  },
+  "reasonDashEncrypted": {
+    "message": "Il manifest DASH dichiara una cifratura (DRM). vdown-helper non aggira il DRM."
+  },
+  "reasonDashClearKey": {
+    "message": "Questo stream DASH è cifrato con ClearKey. Rilevato correttamente (non è DRM), ma il download non è ancora supportato."
+  },
+  "reasonDashPeriods": {
+    "message": "Il manifest ha più periodi: viene scaricato solo il più lungo (il contenuto principale)."
   }
 }

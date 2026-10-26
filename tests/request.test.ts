@@ -220,3 +220,139 @@ describe('buildRequest: audio-only and video-only on HLS masters', () => {
     expect(planFromRequest(req, limits)).toMatchObject({ valid: true, audio: 'none', video: 'copy' });
   });
 });
+
+describe('buildRequest: MPEG-DASH', () => {
+  const MPD = 'https://a.com/show/manifest.mpd';
+  const dash = makeResource(MPD, {
+    title: 'Show',
+    kind: 'dash',
+    format: 'dash',
+    durationSec: 600,
+    variants: [
+      {
+        uri: `${MPD}#vdh-rep=v720`,
+        bandwidth: 2_000_000,
+        width: 1280,
+        height: 720,
+        codecs: 'avc1.64001f',
+        audioGroup: 'dash-audio',
+      },
+      {
+        uri: `${MPD}#vdh-rep=v360`,
+        bandwidth: 800_000,
+        width: 640,
+        height: 360,
+        codecs: 'avc1.4d401e',
+        audioGroup: 'dash-audio',
+      },
+    ],
+    audioTracks: [
+      {
+        type: 'AUDIO',
+        groupId: 'dash-audio',
+        name: 'en',
+        language: 'en',
+        uri: `${MPD}#vdh-rep=a1`,
+        isDefault: true,
+        autoSelect: true,
+        codecs: 'mp4a.40.2',
+      },
+    ],
+    playlist: { playlistClass: 'dash', encryption: [], fragmented: true, live: false },
+    downloadability: { status: 'downloadable', reason: 'ok' },
+  });
+  const limits = { maxMemoryMb: 2048, maxEncodeDurationSec: 0 };
+
+  it('addresses representations by URL fragment and marks the request as DASH, not HLS', () => {
+    const req = buildRequest(dash, DEFAULT_SETTINGS, defaultChoices(dash, DEFAULT_SETTINGS));
+    expect(req).toMatchObject({
+      isDash: true,
+      isHls: false,
+      sourceUrl: `${MPD}#vdh-rep=v720`,
+      audioUrl: `${MPD}#vdh-rep=a1`,
+      hasMuxedAudio: false,
+      fragmented: true,
+      masterUrl: MPD,
+    });
+    expect(req.estimatedBytes).toBe(Math.round((2_000_000 * 600) / 8));
+  });
+  it('separate audio means an FFmpeg stream-copy merge into MP4', () => {
+    const c = { ...defaultChoices(dash, DEFAULT_SETTINGS), container: 'mp4' as const };
+    const req = buildRequest(dash, DEFAULT_SETTINGS, c);
+    expect(planFromRequest(req, limits)).toMatchObject({
+      valid: true,
+      requiresFfmpeg: true,
+      video: 'copy',
+      audio: 'copy',
+      extension: 'mp4',
+    });
+    expect(req.filename).toBe('Show [720p].mp4');
+  });
+  it('"original" with a separate audio track still has to merge, and picks MP4 for H.264 + AAC', () => {
+    const req = buildRequest(dash, DEFAULT_SETTINGS, {
+      ...defaultChoices(dash, DEFAULT_SETTINGS),
+      mode: 'original',
+    });
+    expect(planFromRequest(req, limits)).toMatchObject({
+      valid: true,
+      requiresFfmpeg: true,
+      extension: 'mp4',
+    });
+  });
+  it('audio-only fetches just the audio representation and can stream-copy AAC to M4A', () => {
+    const c = {
+      ...defaultChoices(dash, DEFAULT_SETTINGS),
+      mode: 'audio-only' as const,
+      audioFormat: 'm4a' as const,
+    };
+    const req = buildRequest(dash, DEFAULT_SETTINGS, c);
+    expect(req.sourceUrl).toBe(`${MPD}#vdh-rep=a1`);
+    expect(req.audioUrl).toBeUndefined();
+    expect(req.audioCodec).toBe('aac');
+    expect(planFromRequest(req, limits)).toMatchObject({
+      valid: true,
+      audio: 'copy',
+      usesBitrate: false,
+      extension: 'm4a',
+    });
+  });
+  it('audio-only MP3 is a transcode with a bitrate choice', () => {
+    const c = {
+      ...defaultChoices(dash, DEFAULT_SETTINGS),
+      mode: 'audio-only' as const,
+      audioFormat: 'mp3' as const,
+    };
+    expect(planFromRequest(buildRequest(dash, DEFAULT_SETTINGS, c), limits)).toMatchObject({
+      audio: 'transcode',
+      usesBitrate: true,
+    });
+  });
+  it('video-only drops the audio representation', () => {
+    const req = buildRequest(dash, DEFAULT_SETTINGS, {
+      ...defaultChoices(dash, DEFAULT_SETTINGS),
+      mode: 'video-only',
+      container: 'mp4',
+    });
+    expect(req.audioUrl).toBeUndefined();
+    expect(planFromRequest(req, limits)).toMatchObject({ valid: true, audio: 'none' });
+  });
+  it('a DASH request is never retried as a native download', async () => {
+    const { canRestage, createJob, transition } = await import('@/lib/queue');
+    const req = buildRequest(dash, DEFAULT_SETTINGS, defaultChoices(dash, DEFAULT_SETTINGS));
+    const job = transition(
+      transition(
+        createJob(
+          'd',
+          { ...req, replay: { frameUrl: 'https://e.example/', urls: [] } },
+          planFromRequest(req, limits),
+          1,
+        ),
+        'preparing',
+        2,
+      ),
+      'downloading',
+      3,
+    );
+    expect(canRestage(job, 'SERVER_FORBIDDEN')).toBe(false);
+  });
+});

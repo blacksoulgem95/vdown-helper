@@ -8,7 +8,7 @@ const ff = (args) =>
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...args], { stdio: 'inherit' });
 
 export function ensureFixtures(dir) {
-  if (existsSync(join(dir, '.complete4'))) return;
+  if (existsSync(join(dir, '.complete5'))) return;
   mkdirSync(dir, { recursive: true });
   for (const d of [
     'media',
@@ -26,6 +26,9 @@ export function ensureFixtures(dir) {
     'hls-long',
     'hls-aes-fmp4',
     'hls-range',
+    'dash-vod',
+    'dash-drm',
+    'dash-live',
   ]) {
     mkdirSync(join(dir, d), { recursive: true });
   }
@@ -281,6 +284,60 @@ video/index.m3u8
     '#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:2\n#EXTINF:2.0,\n/__stall/seg.ts\n#EXT-X-ENDLIST\n',
   );
 
+  // MPEG-DASH: two video representations (360p copy, 180p re-encoded for the fixture) + AAC audio, timeline template.
+  ff([
+    '-i',
+    sample,
+    '-map',
+    '0:v:0',
+    '-map',
+    '0:v:0',
+    '-map',
+    '0:a:0',
+    '-c:v:0',
+    'copy',
+    '-c:v:1',
+    'libx264',
+    '-preset',
+    'ultrafast',
+    '-filter:v:1',
+    'scale=320:180',
+    '-g',
+    '50',
+    '-keyint_min',
+    '50',
+    '-sc_threshold',
+    '0',
+    '-c:a',
+    'copy',
+    '-f',
+    'dash',
+    '-seg_duration',
+    '2',
+    '-use_template',
+    '1',
+    '-use_timeline',
+    '1',
+    '-adaptation_sets',
+    'id=0,streams=v id=1,streams=a',
+    join(dir, 'dash-vod/manifest.mpd'),
+  ]);
+  const vodMpd = readFileSync(join(dir, 'dash-vod/manifest.mpd'), 'utf8');
+  // The same manifest, declaring Widevine (refused) and as a live stream (not supported yet). Only the manifests exist.
+  writeFileSync(
+    join(dir, 'dash-drm/manifest.mpd'),
+    vodMpd
+      .replace('<AdaptationSet id="0"', '<AdaptationSet id="0"')
+      .replace(
+        /(<AdaptationSet id="0"[^>]*>)/,
+        '$1<ContentProtection schemeIdUri="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"/>',
+      ),
+  );
+  writeFileSync(
+    join(dir, 'dash-live/manifest.mpd'),
+    vodMpd.replace('type="static"', 'type="dynamic" minimumUpdatePeriod="PT2S"'),
+  );
+
   // Two 70 MB "segments" (zeros): the playlist is valid, the data is not media. Used to trip the memory guard.
   const chunk = Buffer.alloc(70 * 1024 * 1024);
   writeFileSync(join(dir, 'big/seg0.ts'), chunk);
@@ -289,5 +346,5 @@ video/index.m3u8
     join(dir, 'big/index.m3u8'),
     '#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:10.0,\nseg0.ts\n#EXTINF:10.0,\nseg1.ts\n#EXT-X-ENDLIST\n',
   );
-  writeFileSync(join(dir, '.complete4'), 'ok');
+  writeFileSync(join(dir, '.complete5'), 'ok');
 }

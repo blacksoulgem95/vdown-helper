@@ -694,5 +694,17 @@
   },
   "optPageHookHint": {
     "message": "Runs a small read-only script at the start of every page you visit, in every frame, to notice manifests and files that players load from script and to recognise protected playback. It changes nothing and sends nothing; it needs access to all sites, which you can revoke at any time. Off by default."
+  },
+  "kindDashStream": {
+    "message": "DASH STREAM"
+  },
+  "reasonDashEncrypted": {
+    "message": "The DASH manifest declares encryption (DRM). vdown-helper does not bypass DRM."
+  },
+  "reasonDashClearKey": {
+    "message": "This DASH stream is encrypted with ClearKey. Detected correctly (it is not DRM), but downloading it is not supported yet."
+  },
+  "reasonDashPeriods": {
+    "message": "This manifest has several periods: only the longest (the main content) is downloaded."
   }
 }

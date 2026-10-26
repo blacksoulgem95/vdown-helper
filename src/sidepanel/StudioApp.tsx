@@ -122,11 +122,12 @@ function StudioForm({ resource }: { resource: MediaResource }) {
   const variant = resource.kind === 'hls-master' ? resource.variants[choices.variantIndex] : undefined;
   const audioOpts = audioOptions(resource, variant);
   const isHls = resource.kind === 'hls-master' || resource.kind === 'hls-media';
+  const isSegmented = isHls || resource.kind === 'dash';
 
   // Which playlists will this choice read? Inspect them to learn duration, segments, encryption and origins.
   const draft = useMemo(() => buildRequest(resource, settings, choices), [resource, settings, choices]);
   useEffect(() => {
-    if (!isHls) return;
+    if (!isSegmented) return;
     let alive = true;
     setInspecting(true);
     setInspectError(undefined);
@@ -244,7 +245,7 @@ function StudioForm({ resource }: { resource: MediaResource }) {
           <dd className="break-all text-fg/85">{redactUrl(resource.url)}</dd>
           <dt className="text-muted">{t('detailStatus')}</dt>
           <dd className="text-fg/85">{reasonText(resource.downloadability)}</dd>
-          {isHls && (
+          {isSegmented && (
             <>
               <dt className="text-muted">{t('studioPlaylist')}</dt>
               <dd className="text-fg/85">
@@ -306,50 +307,52 @@ function StudioForm({ resource }: { resource: MediaResource }) {
       </Panel>
 
       {/* Quality */}
-      {resource.kind === 'hls-master' && resource.variants.length > 0 && videoMode && (
-        <Panel className="p-3">
-          <h3 className="label mb-2">{t('studioVariants')}</h3>
-          <div role="radiogroup" aria-label={t('studioVariants')} className="space-y-1.5">
-            {resource.variants.map((v, i) => {
-              const active = choices.variantIndex === i;
-              return (
-                <button
-                  key={v.uri}
-                  type="button"
-                  role="radio"
-                  aria-checked={active}
-                  onClick={() =>
-                    set({
-                      variantIndex: i,
-                      audioIndex: audioOptions(resource, v).findIndex((a) => a.isDefault),
-                    })
-                  }
-                  className={cx(
-                    'flex w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-left transition-colors',
-                    active ? 'border-neon bg-neon/10' : 'border-white/12 hover:border-neon/40',
-                  )}
-                >
-                  <span className="mono w-[58px] shrink-0 text-[12px] font-bold">
-                    {resolutionLabel(v.height, v.width) || '—'}
-                  </span>
-                  <span className="mono w-[60px] shrink-0 text-[10px] uppercase text-magenta">
-                    {qualityTag(v.height)}
-                  </span>
-                  <span className="mono min-w-0 flex-1 truncate text-[10.5px] text-muted">
-                    {[
-                      formatBitrate(v.averageBandwidth ?? v.bandwidth),
-                      v.frameRate ? `${v.frameRate} fps` : '',
-                      v.codecs ?? '',
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </Panel>
-      )}
+      {(resource.kind === 'hls-master' || resource.kind === 'dash') &&
+        resource.variants.length > 0 &&
+        videoMode && (
+          <Panel className="p-3">
+            <h3 className="label mb-2">{t('studioVariants')}</h3>
+            <div role="radiogroup" aria-label={t('studioVariants')} className="space-y-1.5">
+              {resource.variants.map((v, i) => {
+                const active = choices.variantIndex === i;
+                return (
+                  <button
+                    key={v.uri}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() =>
+                      set({
+                        variantIndex: i,
+                        audioIndex: audioOptions(resource, v).findIndex((a) => a.isDefault),
+                      })
+                    }
+                    className={cx(
+                      'flex w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-left transition-colors',
+                      active ? 'border-neon bg-neon/10' : 'border-white/12 hover:border-neon/40',
+                    )}
+                  >
+                    <span className="mono w-[58px] shrink-0 text-[12px] font-bold">
+                      {resolutionLabel(v.height, v.width) || '—'}
+                    </span>
+                    <span className="mono w-[60px] shrink-0 text-[10px] uppercase text-magenta">
+                      {qualityTag(v.height)}
+                    </span>
+                    <span className="mono min-w-0 flex-1 truncate text-[10.5px] text-muted">
+                      {[
+                        formatBitrate(v.averageBandwidth ?? v.bandwidth),
+                        v.frameRate ? `${v.frameRate} fps` : '',
+                        v.codecs ?? '',
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </Panel>
+        )}
 
       {/* Audio track */}
       {audioOpts.length > 0 && choices.mode !== 'video-only' && (

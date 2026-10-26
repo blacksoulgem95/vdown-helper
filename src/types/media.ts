@@ -19,7 +19,7 @@ export type MediaFormat =
   | 'blob'
   | 'unknown';
 
-export type StreamKind = 'file' | 'hls-master' | 'hls-media' | 'unsupported-playlist' | 'blob';
+export type StreamKind = 'file' | 'hls-master' | 'hls-media' | 'dash' | 'unsupported-playlist' | 'blob';
 
 export type DetectionMethod =
   'dom-element' | 'dom-source' | 'dom-link' | 'performance' | 'network' | 'hook' | 'manual-rescan';
@@ -42,7 +42,8 @@ export type ReasonCode =
   | 'unsafe-url'
   | 'unsupported-format'
   | 'aes-key-inaccessible'
-  | 'no-segments';
+  | 'no-segments'
+  | 'dash-clearkey';
 
 export type DownloadabilityStatus = 'downloadable' | 'protected' | 'inaccessible' | 'unsupported' | 'unknown';
 
@@ -60,6 +61,8 @@ export interface PlaylistSummary {
   live?: boolean;
   encryption: KeyMethod[];
   fragmented?: boolean;
+  /** DASH: number of periods in the manifest (only the longest, the main content, is downloaded). */
+  periods?: number;
 }
 
 export interface MediaResource {

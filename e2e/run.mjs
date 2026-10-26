@@ -283,7 +283,9 @@ await step('protected, live, plain M3U and DASH are classified honestly (never d
     ['/hls-drm/index.m3u8', 'protected', 'sample-aes'],
     ['/hls-live/index.m3u8', 'unsupported', 'live'],
     ['/lists/playlist.m3u', 'unsupported', 'plain-m3u'],
-    ['/dash/manifest.mpd', 'unsupported', 'dash'],
+    ['/dash/manifest.mpd', 'unsupported', 'malformed'],
+    ['/dash-live/manifest.mpd', 'unsupported', 'live'],
+    ['/dash-drm/manifest.mpd', 'protected', 'drm'],
   ];
   for (const [path, status, reason] of expect) {
     const r = byPath(state, path);
@@ -548,6 +550,117 @@ await step('Studio: AAC audio is stream-COPIED to M4A (no bitrate choice offered
   const p = probe(fileOf(job));
   assert(p.codecs.join() === 'aac' && p.types.join() === 'audio', `codecs ${p.codecs}`);
 });
+
+await step(
+  'DASH: real manifest lists only real representations; separate audio; estimated size',
+  async () => {
+    const r = byPath(state, '/dash-vod/manifest.mpd');
+    assert(r && r.kind === 'dash' && r.format === 'dash', `kind ${r?.kind}`);
+    assert(
+      JSON.stringify(r.variants.map((v) => v.height)) === '[360,180]',
+      `variants ${JSON.stringify(r.variants.map((v) => v.height))}`,
+    );
+    assert(
+      r.audioTracks.length === 1 && r.variants.every((v) => v.audioGroup === 'dash-audio'),
+      'audio track',
+    );
+    assert(Math.abs(r.durationSec - 6) < 0.3 && r.sizeIsEstimate === true, `duration ${r.durationSec}`);
+    assert(r.downloadability.status === 'downloadable', JSON.stringify(r.downloadability));
+    assert(r.playlist.segmentCount === 3 && r.playlist.live === false, JSON.stringify(r.playlist));
+  },
+);
+
+await step(
+  'DASH: quick DOWNLOAD merges video + audio to a valid, fully decodable MP4 (MERGING, no re-encode)',
+  async () => {
+    const r = byPath(state, '/dash-vod/manifest.mpd');
+    await popup.locator(`[data-resource-id="${r.id}"]`).getByRole('button', { name: 'DOWNLOAD' }).click();
+    const job = await jobFinished((j) => j.request.resourceId === r.id, 120000);
+    assert(job.stage === 'completed', `stage ${job.stage}: ${JSON.stringify(job.error)}`);
+    const stages = await stagesOf(job.id);
+    assert(stages.includes('merging') && !stages.includes('encoding'), `stages ${stages}`);
+    const file = fileOf(job);
+    const p = probe(file);
+    assert(
+      p.codecs.includes('h264') && p.codecs.includes('aac') && p.width === 640,
+      `${p.codecs} ${p.width}`,
+    );
+    assert(Math.abs(p.duration - 6) < 0.8, `duration ${p.duration}`);
+    assert(decodeErrors(file) === '', 'decode errors');
+  },
+);
+
+await step(
+  'DASH: choosing 180p in the Studio downloads that representation; audio-only copies the AAC track',
+  async () => {
+    const r = byPath(state, '/dash-vod/manifest.mpd');
+    await select(r);
+    await studio.getByRole('radio', { name: /180p/ }).click();
+    await studio.getByLabel('Output container').selectOption('mp4');
+    const start = studio.getByRole('button', { name: 'START DOWNLOAD' });
+    await until(() => start.isEnabled(), 'start enabled');
+    await start.click();
+    const job = await jobFinished(
+      (j) => j.request.resourceId === r.id && /180p/.test(j.request.filename),
+      120000,
+    );
+    assert(job.stage === 'completed', `stage ${job.stage}: ${JSON.stringify(job.error)}`);
+    const p = probe(fileOf(job));
+    assert(p.width === 320, `width ${p.width}`);
+
+    await studio.getByRole('radio', { name: /Audio only/ }).click();
+    await studio.getByLabel('Audio format').selectOption('m4a');
+    await studio.getByText('Stream copy: no bitrate choice').waitFor();
+    await until(() => start.isEnabled(), 'start enabled');
+    await start.click();
+    const audio = await jobFinished(
+      (j) => j.request.resourceId === r.id && j.request.mode === 'audio-only',
+      120000,
+    );
+    assert(audio.stage === 'completed', `stage ${audio.stage}: ${JSON.stringify(audio.error)}`);
+    const ap = probe(fileOf(audio));
+    assert(ap.codecs.join() === 'aac' && ap.types.join() === 'audio', `${ap.codecs}`);
+  },
+);
+
+await step(
+  'DASH: a Widevine manifest is refused everywhere, including a direct request to the background',
+  async () => {
+    const r = byPath(state, '/dash-drm/manifest.mpd');
+    assert(r.downloadability.status === 'protected', JSON.stringify(r.downloadability));
+    assert(
+      await popup
+        .locator(`[data-resource-id="${r.id}"]`)
+        .getByRole('button', { name: 'DOWNLOAD' })
+        .isDisabled(),
+      'DOWNLOAD must be disabled',
+    );
+    const res = await ext(
+      (req) =>
+        chrome.runtime.sendMessage({ channel: 'vdown', type: 'start-download', payload: { request: req } }),
+      {
+        resourceId: r.id,
+        sourceUrl: `${r.url}#vdh-rep=0`,
+        tabId,
+        pageUrl: r.pageUrl,
+        host: r.host,
+        mode: 'original',
+        container: 'mp4',
+        audioFormat: 'mp3',
+        audioBitrate: 192,
+        filename: 'drm-dash.mp4',
+        subfolder: '',
+        qualityLabel: 'x',
+        sourceFormat: 'dash',
+        isHls: false,
+        isDash: true,
+        hasMuxedAudio: true,
+        hasVideo: true,
+      },
+    );
+    assert(res.ok === false && /protected|inspect/.test(res.error), JSON.stringify(res));
+  },
+);
 
 await step('Studio: output mode radios are operable from the keyboard', async () => {
   const r = state.resources.find((x) => x.url.endsWith('/media/sample.mp4'));

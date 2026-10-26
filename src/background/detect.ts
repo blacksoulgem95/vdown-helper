@@ -1,7 +1,9 @@
 import { analyzeCandidates, provisionalResources, type AnalyzeContext } from '@/lib/analyze';
 import { hookCandidates, markProtectedFrames, protectedKeySystems } from '@/lib/hookData';
-import { inspectMediaPlaylist } from '@/lib/inspect';
+import { inspectDashRepresentation, inspectMediaPlaylist } from '@/lib/inspect';
 import { parseHls } from '@/lib/hls/parser';
+import { parseDash, mainPeriodIndex } from '@/lib/dash/parser';
+import { parseDashRef } from '@/lib/dash/ref';
 import { isSafeFetchUrl, log } from '@/lib/security';
 import type { VariantInspection, TabState } from '@/types/messages';
 import type { MediaResource, RawCandidate, ScanNotes, ScanReport } from '@/types/media';
@@ -13,7 +15,14 @@ import { emptyState, getTabState, setTabState } from './tabState';
 const inFlight = new Map<number, Promise<TabState>>();
 
 function rank(r: MediaResource): number {
-  const order = { 'hls-master': 0, 'hls-media': 1, file: 2, blob: 3, 'unsupported-playlist': 4 } as const;
+  const order = {
+    'hls-master': 0,
+    dash: 0,
+    'hls-media': 1,
+    file: 2,
+    blob: 3,
+    'unsupported-playlist': 4,
+  } as const;
   return (order[r.kind] ?? 5) + (r.downloadability.status === 'downloadable' ? 0 : 10);
 }
 
@@ -189,8 +198,20 @@ export async function inspectVariant(
       r.frameId !== undefined && r.frameUrl ? [[r.frameId, r.frameUrl] as const] : [],
     ),
   );
-  const res = await combinedFetcher(tabId, tab?.url ?? '', true, frameUrls).text(url, frameId);
+  const dashRef = parseDashRef(url);
+  const res = await combinedFetcher(tabId, tab?.url ?? '', true, frameUrls).text(
+    dashRef?.manifestUrl ?? url,
+    frameId,
+  );
   if (!res.ok) throw new Error(res.kind === 'http' ? `http-${res.status ?? 0}` : 'blocked');
+  if (dashRef) {
+    const d = parseDash(res.text ?? '', res.finalUrl || dashRef.manifestUrl);
+    if (!d.ok) throw new Error(`parse-${d.error.code}`);
+    const period = d.manifest.periods[mainPeriodIndex(d.manifest)];
+    const rep = period?.representations.find((r) => r.id === dashRef.repId);
+    if (!period || !rep) throw new Error('parse-no-representation');
+    return inspectDashRepresentation(d.manifest, period, rep);
+  }
   const parsed = parseHls(res.text ?? '', res.finalUrl || url);
   if (!parsed.ok) throw new Error(`parse-${parsed.error.code}`);
   if (parsed.playlist.kind !== 'hls-media') throw new Error('parse-not-media');

@@ -63,6 +63,8 @@ export interface DownloadRequest {
   sourceFormat: MediaFormat;
   /** True when the source is HLS (needs the segment pipeline). */
   isHls: boolean;
+  /** True when the source is an MPEG-DASH manifest; the representation is named in the URL fragment (lib/dash/ref). */
+  isDash?: boolean;
   /** HLS segments are fMP4 (init section) rather than MPEG-TS. */
   fragmented?: boolean;
   /** The chosen stream already carries audio. */

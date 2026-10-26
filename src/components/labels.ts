@@ -26,6 +26,7 @@ const REASONS: Record<ReasonCode, MessageKey> = {
   drm: 'reasonDrm',
   'sample-aes': 'reasonSampleAes',
   eme: 'reasonEme',
+  'dash-clearkey': 'reasonDashClearKey',
   cors: 'reasonCors',
   'http-error': 'reasonHttp',
   network: 'reasonNetwork',
@@ -53,6 +54,8 @@ export function kindLabel(r: MediaResource): string {
       return t('kindHlsMaster');
     case 'hls-media':
       return t('kindHlsMedia');
+    case 'dash':
+      return t('kindDashStream');
     case 'unsupported-playlist':
       return r.playlist?.playlistClass === 'm3u-plain'
         ? t('kindPlainM3u')

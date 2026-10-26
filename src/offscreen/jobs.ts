@@ -4,7 +4,8 @@ import type { DownloadRequest, JobProgress, JobStage } from '@/types/download';
 import type { OffscreenEvent, OffscreenPlan } from '@/types/messages';
 import { CancelledError, PipelineError, asPipelineError } from './errors';
 import { runFfmpeg } from './ffmpeg';
-import { stageDirectFile, stageHlsPlaylist } from './hls';
+import { stageDashRepresentation } from './dash';
+import { stageDirectFile, stageHlsPlaylist, type StageOptions } from './hls';
 import { removeJobDir } from './opfs';
 
 interface Running {
@@ -63,6 +64,13 @@ function ext(fragmented: boolean): string {
   return fragmented ? 'mp4' : 'ts';
 }
 
+/** Stage one stream: an HLS media playlist, or one representation of a DASH manifest. */
+function stageStream(url: string, opts: Omit<StageOptions, 'playlistUrl'>, dash: boolean) {
+  return dash
+    ? stageDashRepresentation({ ...opts, ref: url })
+    : stageHlsPlaylist({ ...opts, playlistUrl: url });
+}
+
 async function execute(
   jobId: string,
   req: DownloadRequest,
@@ -81,33 +89,39 @@ async function execute(
   let durationSec = req.durationSec;
   const hasAudioInput = req.audioUrl !== undefined;
 
-  if (req.isHls) {
+  if (req.isHls || req.isDash) {
     const weight = hasAudioInput ? 0.5 : 1;
-    const video = await stageHlsPlaylist({
-      jobId,
-      playlistUrl: req.sourceUrl,
-      fileName: (frag) => `video.${ext(frag)}`,
-      concurrency: plan.segmentConcurrency,
-      credentialedOrigins,
-      signal,
-      ...(maxBytes !== undefined ? { maxBytes } : {}),
-      onProgress: (p) =>
-        send({ ...p, ...(p.fraction !== undefined ? { fraction: p.fraction * weight } : {}) }),
-    });
-    videoFile = video.file;
-    durationSec = durationSec ?? video.durationSec;
-    if (hasAudioInput && req.audioUrl) {
-      const audio = await stageHlsPlaylist({
+    const video = await stageStream(
+      req.sourceUrl,
+      {
         jobId,
-        playlistUrl: req.audioUrl,
-        fileName: (frag) => `audio.${frag ? 'mp4' : 'ts'}`,
+        fileName: (frag) => `video.${ext(frag)}`,
         concurrency: plan.segmentConcurrency,
         credentialedOrigins,
         signal,
-        ...(maxBytes !== undefined ? { maxBytes: Math.max(0, maxBytes - video.bytes) } : {}),
+        ...(maxBytes !== undefined ? { maxBytes } : {}),
         onProgress: (p) =>
-          send({ ...p, ...(p.fraction !== undefined ? { fraction: 0.5 + p.fraction * 0.5 } : {}) }),
-      });
+          send({ ...p, ...(p.fraction !== undefined ? { fraction: p.fraction * weight } : {}) }),
+      },
+      req.isDash === true,
+    );
+    videoFile = video.file;
+    durationSec = durationSec ?? video.durationSec;
+    if (hasAudioInput && req.audioUrl) {
+      const audio = await stageStream(
+        req.audioUrl,
+        {
+          jobId,
+          fileName: (frag) => `audio.${frag ? 'mp4' : 'ts'}`,
+          concurrency: plan.segmentConcurrency,
+          credentialedOrigins,
+          signal,
+          ...(maxBytes !== undefined ? { maxBytes: Math.max(0, maxBytes - video.bytes) } : {}),
+          onProgress: (p) =>
+            send({ ...p, ...(p.fraction !== undefined ? { fraction: 0.5 + p.fraction * 0.5 } : {}) }),
+        },
+        req.isDash === true,
+      );
       audioFile = audio.file;
     }
   } else {

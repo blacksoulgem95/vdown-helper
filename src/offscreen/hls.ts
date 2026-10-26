@@ -228,6 +228,23 @@ export async function loadMediaPlaylist(
   return p;
 }
 
+/** Fetch a manifest (text) with the same limits, credential rules and error classification as segments. */
+export async function fetchManifestText(
+  url: string,
+  signal: AbortSignal,
+  creds: Creds,
+): Promise<{ text: string; url: string }> {
+  check(signal);
+  const res = await fetchText(url, fetch, creds(url));
+  if (!res.ok) {
+    throw new PipelineError(
+      res.kind === 'http' ? 'http-error' : 'cors',
+      res.kind === 'http' ? `HTTP ${res.status ?? 0}` : 'The manifest request was blocked',
+    );
+  }
+  return { text: res.text ?? '', url: res.finalUrl || url };
+}
+
 function ivFor(key: HlsKey, sequence: number): Uint8Array {
   const iv = new Uint8Array(16);
   if (key.iv) {
@@ -241,10 +258,33 @@ function ivFor(key: HlsKey, sequence: number): Uint8Array {
 
 /** Download a media playlist's segments (decrypting AES-128) in order into a file on disk. */
 export async function stageHlsPlaylist(opts: StageOptions): Promise<StagedMedia> {
-  const { signal } = opts;
+  const playlist = await loadMediaPlaylist(
+    opts.playlistUrl,
+    opts.signal,
+    credentialsFor(opts.credentialedOrigins),
+  );
+  return stageSegmentList({
+    ...opts,
+    segs: playlist.segments,
+    fragmented: playlist.fragmented,
+    durationSec: playlist.totalDuration,
+  });
+}
+
+export type SegmentListOptions = Omit<StageOptions, 'playlistUrl'> & {
+  segs: HlsSegment[];
+  fragmented: boolean;
+  durationSec: number;
+};
+
+/**
+ * The shared segment engine (HLS, DASH, live recording): fetch segments in parallel but write them to disk in order,
+ * decrypting AES-128 where a key applies, writing each init section once, with caps, retries and cancellation.
+ */
+export async function stageSegmentList(opts: SegmentListOptions): Promise<StagedMedia> {
+  const { signal, segs } = opts;
   const creds = credentialsFor(opts.credentialedOrigins);
-  const playlist = await loadMediaPlaylist(opts.playlistUrl, signal, creds);
-  const segs = playlist.segments;
+  if (segs.length > MAX_SEGMENTS) throw new PipelineError('invalid', 'The stream has too many segments');
 
   const free = await freeBytes();
   if (free !== undefined && free < 64 * 1024 * 1024) {
@@ -270,7 +310,7 @@ export async function stageHlsPlaylist(opts: StageOptions): Promise<StagedMedia>
 
   const out = await createStageFile(
     opts.jobId,
-    typeof opts.fileName === 'function' ? opts.fileName(playlist.fragmented) : opts.fileName,
+    typeof opts.fileName === 'function' ? opts.fileName(opts.fragmented) : opts.fileName,
   );
   const meter = new SpeedMeter();
   const started = Date.now();
@@ -372,7 +412,7 @@ export async function stageHlsPlaylist(opts: StageOptions): Promise<StagedMedia>
     await Promise.all(Array.from({ length: n }, worker));
     await flush();
     const file = await out.finish();
-    return { file, bytes: out.bytes, fragmented: playlist.fragmented, durationSec: playlist.totalDuration };
+    return { file, bytes: out.bytes, fragmented: opts.fragmented, durationSec: opts.durationSec };
   } catch (e) {
     await out.abort();
     throw e;
