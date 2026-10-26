@@ -103,12 +103,12 @@ export interface PlaylistSummary {
 }
 
 /**
- * Bytes that only the page holds: a `data:` URL (later also a `blob:` URL). The extension never fetches these; the
+ * Bytes that only the page holds: a `data:` URL or a `blob:` URL. The extension never fetches these; the
  * content script of the owning frame reads them and hands them over (src/content/ingest.ts), so the resource carries
  * a small handle instead of the data.
  */
 export interface PageHeld {
-  kind: 'data';
+  kind: 'data' | 'blob';
   /** Handle inside the owning frame's scanner (a hash of the data), not a URL. */
   id: string;
   /** Decoded size in bytes. */

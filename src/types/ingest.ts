@@ -18,5 +18,11 @@ export type IngestDown =
 
 /** Largest data: URL payload the extension will move (decoded). */
 export const MAX_HELD_BYTES = 32 * 1024 * 1024;
-/** Raw bytes per chunk (about 1.4 MB once base64-encoded). */
-export const INGEST_CHUNK_BYTES = 1024 * 1024;
+/** Largest blob: the extension will move out of a page (it is streamed to disk, not held in memory). */
+export const HELD_BLOB_LIMIT = 4 * 1024 * 1024 * 1024;
+/** Raw bytes per chunk (about 5.6 MB once base64-encoded, far below the 64 MB message limit). */
+export const INGEST_CHUNK_BYTES = 4 * 1024 * 1024;
+
+/** The most a held source of this kind may be. */
+export const heldLimit = (kind: 'data' | 'blob'): number =>
+  kind === 'data' ? MAX_HELD_BYTES : HELD_BLOB_LIMIT;

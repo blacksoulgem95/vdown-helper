@@ -39,8 +39,10 @@ export async function pageScanAll(tabId: number): Promise<ScanReport[]> {
   const results = await chrome.scripting.executeScript({
     target: { tabId, allFrames: true },
     func: () => {
-      const api = (globalThis as unknown as { __vdh?: { scan?: () => unknown } }).__vdh;
-      return api?.scan ? api.scan() : null;
+      const api = (globalThis as unknown as { __vdh?: { scan?: () => unknown; scanAsync?: () => unknown } })
+        .__vdh;
+      // scanAsync also reads the blob: sources the page holds; both return a scan report
+      return api?.scanAsync ? api.scanAsync() : api?.scan ? api.scan() : null;
     },
   });
   return results.filter((r) => r.result).map((r) => ({ ...(r.result as ScanReport), frameId: r.frameId }));

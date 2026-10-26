@@ -3,6 +3,7 @@ import { t } from '@/lib/i18n';
 import { formatBytes } from '@/lib/media';
 import { parseUrl, redactUrl } from '@/lib/security';
 import type { MediaResource } from '@/types/media';
+import { heldSource } from './MediaCard';
 import { reasonText } from './labels';
 import { Badge, IconButton, cx } from './ui';
 
@@ -67,7 +68,7 @@ export function FileCard({ resource: r, selected, busy, feedback, onToggle, onDo
           {name}
         </p>
         <p className="mono truncate text-[10.5px] text-muted" title={redactUrl(r.url)}>
-          {meta.join(' · ') || (r.held ? t('sourceInline') : r.host)}
+          {meta.join(' · ') || (r.held ? heldSource(r) : r.host)}
         </p>
         {!ok && <p className="text-[10.5px] leading-snug text-muted">{reasonText(r.downloadability)}</p>}
         {feedback && (

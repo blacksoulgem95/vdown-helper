@@ -1,6 +1,6 @@
 import { buildFfmpegArgs, MIME_BY_EXTENSION } from '@/lib/ffmpegArgs';
 import { log } from '@/lib/security';
-import { MAX_HELD_BYTES } from '@/types/ingest';
+import { heldLimit } from '@/types/ingest';
 import type { DownloadRequest, JobProgress, JobStage } from '@/types/download';
 import type { OffscreenEvent, OffscreenPlan } from '@/types/messages';
 import { CancelledError, PipelineError, asPipelineError } from './errors';
@@ -95,7 +95,8 @@ async function execute(
         tabId: req.tabId,
         frameId: req.held.frameId ?? 0,
         fileName: `source.${req.sourceFormat === 'unknown' ? 'bin' : req.sourceFormat}`,
-        maxBytes: maxBytes === undefined ? MAX_HELD_BYTES : Math.min(maxBytes, MAX_HELD_BYTES),
+        maxBytes:
+          maxBytes === undefined ? heldLimit(req.held.kind) : Math.min(maxBytes, heldLimit(req.held.kind)),
         signal,
         onProgress: (bytes, total) =>
           send({ bytesDone: bytes, bytesTotal: total, fraction: total ? bytes / total : 1 }),

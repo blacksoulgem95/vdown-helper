@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { heldData, scan } from '@/content/scanner';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { heldBlobs, heldData, scan, scanAsync } from '@/content/scanner';
 
 function setBody(html: string) {
   document.body.innerHTML = html;
@@ -201,6 +201,111 @@ describe('content scanner', () => {
       const r = scan();
       expect(r.candidates.filter((c) => c.fileKind === 'image')).toHaveLength(300);
       expect(r.candidates.filter((c) => !c.fileKind)).toHaveLength(1);
+    });
+  });
+});
+
+describe('blob: sources (scanAsync)', () => {
+  const realFetch = globalThis.fetch;
+  const bytes = (...v: number[]) => Uint8Array.from(v);
+  const respond = (map: Record<string, Blob | Error | 'hang'>) => {
+    globalThis.fetch = (async (url: string) => {
+      const v = map[url];
+      if (v === 'hang') return new Promise(() => undefined);
+      if (!v || v instanceof Error) throw v ?? new Error('not found');
+      return { blob: async () => v };
+    }) as unknown as typeof fetch;
+  };
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    vi.useRealTimers();
+  });
+
+  it('lists a readable blob like a file, with its real size and type, and stops counting it as unreadable', async () => {
+    const blob = new Blob([bytes(0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d, 0, 0, 0, 0)], {
+      type: 'video/mp4',
+    });
+    respond({ 'blob:https://example.com/a': blob });
+    setBody('<video src="blob:https://example.com/a" title="Recorded"></video>');
+    const sync = scan();
+    expect(sync.candidates).toHaveLength(0); // the synchronous scan still never reports blobs
+    expect(sync.notes.blobSources).toBe(1);
+    const r = await scanAsync();
+    expect(r.notes.blobSources).toBe(0);
+    expect(r.candidates).toHaveLength(1);
+    expect(r.candidates[0]).toMatchObject({
+      method: 'dom-element',
+      mimeType: 'video/mp4',
+      mediaType: 'video',
+      title: 'Recorded',
+      held: { kind: 'blob', bytes: 16 },
+    });
+    expect(r.candidates[0]!.url).toMatch(/^data:application\/x-vdh-blob;vdh=[0-9a-f]{8}$/);
+    expect(r.candidates[0]!.url).not.toContain('blob:');
+    expect(heldBlobs.get(r.candidates[0]!.held!.id)).toBe(blob);
+  });
+
+  it('recognises the type of an untyped blob from its first bytes, and files an image under images', async () => {
+    // Chrome answers fetch() of an untyped Blob with text/plain: that is not taken at its word
+    const png = new Blob([bytes(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0)], {
+      type: 'text/plain',
+    });
+    respond({ 'blob:https://example.com/img': png });
+    setBody('<img src="blob:https://example.com/img">');
+    const r = await scanAsync();
+    expect(r.candidates).toHaveLength(1);
+    expect(r.candidates[0]).toMatchObject({ mimeType: 'image/png', fileKind: 'image', method: 'dom-image' });
+    expect(r.notes.blobSources).toBe(0); // an image blob was never counted as an unreadable media source
+  });
+
+  it('leaves out what cannot be read: MediaSource urls, revoked urls, hung reads, unknown content', async () => {
+    vi.useFakeTimers();
+    respond({
+      'blob:https://example.com/mse': new Error('not fetchable'),
+      'blob:https://example.com/hang': 'hang',
+      'blob:https://example.com/text': new Blob(['something else'], { type: 'application/x-unknown' }),
+    });
+    setBody(
+      '<video src="blob:https://example.com/mse"></video><video src="blob:https://example.com/hang"></video>' +
+        '<video src="blob:https://example.com/text"></video><video src="blob:https://example.com/gone"></video>',
+    );
+    const p = scanAsync();
+    await vi.advanceTimersByTimeAsync(3000);
+    const r = await p;
+    expect(r.candidates).toHaveLength(0);
+    expect(r.notes.blobSources).toBe(4);
+  });
+
+  it('still lists a real text file as a document', async () => {
+    respond({ 'blob:https://example.com/t': new Blob(['hello, world\n'], { type: 'text/plain' }) });
+    setBody('<a href="blob:https://example.com/t" download="n.txt">Notes</a>');
+    const r = await scanAsync();
+    expect(r.candidates[0]).toMatchObject({ fileKind: 'document', mimeType: 'text/plain' });
+  });
+
+  it('reports one candidate for a blob the page references twice, and keeps only the latest scan', async () => {
+    const a = new Blob([bytes(0x1a, 0x45, 0xdf, 0xa3, 0, 0, 0, 0)], { type: 'video/webm' });
+    respond({ 'blob:https://example.com/a': a });
+    setBody('<video src="blob:https://example.com/a"><source src="blob:https://example.com/a"></video>');
+    const first = await scanAsync();
+    expect(first.candidates).toHaveLength(2); // two different detection methods, as for http sources
+    expect(new Set(first.candidates.map((c) => c.held!.id)).size).toBe(1);
+    setBody('');
+    await scanAsync();
+    expect(heldBlobs.size).toBe(0);
+  });
+
+  it('lists a blob download link under its real type', async () => {
+    const pdf = new Blob([bytes(0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37)], {
+      type: 'application/pdf',
+    });
+    respond({ 'blob:https://example.com/doc': pdf });
+    setBody('<a href="blob:https://example.com/doc" download="r.pdf">Report</a>');
+    const r = await scanAsync();
+    expect(r.candidates[0]).toMatchObject({
+      fileKind: 'document',
+      mimeType: 'application/pdf',
+      title: 'Report',
     });
   });
 });

@@ -18,9 +18,13 @@ import type { MediaResource } from '@/types/media';
 import { kindLabel, reasonText, statusBadge } from './labels';
 import { Badge, Button, Notice, cx } from './ui';
 
+/** Where page-held bytes come from, in words. */
+export const heldSource = (r: MediaResource): string =>
+  r.held?.kind === 'blob' ? t('sourceBlob') : t('sourceInline');
+
 /** Short, token-free hint of where a resource lives, to tell apart cards that share a page title. */
 function sourceHint(r: MediaResource): string {
-  if (r.held) return t('sourceInline');
+  if (r.held) return heldSource(r);
   const u = parseUrl(r.url);
   if (!u) return '';
   const tail = u.pathname.split('/').filter(Boolean).slice(-2).join('/');
@@ -207,7 +211,7 @@ export function MediaCard({
           <dt className="text-muted">URL</dt>
           <dd>
             {r.held ? (
-              <span className="text-fg/85">{t('sourceInline')}</span>
+              <span className="text-fg/85">{heldSource(r)}</span>
             ) : (
               <button
                 type="button"

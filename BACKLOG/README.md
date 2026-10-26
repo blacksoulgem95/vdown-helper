@@ -55,7 +55,7 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-035](VDH-035-subtitles.md) | Subtitles and captions | done | P1 | lib | VDH-034 |
 | [VDH-036](VDH-036-more-formats-data-urls.md) | More container/audio formats and data: URLs | done | P1 | lib | VDH-033 |
 | [VDH-037](VDH-037-file-types-tabs-zip.md) | Images, documents, archives and page assets with ZIP download | done | P1 | ui | VDH-033 |
-| [VDH-038](VDH-038-blob-mse-capture.md) | Blob files and MSE capture | todo | P0 | content | VDH-033 |
+| [VDH-038](VDH-038-blob-mse-capture.md) | Blob files and MSE capture | in-progress | P0 | content | VDH-033 |
 | [VDH-039](VDH-039-mediastream-recording.md) | MediaStream recording | todo | P1 | content | VDH-038 |
 | [VDH-040](VDH-040-live-recording.md) | Live and event stream recording | todo | P1 | background | VDH-034 |
 | [VDH-041](VDH-041-open-site-metadata.md) | Metadata and open-site recognition | todo | P2 | lib | VDH-033 |

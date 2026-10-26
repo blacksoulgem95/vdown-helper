@@ -11,7 +11,7 @@ import { classifyPlaylist, parseHls } from './hls/parser';
 import { dashRef } from './dash/ref';
 import { extensionForMime, fileStem, urlExtension, type FileKind } from './filetypes';
 import { exceedsHeldLimit, isDataLabel } from './dataUrl';
-import { MAX_HELD_BYTES } from '@/types/ingest';
+import { heldLimit } from '@/types/ingest';
 import {
   DashExpandError,
   expandSegments,
@@ -437,9 +437,10 @@ function analyzeHeld(r: MediaResource, e: Entry, ctx: AnalyzeContext): MediaReso
   const held = e.held as PageHeld;
   r.sizeBytes = held.bytes;
   if (!e.hints.title && !e.hints.fileKind) r.title = clip(ctx.pageTitle) || r.host;
-  r.downloadability = exceedsHeldLimit(held.bytes)
-    ? verdict('unsupported', 'too-large', `${MAX_HELD_BYTES}`)
-    : verdict('downloadable', 'ok', 'in-page-data');
+  if (held.bytes < 0) delete r.sizeBytes; // not measured yet
+  r.downloadability = exceedsHeldLimit(held.bytes, held.kind)
+    ? verdict('unsupported', 'too-large', `${heldLimit(held.kind)}`)
+    : verdict('downloadable', 'ok', held.kind === 'blob' ? 'in-page-blob' : 'in-page-data');
   return r;
 }
 

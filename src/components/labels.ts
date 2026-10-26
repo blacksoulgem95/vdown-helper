@@ -48,6 +48,7 @@ export function reasonText(d: Downloadability): string {
   if (d.status === 'downloadable' && d.detail === 'aes-128') return t('reasonAes128');
   if (d.status === 'downloadable' && d.detail === 'headers-unreadable') return t('reasonHeadersUnreadable');
   if (d.status === 'downloadable' && d.detail === 'in-page-data') return t('reasonInPageData');
+  if (d.status === 'downloadable' && d.detail === 'in-page-blob') return t('reasonInPageBlob');
   return base;
 }
 

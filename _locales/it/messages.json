@@ -862,5 +862,11 @@
   },
   "zipTooLarge": {
     "message": "I file selezionati superano il limite di dimensione per uno ZIP (il limite di memoria nelle Impostazioni, al massimo 4 GB). Selezionane meno oppure scaricali uno alla volta."
+  },
+  "reasonInPageBlob": {
+    "message": "Il file è tenuto dalla pagina stessa (URL blob:). È la pagina a consegnarlo; l'estensione non lo scarica mai da sola."
+  },
+  "sourceBlob": {
+    "message": "tenuto dalla pagina (blob:)"
   }
 }

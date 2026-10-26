@@ -1,4 +1,4 @@
-import { MAX_HELD_BYTES } from '@/types/ingest';
+import { heldLimit } from '@/types/ingest';
 
 export interface DataUrlInfo {
   /** Lower-case media type, e.g. "video/mp4". */
@@ -55,4 +55,8 @@ export const DATA_LABEL = /^data:[a-z0-9!#$&^_.+/-]{3,170};vdh=[a-f0-9]{8}$/;
 
 export const isDataLabel = (url: string): boolean => DATA_LABEL.test(url);
 
-export const exceedsHeldLimit = (bytes: number): boolean => bytes > MAX_HELD_BYTES;
+export const exceedsHeldLimit = (bytes: number, kind: 'data' | 'blob' = 'data'): boolean =>
+  bytes > heldLimit(kind);
+
+/** Stand-in label for a blob: URL (its type is only known once the page has been asked). */
+export const blobLabel = (handle: string): string => dataLabel('application/x-vdh-blob', handle);

@@ -1864,8 +1864,165 @@ await step('zip: above the size limit it refuses with an explanation and queues 
   await pg.close();
 });
 
-await filesPop.close();
-await filesPage.close();
+await filesPop?.close();
+await filesPage?.close();
+
+// ---- blob: URLs the page holds
+let blobsPage;
+let blobsTab;
+let blobsState;
+const blobRes = (pred) => blobsState.resources.find((r) => r.held?.kind === 'blob' && pred(r));
+
+await step(
+  'blob: media, images and files the page holds are listed with their real type and size',
+  async () => {
+    blobsPage = await ctx.newPage();
+    await blobsPage.goto(`${A}/pages/blobs.html`);
+    await blobsPage.waitForFunction(() => window.ready === true, null, { timeout: 15000 });
+    blobsTab = await ext(
+      async (u) => (await chrome.tabs.query({})).find((t) => t.url?.startsWith(u))?.id,
+      `${A}/pages/blobs.html`,
+    );
+    const res = await ext(
+      (id) => chrome.runtime.sendMessage({ channel: 'vdown', type: 'scan', payload: { tabId: id } }),
+      blobsTab,
+    );
+    assert(res.ok, JSON.stringify(res));
+    blobsState = res.state;
+    const sizeOf = (p) => statSync(p).size;
+    const video = blobRes((r) => r.mimeType === 'video/mp4');
+    assert(
+      video?.kind === 'file' &&
+        video.format === 'mp4' &&
+        video.sizeBytes === sizeOf(join(fixtures, 'media/sample.mp4')),
+      `video ${JSON.stringify(video)}`,
+    );
+    assert(
+      video.title === 'Blob clip' && video.downloadability.status === 'downloadable',
+      `video title/verdict ${video.title}`,
+    );
+    const audio = blobRes((r) => r.mimeType === 'audio/mpeg');
+    assert(
+      audio,
+      `audio missing; held: ${JSON.stringify(blobsState.resources.filter((r) => r.held).map((r) => [r.kind, r.mimeType, r.sizeBytes, r.mediaType]))}`,
+    );
+    assert(
+      audio?.mediaType === 'audio' && audio.sizeBytes === sizeOf(join(fixtures, 'gen/inline.mp3')),
+      `audio ${JSON.stringify(audio)}`,
+    );
+    const image = blobRes((r) => r.kind === 'image');
+    assert(
+      image?.mimeType === 'image/png' &&
+        image.ext === 'png' &&
+        image.sizeBytes === sizeOf(join(fixtures, 'files/hero.png')),
+      `image ${JSON.stringify(image)}`,
+    );
+    const big = blobRes((r) => r.kind === 'archive');
+    assert(big?.sizeBytes === 9 * 1024 * 1024 && big.ext === 'zip', `big ${JSON.stringify(big)}`);
+    // the MediaSource and the revoked URL cannot be read: counted, not listed
+    assert(blobsState.notes.blobSources === 2, `unreadable blob sources: ${blobsState.notes.blobSources}`);
+    assert(
+      !JSON.stringify(blobsState).includes('blob:http'),
+      'no blob: URL may be kept in the extension state',
+    );
+  },
+);
+
+await step(
+  'blob: a video blob is handed over by the page and saved identical, even after the page revoked the URL',
+  async () => {
+    // the list is on screen (it was just scanned), then the page takes its blob URLs back: the extension holds the Blobs
+    const pop = await openPopup(blobsTab);
+    await pop.getByRole('status').filter({ hasText: 'READY' }).waitFor({ timeout: 45000 });
+    blobsState = (await ext((id) => chrome.storage.session.get(`tab:${id}`), blobsTab))[`tab:${blobsTab}`];
+    const video = blobRes((r) => r.mimeType === 'video/mp4');
+    assert(video, 'the video blob is listed after the popup scan');
+    await blobsPage.evaluate(() => window.revokeVideo());
+    await select(video, blobsTab);
+    const start = studio.getByRole('button', { name: 'START DOWNLOAD' });
+    await until(() => start.isEnabled(), 'start enabled');
+    await start.click();
+    const job = await jobFinished(
+      (j) => j.request.resourceId === video.id && j.createdAt > Date.now() - 60000,
+    );
+    assert(job.stage === 'completed', `stage ${job.stage}: ${JSON.stringify(job.error)}`);
+    assert(
+      job.viaOffscreen === true && job.request.filename.endsWith('.mp4'),
+      `name ${job.request.filename}`,
+    );
+    assert(
+      readFileSync(fileOf(job)).equals(readFileSync(join(fixtures, 'media/sample.mp4'))),
+      'differs from the blob',
+    );
+  },
+);
+
+await step('blob: a 9 MiB blob crosses several transfer chunks and arrives complete', async () => {
+  const big = blobRes((r) => r.kind === 'archive');
+  const res = await ext(
+    (req) =>
+      chrome.runtime.sendMessage({ channel: 'vdown', type: 'start-download', payload: { request: req } }),
+    {
+      resourceId: big.id,
+      sourceUrl: big.url,
+      tabId: blobsTab,
+      pageUrl: big.pageUrl,
+      host: big.host,
+      mode: 'original',
+      container: 'original',
+      audioFormat: 'mp3',
+      audioBitrate: 192,
+      filename: 'big.zip',
+      subfolder: '',
+      qualityLabel: 'ZIP',
+      sourceFormat: 'unknown',
+      isHls: false,
+      hasMuxedAudio: false,
+      hasVideo: false,
+      file: { kind: 'archive' },
+    },
+  );
+  assert(res.ok, JSON.stringify(res));
+  const job = await jobFinished((j) => j.id === res.jobId);
+  assert(job.stage === 'completed', `stage ${job.stage}: ${JSON.stringify(job.error)}`);
+  const data = readFileSync(fileOf(job));
+  assert(data.length === 9 * 1024 * 1024 && data.every((b) => b === 7), `got ${data.length} bytes`);
+});
+
+await step('blob: an audio blob converts through FFmpeg.wasm, an image blob is saved as it is', async () => {
+  const audio = blobRes((r) => r.mimeType === 'audio/mpeg');
+  await select(audio, blobsTab);
+  await studio.getByRole('radio', { name: /Audio only/ }).click();
+  await studio.getByLabel('Audio format').selectOption('wav');
+  const start = studio.getByRole('button', { name: 'START DOWNLOAD' });
+  await until(() => start.isEnabled(), 'start enabled');
+  await start.click();
+  const job = await jobFinished(
+    (j) => j.request.resourceId === audio.id && j.request.mode === 'audio-only',
+    90000,
+  );
+  assert(job.stage === 'completed', `stage ${job.stage}: ${JSON.stringify(job.error)}`);
+  assert(probe(fileOf(job)).codecs.join() === 'pcm_s16le', 'wav');
+
+  const image = blobRes((r) => r.kind === 'image');
+  const pop = await openPopup(blobsTab);
+  await pop.getByRole('status').filter({ hasText: 'READY' }).waitFor({ timeout: 45000 });
+  await pop.getByRole('tab', { name: /^Images/ }).click();
+  await pop
+    .locator(`[data-resource-id="${image.id}"]`)
+    .getByRole('button', { name: /^DOWNLOAD / })
+    .click();
+  const imgJob = await jobFinished(
+    (j) => j.request.resourceId === image.id && j.createdAt > Date.now() - 60000,
+  );
+  assert(imgJob.stage === 'completed', `stage ${imgJob.stage}: ${JSON.stringify(imgJob.error)}`);
+  assert(
+    readFileSync(fileOf(imgJob)).equals(readFileSync(join(fixtures, 'files/hero.png'))),
+    'image differs',
+  );
+  await pop.close();
+  await blobsPage.close();
+});
 
 await step('empty page shows the empty state and SCAN AGAIN', async () => {
   const p2 = await ctx.newPage();

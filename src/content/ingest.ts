@@ -26,6 +26,7 @@ function toBase64(blob: Blob): Promise<string> {
   });
 }
 
+/** A data: URL decoded by the page itself (the extension never fetches it). */
 export async function pumpData(jobId: string, dataUrl: string): Promise<PumpResult> {
   let blob: Blob;
   try {
@@ -33,8 +34,12 @@ export async function pumpData(jobId: string, dataUrl: string): Promise<PumpResu
   } catch {
     return { ok: false, error: 'The page data could not be decoded' };
   }
-  if (blob.size > MAX_HELD_BYTES)
-    return { ok: false, error: 'The embedded data is larger than the allowed size' };
+  return pumpBlob(jobId, blob, MAX_HELD_BYTES);
+}
+
+/** Stream a Blob the page holds to the offscreen document of `jobId`, at most `limit` bytes. */
+export async function pumpBlob(jobId: string, blob: Blob, limit: number): Promise<PumpResult> {
+  if (blob.size > limit) return { ok: false, error: 'The embedded data is larger than the allowed size' };
 
   const port = chrome.runtime.connect({ name: `${INGEST_PORT_PREFIX}${jobId}` });
   const inbox: IngestDown[] = [];

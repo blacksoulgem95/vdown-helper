@@ -6,10 +6,12 @@
  * Fetches made here use the page's origin and cookies, exactly like the page's own player, so no extra host
  * permission is needed to read media the page itself can read.
  */
-import { dataHandle, dataLabel, inspectDataUrl } from '@/lib/dataUrl';
-import { fileKindOfExtension, urlExtension, type FileKind } from '@/lib/filetypes';
+import { blobLabel, dataHandle, dataLabel, inspectDataUrl } from '@/lib/dataUrl';
+import { fileKindOfExtension, fileKindOfMime, urlExtension, type FileKind } from '@/lib/filetypes';
+import { sniffMime } from '@/lib/sniff';
+import { HELD_BLOB_LIMIT } from '@/types/ingest';
 import { fetchText, probeHeaders } from '@/lib/netprobe';
-import { pumpData, type PumpResult } from './ingest';
+import { pumpBlob, pumpData, type PumpResult } from './ingest';
 import type { DetectionMethod, RawCandidate, ScanReport } from '@/types/media';
 
 const MEDIA_EXT =
@@ -23,6 +25,21 @@ const MIN_HELD_IMAGE_BYTES = 2048;
 
 /** data: URLs found by the last scan, by handle. They stay in the page; only a label leaves it (see ingest.ts). */
 export const heldData = new Map<string, string>();
+/**
+ * Blobs the page holds, by handle. The Blob object itself is kept (not just its URL), so a page that revokes the URL
+ * right after use cannot take the data away from a download that was already offered. Replaced on every scan.
+ */
+export const heldBlobs = new Map<string, Blob>();
+
+interface PendingBlob {
+  url: string;
+  method: DetectionMethod;
+  extra: Partial<RawCandidate>;
+  /** Already counted in `notes.blobSources` (media sources are; images are not). */
+  counted: boolean;
+}
+/** blob: sources the last synchronous scan met; scanAsync() reads them. */
+let pendingBlobs: PendingBlob[] = [];
 const MAX_BLOCKED_FRAMES = 20;
 
 function abs(url: string | null | undefined, base: string): string | undefined {
@@ -60,6 +77,7 @@ interface Collector {
   notes: ScanReport['notes'];
   seen: Set<string>;
   counts: Record<keyof typeof CAPS, number>;
+  blobUrls: Set<string>;
 }
 
 function add(c: Collector, candidate: RawCandidate): void {
@@ -104,7 +122,12 @@ function addUrl(
   const url = abs(raw, base);
   if (!url) return;
   if (url.startsWith('blob:')) {
-    c.notes.blobSources++;
+    // counted (once per distinct URL) as unreadable until scanAsync() manages to read it
+    if (!c.blobUrls.has(url)) {
+      c.blobUrls.add(url);
+      c.notes.blobSources++;
+    }
+    if (pendingBlobs.length < MAX_HELD) pendingBlobs.push({ url, method, extra, counted: true });
     return;
   }
   if (!/^https?:/i.test(url)) return; // data:, javascript:, etc. are never candidates
@@ -150,7 +173,7 @@ function scanElements(c: Collector, doc: Document): void {
     // Standalone <source> not inside media elements (e.g. inside <picture> is irrelevant; keep only media-looking ones).
     for (const a of root.querySelectorAll<HTMLAnchorElement>('a[href]')) {
       const href = a.getAttribute('href');
-      if (href && (MEDIA_EXT.test(href) || /^data:(video|audio)\//i.test(href)))
+      if (href && (MEDIA_EXT.test(href) || /^data:(video|audio)\//i.test(href) || /^blob:/i.test(href)))
         addUrl(
           c,
           href,
@@ -176,8 +199,13 @@ function addFile(
     if (kind === 'image') addData(c, raw, method, extra);
     return;
   }
-  if (/^(javascript|blob|about):/i.test(raw)) return;
+  if (/^(javascript|about):/i.test(raw)) return;
   const url = abs(raw, base);
+  if (url?.startsWith('blob:')) {
+    // an image the page holds as a blob: readable by scanAsync(), not counted as an unreadable media source
+    if (pendingBlobs.length < MAX_HELD) pendingBlobs.push({ url, method, extra, counted: false });
+    return;
+  }
   if (!url || !/^https?:/i.test(url)) return;
   add(c, { url, method, fileKind: kind, ...extra });
 }
@@ -267,11 +295,13 @@ function scanPerformance(c: Collector, base: string): void {
 
 export function scan(): ScanReport {
   heldData.clear();
+  pendingBlobs = [];
   const c: Collector = {
     candidates: [],
     notes: { blobSources: 0, inaccessibleFrames: 0, blockedFrameOrigins: [] },
     seen: new Set(),
     counts: { media: 0, image: 0, document: 0, archive: 0, asset: 0 },
+    blobUrls: new Set(),
   };
   const doc = document;
   scanElements(c, doc);
@@ -304,8 +334,76 @@ export function scan(): ScanReport {
   };
 }
 
+const BLOB_PROBE_MS = 2500;
+
+const withTimeout = <T>(p: Promise<T>, ms: number): Promise<T> =>
+  Promise.race([p, new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms))]);
+
+/** Read what a blob: URL holds: its Blob, and its type (declared, or recognised from the first bytes). */
+async function probeBlob(url: string): Promise<{ blob: Blob; mime: string } | undefined> {
+  try {
+    const blob = await withTimeout(
+      fetch(url).then((r) => r.blob()),
+      BLOB_PROBE_MS,
+    );
+    let mime = blob.type.split(';')[0]?.trim().toLowerCase() ?? '';
+    // An untyped Blob is served by fetch() as "text/plain" in Chrome, so that type says nothing either: look at the bytes.
+    if (
+      !mime ||
+      mime === 'application/octet-stream' ||
+      mime === 'binary/octet-stream' ||
+      mime === 'text/plain'
+    ) {
+      mime = sniffMime(new Uint8Array(await blob.slice(0, 600).arrayBuffer())) ?? mime;
+    }
+    return mime ? { blob, mime } : undefined;
+  } catch {
+    // a MediaSource URL, a revoked URL or a blob from another origin: not readable from here
+    return undefined;
+  }
+}
+
+/**
+ * scan() plus the blob: sources it met. A blob the page can hand over is listed like any file, with its real size;
+ * one that cannot be read (a MediaSource, a revoked URL) stays counted in `notes.blobSources`.
+ */
+export async function scanAsync(): Promise<ScanReport> {
+  heldBlobs.clear();
+  const report = scan();
+  const pending = pendingBlobs;
+  pendingBlobs = [];
+  const urls = [...new Set(pending.map((p) => p.url))];
+  const probed = new Map(await Promise.all(urls.map(async (u) => [u, await probeBlob(u)] as const)));
+  const uncounted = new Set<string>();
+  for (const p of pending) {
+    const found = probed.get(p.url);
+    if (!found) continue;
+    const id = dataHandle(p.url);
+    const isMedia = /^(video|audio)\//.test(found.mime);
+    const kind = isMedia ? undefined : fileKindOfMime(found.mime);
+    // only media, images, documents, archives and page assets are listed; anything else stays unreadable
+    if (!isMedia && !kind) continue;
+    heldBlobs.set(id, found.blob);
+    // one URL may be referenced several times (src and <source>): it stops being "unreadable" once
+    if (p.counted && !uncounted.has(p.url)) {
+      uncounted.add(p.url);
+      report.notes.blobSources = Math.max(0, report.notes.blobSources - 1);
+    }
+    report.candidates.push({
+      ...p.extra,
+      url: blobLabel(id),
+      method: p.method,
+      mimeType: found.mime,
+      held: { kind: 'blob', id, bytes: found.blob.size },
+      ...(kind ? { fileKind: kind } : {}),
+    });
+  }
+  return report;
+}
+
 export interface VdhApi {
   scan: typeof scan;
+  scanAsync: typeof scanAsync;
   probeHeaders: (url: string) => ReturnType<typeof probeHeaders>;
   fetchText: (url: string) => ReturnType<typeof fetchText>;
   /** Send the page-held bytes behind `handle` to the offscreen document of `jobId`. */
@@ -314,11 +412,14 @@ export interface VdhApi {
 
 const api: VdhApi = {
   scan,
+  scanAsync,
   probeHeaders: (url) => probeHeaders(url),
   fetchText: (url) => fetchText(url),
   pumpHeld: async (jobId, handle) => {
     // The handle is only known after a scan of this document: look again if the page changed since.
-    if (!heldData.has(handle)) scan();
+    if (!heldData.has(handle) && !heldBlobs.has(handle)) await scanAsync();
+    const blob = heldBlobs.get(handle);
+    if (blob) return pumpBlob(jobId, blob, HELD_BLOB_LIMIT);
     const data = heldData.get(handle);
     return data === undefined
       ? { ok: false, error: 'The page no longer holds this data' }

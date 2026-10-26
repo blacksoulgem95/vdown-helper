@@ -862,5 +862,11 @@
   },
   "zipTooLarge": {
     "message": "The selected files add up to more than the size limit for a ZIP (the memory limit in Settings, at most 4 GB). Select fewer files or download them one by one."
+  },
+  "reasonInPageBlob": {
+    "message": "The file is held by the page itself (a blob: URL). The page hands it over; the extension never fetches it."
+  },
+  "sourceBlob": {
+    "message": "held by the page (blob:)"
   }
 }

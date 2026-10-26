@@ -1,4 +1,4 @@
-import { INGEST_PORT_PREFIX, MAX_HELD_BYTES, type IngestDown, type IngestUp } from '@/types/ingest';
+import { HELD_BLOB_LIMIT, INGEST_PORT_PREFIX, type IngestDown, type IngestUp } from '@/types/ingest';
 import { CancelledError, PipelineError } from './errors';
 import { createStageFile } from './opfs';
 import { storageReady } from './startup';
@@ -39,7 +39,7 @@ export function expectIngest(opts: {
       frameId: opts.frameId,
       fileName: opts.fileName,
       jobId: opts.jobId,
-      maxBytes: Math.min(opts.maxBytes ?? MAX_HELD_BYTES, MAX_HELD_BYTES),
+      maxBytes: Math.min(opts.maxBytes ?? HELD_BLOB_LIMIT, HELD_BLOB_LIMIT),
       signal: opts.signal,
       onProgress: opts.onProgress,
       resolve,
