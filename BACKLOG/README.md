@@ -49,3 +49,4 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-029](VDH-029-credential-and-ssrf-hardening.md) | Cookies and extension fetches limited to what the user chose | done | P0 | security | VDH-008, VDH-011 |
 | [VDH-030](VDH-030-resource-limits-hostile-servers.md) | Byte, time and count limits against hostile servers and playlists | done | P1 | security | VDH-011 |
 | [VDH-031](VDH-031-hls-correctness-fixes.md) | HLS correctness: encrypted init sections, ignored Range, unusable keys | done | P1 | lib | VDH-011 |
+| [VDH-032](VDH-032-release-pipeline.md) | Release pipeline for main (Chrome package + tag + GitHub Release) | in-progress | P1 | build | VDH-022, VDH-002 |

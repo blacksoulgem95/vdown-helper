@@ -1,0 +1,97 @@
+name: Release
+
+# On every push to main: verify, build and package the extension. If the version in package.json has not been
+# released yet, tag it (v<version>) and publish a GitHub Release with the Chrome package attached.
+# To ship a new version: bump "version" in package.json (the manifest version follows it) and merge to main.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      released: ${{ steps.meta.outputs.released }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # tags are needed to know whether this version was already released
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm test
+
+      # build + dist checks (manifest, assets, locales, CSP, no remote code) + zip + sha256
+      - name: Build and package
+        run: npm run package
+
+      - name: Work out the version
+        id: meta
+        run: |
+          version=$(node -p "require('./package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+            echo "released=true" >> "$GITHUB_OUTPUT"
+            echo "::notice title=No new release::v$version already exists. Bump the version in package.json to publish a new release."
+          else
+            echo "released=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify the zip
+        run: |
+          cd release
+          sha256sum -c "vdown-helper-${{ steps.meta.outputs.version }}.zip.sha256"
+          unzip -tq "vdown-helper-${{ steps.meta.outputs.version }}.zip"
+          unzip -l "vdown-helper-${{ steps.meta.outputs.version }}.zip" | awk '{print $4}' | grep -qx manifest.json
+
+      # Always keep the package of this commit, release or not.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vdown-helper-${{ steps.meta.outputs.version }}-${{ github.sha }}
+          path: release/*
+          if-no-files-found: error
+
+  release:
+    needs: package
+    if: needs.package.outputs.released == 'false'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the tag and the release
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: vdown-helper-*
+          merge-multiple: true
+          path: release
+
+      - name: Create tag and GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.package.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Creates the tag v$VERSION on this commit if it does not exist yet. Never touches an existing release.
+          gh release create "v$VERSION" \
+            "release/vdown-helper-$VERSION.zip" \
+            "release/vdown-helper-$VERSION.zip.sha256" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "vdown-helper $VERSION" \
+            --generate-notes \
+            --notes "Chrome package for vdown-helper $VERSION. Unzip it, open chrome://extensions, enable Developer mode and choose Load unpacked. Verify the download with the .sha256 file. The package bundles an FFmpeg.wasm core (GPL-2.0-or-later); see THIRD_PARTY_NOTICES.md."
