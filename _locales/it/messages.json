@@ -910,5 +910,53 @@
   },
   "pipeCapture": {
     "message": "Cattura: la pagina riproduce il video fino in fondo mentre ciò che il lettore riceve viene registrato, poi i flussi vengono copiati in un file. Nulla viene ricodificato."
+  },
+  "stageRecording": {
+    "message": "REGISTRAZIONE"
+  },
+  "kindStream": {
+    "message": "Flusso multimediale live"
+  },
+  "sourceStream": {
+    "message": "un flusso nella pagina (MediaStream)"
+  },
+  "reasonStreamRecordable": {
+    "message": "È un flusso multimediale live riprodotto dalla pagina (fotocamera, condivisione schermo, chiamata o canvas). Non ha un file né un indirizzo, ma può essere registrato mentre viene riprodotto, finché premi Stop o si raggiunge un limite."
+  },
+  "recordStart": {
+    "message": "REGISTRA"
+  },
+  "recordHint": {
+    "message": "Registra ciò che questo flusso riproduce da ora in poi, in WebM (o MP4 dove questo Chrome lo supporta, vedi Impostazioni). Finché registra, nella pagina resta un banner: premi Stop per salvare o Annulla per scartare."
+  },
+  "recordBanner": {
+    "message": "vdown-helper sta registrando questo flusso"
+  },
+  "recordStop": {
+    "message": "Ferma e salva"
+  },
+  "jobStop": {
+    "message": "Ferma e salva"
+  },
+  "pipeRecord": {
+    "message": "Registrazione: il flusso della pagina viene registrato dal browser finché non lo fermi o non si raggiunge un limite; poi il file viene sistemato con una copia dei flussi (durata, indice). vdown-helper non ricodifica nulla."
+  },
+  "secRecording": {
+    "message": "Registrazione"
+  },
+  "secRecordingHint": {
+    "message": "Limiti e formato delle registrazioni di flussi multimediali. Una registrazione si ferma da sola e viene salvata quando si raggiunge un limite."
+  },
+  "optRecordContainer": {
+    "message": "Formato di registrazione"
+  },
+  "optRecordContainerHint": {
+    "message": "L'MP4 è usato solo dove questo Chrome lo registra in modo nativo; altrimenti WebM."
+  },
+  "optRecordMaxMinutes": {
+    "message": "Registrazione più lunga (minuti)"
+  },
+  "optRecordMaxMb": {
+    "message": "Registrazione più grande (MB)"
   }
 }

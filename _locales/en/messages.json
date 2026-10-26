@@ -910,5 +910,53 @@
   },
   "pipeCapture": {
     "message": "Capture: the page plays the video through while what the player receives is recorded, then the streams are copied into a file. Nothing is re-encoded."
+  },
+  "stageRecording": {
+    "message": "RECORDING"
+  },
+  "kindStream": {
+    "message": "Live media stream"
+  },
+  "sourceStream": {
+    "message": "a stream in the page (MediaStream)"
+  },
+  "reasonStreamRecordable": {
+    "message": "This is a live media stream the page is playing (camera, screen share, call or canvas). It has no file or address, but it can be recorded while it plays, until you press Stop or a limit is reached."
+  },
+  "recordStart": {
+    "message": "RECORD"
+  },
+  "recordHint": {
+    "message": "Records what this stream plays from now on, as WebM (or MP4 where this Chrome supports it, see Settings). A banner stays on the page while it records; press Stop to save, or Cancel to discard."
+  },
+  "recordBanner": {
+    "message": "vdown-helper is recording this stream"
+  },
+  "recordStop": {
+    "message": "Stop and save"
+  },
+  "jobStop": {
+    "message": "Stop and save"
+  },
+  "pipeRecord": {
+    "message": "Recording: the page's stream is recorded by the browser until you stop it or a limit is reached, then the file is tidied with a stream copy (duration, index). Nothing is re-encoded by vdown-helper."
+  },
+  "secRecording": {
+    "message": "Recording"
+  },
+  "secRecordingHint": {
+    "message": "Limits and format for recordings of media streams. A recording stops by itself and is saved when a limit is reached."
+  },
+  "optRecordContainer": {
+    "message": "Recording format"
+  },
+  "optRecordContainerHint": {
+    "message": "MP4 is used only where this Chrome can record it natively; otherwise WebM."
+  },
+  "optRecordMaxMinutes": {
+    "message": "Longest recording (minutes)"
+  },
+  "optRecordMaxMb": {
+    "message": "Largest recording (MB)"
   }
 }

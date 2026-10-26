@@ -435,6 +435,13 @@ async function analyzeSubtitleFile(r: MediaResource, e: Entry, fetcher: Fetcher)
 /** Media embedded in the page as a data: URL: nothing to probe, its size is known and the page hands it over. */
 function analyzeHeld(r: MediaResource, e: Entry, ctx: AnalyzeContext): MediaResource {
   const held = e.held as PageHeld;
+  if (held.kind === 'stream') {
+    // A MediaStream the page plays (camera, screen share, WebRTC, canvas): nothing to fetch, but it can be recorded.
+    r.kind = 'blob';
+    r.title = clip(e.hints.title || ctx.pageTitle) || r.host;
+    r.downloadability = verdict('downloadable', 'ok', 'stream-recordable');
+    return r;
+  }
   if (held.kind === 'mse') {
     // A player fed through MediaSource: there is nothing to fetch. The background upgrades this to "capturable"
     // when the page hook has seen how the player is fed.

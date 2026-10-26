@@ -5,6 +5,7 @@ import {
   SpeedMeter,
   TRANSITIONS,
   canRetry,
+  canStop,
   canTransition,
   createJob,
   failJob,
@@ -46,6 +47,26 @@ const plan = (over: Partial<Plan> = {}): Plan => ({
   ...over,
 });
 
+describe('recording', () => {
+  it('has its own stage instead of a download, and is the only thing that can be stopped (saved)', () => {
+    expect(stagesFor(plan({ pipeline: 'record', requiresFfmpeg: true }))).toEqual([
+      'detected',
+      'preparing',
+      'recording',
+      'merging',
+      'completed',
+    ]);
+    expect(canTransition('preparing', 'recording')).toBe(true);
+    expect(canTransition('recording', 'merging')).toBe(true);
+    expect(canTransition('recording', 'completed')).toBe(true);
+    expect(canTransition('recording', 'downloading')).toBe(false);
+    expect(isActive({ stage: 'recording' })).toBe(true);
+    expect(canStop({ stage: 'recording' })).toBe(true);
+    for (const s of ['detected', 'preparing', 'downloading', 'merging', 'completed', 'failed', 'cancelled'])
+      expect(canStop({ stage: s as JobStage })).toBe(false);
+  });
+});
+
 describe('stagesFor: only the stages a job really passes through', () => {
   it('native', () =>
     expect(stagesFor(plan())).toEqual(['detected', 'preparing', 'downloading', 'completed']));
@@ -84,7 +105,14 @@ describe('transitions', () => {
     }
   });
   it('every non-terminal stage can fail or be cancelled', () => {
-    for (const s of ['detected', 'preparing', 'downloading', 'merging', 'encoding'] as JobStage[]) {
+    for (const s of [
+      'detected',
+      'preparing',
+      'downloading',
+      'recording',
+      'merging',
+      'encoding',
+    ] as JobStage[]) {
       expect(canTransition(s, 'failed')).toBe(true);
       expect(canTransition(s, 'cancelled')).toBe(true);
     }

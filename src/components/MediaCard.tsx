@@ -21,7 +21,11 @@ import { Badge, Button, Notice, cx } from './ui';
 
 /** Where page-held bytes come from, in words. */
 export const heldSource = (r: MediaResource): string =>
-  r.held?.kind === 'blob' ? t('sourceBlob') : t('sourceInline');
+  r.held?.kind === 'blob'
+    ? t('sourceBlob')
+    : r.held?.kind === 'stream'
+      ? t('sourceStream')
+      : t('sourceInline');
 
 /** Short, token-free hint of where a resource lives, to tell apart cards that share a page title. */
 function sourceHint(r: MediaResource): string {
@@ -64,6 +68,8 @@ export interface MediaCardProps {
   onGrantAccess: (r: MediaResource) => void;
   /** MediaSource players are captured (the page plays the video through), not downloaded. */
   onCapture?: (r: MediaResource, speed: 'fast' | 'realtime') => void;
+  /** MediaStreams are recorded until the user stops them. */
+  onRecord?: (r: MediaResource) => void;
 }
 
 export function MediaCard({
@@ -74,6 +80,7 @@ export function MediaCard({
   onConfigure,
   onGrantAccess,
   onCapture,
+  onRecord,
 }: MediaCardProps) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
@@ -132,9 +139,24 @@ export function MediaCard({
         </div>
       )}
 
-      {r.held?.kind === 'mse' ? (
+      {r.held?.kind === 'mse' || r.held?.kind === 'stream' ? (
         <div className="mt-2.5 space-y-2">
-          {ok && (
+          {ok && r.held.kind === 'stream' && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="primary"
+                onClick={() => onRecord?.(r)}
+                disabled={busy}
+                icon={<Radio size={13} aria-hidden="true" />}
+              >
+                {busy ? t('working') : t('recordStart')}
+              </Button>
+            </div>
+          )}
+          {ok && r.held.kind === 'stream' && (
+            <p className="text-[10.5px] leading-snug text-muted">{t('recordHint')}</p>
+          )}
+          {ok && r.held.kind === 'mse' && (
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant="primary"
@@ -154,7 +176,9 @@ export function MediaCard({
               </Button>
             </div>
           )}
-          {ok && <p className="text-[10.5px] leading-snug text-muted">{t('captureHint')}</p>}
+          {ok && r.held.kind === 'mse' && (
+            <p className="text-[10.5px] leading-snug text-muted">{t('captureHint')}</p>
+          )}
           <button
             type="button"
             className="mono inline-flex items-center gap-1 rounded px-1.5 py-1 text-[10px] uppercase tracking-wider text-muted hover:text-neon"

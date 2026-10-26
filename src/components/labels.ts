@@ -52,6 +52,7 @@ export function reasonText(d: Downloadability): string {
   if (d.status === 'downloadable' && d.detail === 'in-page-data') return t('reasonInPageData');
   if (d.status === 'downloadable' && d.detail === 'in-page-blob') return t('reasonInPageBlob');
   if (d.status === 'downloadable' && d.detail === 'mse-capturable') return t('reasonMseCapturable');
+  if (d.status === 'downloadable' && d.detail === 'stream-recordable') return t('reasonStreamRecordable');
   return base;
 }
 
@@ -70,7 +71,7 @@ export function kindLabel(r: MediaResource): string {
           ? t('kindDash')
           : t('kindPlaylist');
     case 'blob':
-      return t('kindBlob');
+      return r.held?.kind === 'stream' ? t('kindStream') : t('kindBlob');
     case 'image':
       return t('kindImage');
     case 'document':
@@ -91,6 +92,7 @@ const STAGES: Record<JobStage, MessageKey> = {
   preparing: 'stagePreparing',
   downloading: 'stageDownloading',
   merging: 'stageMerging',
+  recording: 'stageRecording',
   encoding: 'stageEncoding',
   completed: 'stageCompleted',
   failed: 'stageFailed',

@@ -39,7 +39,9 @@ export type Pipeline =
   /** Plain files fetched one by one and packed into a ZIP written to disk (lib/zip). */
   | 'zip'
   /** A MediaSource player recorded in the page, assembled into one or more files by copying streams (no re-encode). */
-  | 'capture';
+  | 'capture'
+  /** A MediaStream recorded in the page until Stop, saved as WebM or MP4 (no re-encode of what the recorder wrote). */
+  | 'record';
 
 export type StreamHandling = 'copy' | 'transcode';
 

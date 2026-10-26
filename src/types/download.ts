@@ -6,7 +6,15 @@ export type VideoContainer = 'mp4' | 'mkv' | 'ts' | 'original';
 export type AudioBitrate = 128 | 192 | 256 | 320;
 
 export type JobStage =
-  'detected' | 'preparing' | 'downloading' | 'merging' | 'encoding' | 'completed' | 'failed' | 'cancelled';
+  | 'detected'
+  | 'preparing'
+  | 'downloading'
+  | 'recording'
+  | 'merging'
+  | 'encoding'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
 
 export type JobErrorCode =
   | 'cors'
@@ -84,6 +92,11 @@ export interface DownloadRequest {
    * `fast` raises the playback rate; `realtime` plays at the normal rate.
    */
   capture?: { speed: 'fast' | 'realtime' };
+  /**
+   * Record a MediaStream the page plays (camera, screen share, WebRTC, canvas) until the user stops it or a limit is
+   * reached. `prefer` is the container wanted; WebM is used when this Chrome cannot record it.
+   */
+  record?: { prefer: 'webm' | 'mp4' };
   /** A plain file (image, document, archive, page asset) saved as it is. */
   file?: { kind: 'image' | 'document' | 'archive' | 'asset' };
   /** Source description for the queue display. */
@@ -120,6 +133,8 @@ export interface JobProgress {
   /** Human-readable step counters such as segments. */
   unitsDone?: number;
   unitsTotal?: number;
+  /** Seconds recorded so far (a recording has no total). */
+  elapsedSec?: number;
 }
 
 export interface DownloadJob {

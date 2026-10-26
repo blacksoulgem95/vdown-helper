@@ -13,7 +13,7 @@ vi.mock('@/offscreen/opfs', () => ({
   }),
 }));
 
-import { expectIngest, handleIngestPort } from '@/offscreen/ingest';
+import { expectIngest, expectRecording, handleIngestPort } from '@/offscreen/ingest';
 
 class FakePort {
   sent: IngestDown[] = [];
@@ -194,5 +194,112 @@ describe('page-held bytes (offscreen side)', () => {
     const caught = expect(p).rejects.toMatchObject({ code: 'network' });
     await vi.advanceTimersByTimeAsync(21_000);
     await caught;
+  });
+});
+
+describe('recording a MediaStream (offscreen side)', () => {
+  function recording(over: Partial<Parameters<typeof expectRecording>[0]> = {}) {
+    const ac = new AbortController();
+    const started = vi.fn();
+    const progress: number[] = [];
+    const p = expectRecording({
+      jobId: 'job1',
+      tabId: 7,
+      frameId: 2,
+      maxBytes: 100,
+      signal: ac.signal,
+      onStart: started,
+      onProgress: (b) => progress.push(b),
+      ...over,
+    });
+    p.catch(() => undefined);
+    return { p, ac, started, progress };
+  }
+  const chunk = (seq: number, s: string): IngestUp => ({ t: 'cchunk', seq, track: '0', b64: b64(s) });
+
+  it('stages the recorder output in order and returns it with its type once the page says it is done', async () => {
+    const { p, started, progress } = recording();
+    const port = good();
+    handleIngestPort(port as unknown as chrome.runtime.Port);
+    port.say({ t: 'cbegin', mime: 'video/webm;codecs=vp9,opus' });
+    await flush();
+    expect(started).toHaveBeenCalledTimes(1);
+    port.say(chunk(0, 'abc'));
+    port.say(chunk(1, 'defg'));
+    port.say({ t: 'cend', chunks: 2 });
+    const r = await p;
+    expect(r).toMatchObject({ bytes: 7, mime: 'video/webm;codecs=vp9,opus', partial: false });
+    expect(await r.file.text()).toBe('abcdefg');
+    expect(port.sent).toEqual([{ t: 'ready' }, { t: 'ack', seq: 0 }, { t: 'ack', seq: 1 }, { t: 'done' }]);
+    expect(progress).toEqual([3, 7]);
+  });
+
+  it('refuses a type the recorder never writes, out-of-order data and more than the hard limit', async () => {
+    for (const bad of [
+      (port: FakePort) => port.say({ t: 'cbegin', mime: 'text/html' }),
+      (port: FakePort) => port.say({ t: 'cbegin' }),
+      (port: FakePort) => {
+        port.say({ t: 'cbegin', mime: 'video/webm' });
+        port.say(chunk(1, 'x'));
+      },
+      (port: FakePort) => {
+        port.say({ t: 'cbegin', mime: 'video/webm' });
+        port.say(chunk(0, 'x'.repeat(101)));
+      },
+    ]) {
+      const { p } = recording();
+      const port = good();
+      handleIngestPort(port as unknown as chrome.runtime.Port);
+      bad(port);
+      await expect(p).rejects.toBeTruthy();
+      expect(port.sent.at(-1)).toMatchObject({ t: 'abort' });
+    }
+  });
+
+  it('keeps what had arrived when the tab goes away (closed or navigated), and fails when nothing had', async () => {
+    const kept = recording();
+    const port = good();
+    handleIngestPort(port as unknown as chrome.runtime.Port);
+    port.say({ t: 'cbegin', mime: 'audio/webm' });
+    port.say(chunk(0, 'abc'));
+    port.drop();
+    const r = await kept.p;
+    expect(r).toMatchObject({ bytes: 3, partial: true });
+    expect(await r.file.text()).toBe('abc');
+
+    written.length = 0;
+    const empty = recording();
+    const port2 = good();
+    handleIngestPort(port2 as unknown as chrome.runtime.Port);
+    port2.say({ t: 'cbegin', mime: 'audio/webm' });
+    port2.drop();
+    await expect(empty.p).rejects.toBeTruthy();
+  });
+
+  it('treats the page reporting "cancelled" as a cancellation, and any other page error as a failure', async () => {
+    const { CancelledError } = await import('@/offscreen/errors');
+    const a = recording();
+    const pa = good();
+    handleIngestPort(pa as unknown as chrome.runtime.Port);
+    pa.say({ t: 'cbegin', mime: 'video/webm' });
+    pa.say({ t: 'error', message: 'cancelled' });
+    await expect(a.p).rejects.toBeInstanceOf(CancelledError);
+
+    const b = recording();
+    const pb = good();
+    handleIngestPort(pb as unknown as chrome.runtime.Port);
+    pb.say({ t: 'cbegin', mime: 'video/webm' });
+    pb.say({ t: 'error', message: 'boom' });
+    await expect(b.p).rejects.not.toBeInstanceOf(CancelledError);
+  });
+
+  it('is cancelled by the job, and never starts for an unexpected sender', async () => {
+    const { p, ac } = recording();
+    const stranger = new FakePort('vdh-ingest:job1', { id: ME, tab: { id: 99 }, frameId: 2 });
+    handleIngestPort(stranger as unknown as chrome.runtime.Port);
+    expect(stranger.sent[0]).toMatchObject({ t: 'abort' });
+    ac.abort();
+    const { CancelledError } = await import('@/offscreen/errors');
+    await expect(p).rejects.toBeInstanceOf(CancelledError);
   });
 });

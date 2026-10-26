@@ -112,7 +112,7 @@ export interface PlaylistSummary {
  * a small handle instead of the data.
  */
 export interface PageHeld {
-  kind: 'data' | 'blob' | 'mse';
+  kind: 'data' | 'blob' | 'mse' | 'stream';
   /** Handle inside the owning frame's scanner (a hash of the data), not a URL. */
   id: string;
   /** Decoded size in bytes. */

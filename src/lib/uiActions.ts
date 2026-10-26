@@ -10,6 +10,7 @@ import {
   audioOptions,
   buildRequest,
   buildCaptureRequest,
+  buildRecordRequest,
   buildZipRequest,
   defaultChoices,
   planFromRequest,
@@ -263,6 +264,12 @@ export async function startCapture(
   speed: 'fast' | 'realtime',
 ): Promise<StartOutcome> {
   const request = buildCaptureRequest(resource, settings, speed);
+  const res = await send('start-download', { request });
+  return res.ok ? { ok: true, jobId: res.jobId } : { ok: false, error: describeError(res.error) };
+}
+
+export async function startRecord(resource: MediaResource, settings: Settings): Promise<StartOutcome> {
+  const request = buildRecordRequest(resource, settings);
   const res = await send('start-download', { request });
   return res.ok ? { ok: true, jobId: res.jobId } : { ok: false, error: describeError(res.error) };
 }

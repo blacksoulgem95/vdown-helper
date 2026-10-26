@@ -11,7 +11,19 @@ import { fileKindOfExtension, fileKindOfMime, urlExtension, type FileKind } from
 import { sniffMime } from '@/lib/sniff';
 import { HELD_BLOB_LIMIT } from '@/types/ingest';
 import { fetchText, probeHeaders } from '@/lib/netprobe';
-import { mseVideos, startCapture, stopCapture, type BannerLabels, type CaptureResult } from './capture';
+import {
+  describeStream,
+  finishRecording,
+  mseVideos,
+  startCapture,
+  startRecord as startStreamRecording,
+  stopCapture,
+  streamMedia,
+  type BannerLabels,
+  type CaptureResult,
+  type RecordOptions,
+  type RecordResult,
+} from './capture';
 import { pumpBlob, pumpData, type PumpResult } from './ingest';
 import type { DetectionMethod, RawCandidate, ScanReport } from '@/types/media';
 
@@ -168,6 +180,19 @@ function scanElements(c: Collector, doc: Document): void {
           ...(label ? { title: label } : {}),
         });
       }
+      const stream = describeStream(media);
+      if (stream) {
+        // A camera, screen share, WebRTC or canvas stream: no address, but it can be recorded while it plays.
+        streamMedia.set(stream.handle, media);
+        add(c, {
+          ...extra,
+          mediaType: stream.hasVideo ? 'video' : 'audio',
+          ...(stream.width && stream.height ? { width: stream.width, height: stream.height } : {}),
+          url: dataLabel('application/x-vdh-stream', stream.handle),
+          method: 'dom-element',
+          held: { kind: 'stream', id: stream.handle, bytes: 0 },
+        });
+      }
       addUrl(c, media.currentSrc, base, 'dom-element', extra, media);
       addUrl(c, media.getAttribute('src'), base, 'dom-element', extra, media);
       for (const s of media.querySelectorAll('source')) {
@@ -300,6 +325,7 @@ function scanPerformance(c: Collector, base: string): void {
 
 export function scan(): ScanReport {
   heldData.clear();
+  streamMedia.clear();
   pendingBlobs = [];
   const c: Collector = {
     candidates: [],
@@ -441,6 +467,15 @@ export interface VdhApi {
     labels: BannerLabels,
   ) => Promise<CaptureResult>;
   stopCapture: (jobId: string) => boolean;
+  /** Record the MediaStream behind `handle` (resolves when the recording has ended). */
+  startRecord: (
+    jobId: string,
+    handle: string,
+    options: RecordOptions,
+    labels: BannerLabels,
+  ) => Promise<RecordResult>;
+  /** Stop a running recording and hand over what it has. */
+  finishRecording: (jobId: string) => boolean;
 }
 
 const api: VdhApi = {
@@ -448,6 +483,12 @@ const api: VdhApi = {
   scanAsync,
   startCapture,
   stopCapture,
+  startRecord: (jobId, handle, options, labels) => {
+    // The handle is only known after a scan of this document: look again if the page changed since.
+    if (!streamMedia.has(handle)) scan();
+    return startStreamRecording(jobId, handle, options, labels);
+  },
+  finishRecording,
   probeHeaders: (url) => probeHeaders(url),
   fetchText: (url) => fetchText(url),
   pumpHeld: async (jobId, handle) => {

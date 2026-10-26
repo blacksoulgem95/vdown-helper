@@ -20,7 +20,7 @@ function toBase64(blob: Blob): Promise<string> {
     reader.onerror = () => reject(new Error('read-failed'));
     reader.onload = () => {
       const s = String(reader.result);
-      resolve(s.slice(s.indexOf(',') + 1));
+      resolve(s.slice(s.lastIndexOf(',') + 1));
     };
     reader.readAsDataURL(blob);
   });

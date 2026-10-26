@@ -25,6 +25,8 @@ What automation cannot prove. Follow the manual test procedure in the README in 
 
 - [ ] Options -> "Look inside players" shows Chrome's all-sites prompt and enables the hook; revoking access removes it
 - [ ] "Allow embedded players" in the popup asks for exactly the listed frame origins, then the nested players appear
+- [ ] Recording a MediaStream (a webcam test page, a screen share, a WebRTC call page) with "Recording format" set to MP4: the file plays and has sound; with WebM it still works
+- [ ] MediaStream recording keeps the "recording" banner visible in a real window, Stop in the banner and in the queue both save, and closing the tab keeps what was recorded
 
 ## Notes
 

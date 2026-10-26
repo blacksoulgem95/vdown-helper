@@ -218,3 +218,63 @@ export async function stopCapture(tabId: number, frameId: number, jobId: string)
     // the page is gone: so is the capture
   }
 }
+
+export interface RecordLabels extends CaptureLabels {
+  stop: string;
+}
+
+/**
+ * Start recording a MediaStream in the owning frame and wait until the recording has ended (Stop, a limit, the end of
+ * the stream, or an error). The page controller shows the banner and streams the recorder's output to the offscreen document.
+ */
+export async function runRecord(
+  tabId: number,
+  frameId: number,
+  jobId: string,
+  handle: string,
+  options: { prefer: 'webm' | 'mp4'; maxSeconds: number; maxBytes: number },
+  labels: RecordLabels,
+): Promise<CaptureOutcome> {
+  try {
+    const [res] = await chrome.scripting.executeScript({
+      target: { tabId, frameIds: [frameId] },
+      func: (j: string, h: string, o: typeof options, l: RecordLabels) => {
+        const api = (
+          globalThis as unknown as {
+            __vdh?: { startRecord?: (...a: unknown[]) => Promise<unknown> };
+          }
+        ).__vdh;
+        return api?.startRecord
+          ? api.startRecord(j, h, o, l)
+          : { ok: false, code: 'no-source', message: 'The page scanner is not available' };
+      },
+      args: [jobId, handle, options, labels],
+    });
+    const r = res?.result as { ok?: boolean; code?: string; message?: string } | undefined;
+    return r?.ok
+      ? { ok: true }
+      : {
+          ok: false,
+          code: r?.code ?? 'failed',
+          message: r?.message ?? 'The recording could not be completed',
+        };
+  } catch {
+    return { ok: false, code: 'no-source', message: 'The page is no longer available' };
+  }
+}
+
+/** The user pressed Stop in the queue: the recording in the page ends and hands over what it has. Best effort. */
+export async function finishRecordingInPage(tabId: number, frameId: number, jobId: string): Promise<void> {
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId, frameIds: [frameId] },
+      func: (j: string) => {
+        const api = (globalThis as unknown as { __vdh?: { finishRecording?: (a: string) => unknown } }).__vdh;
+        api?.finishRecording?.(j);
+      },
+      args: [jobId],
+    });
+  } catch {
+    // the page is gone: the offscreen document saves what it received when the connection closed
+  }
+}

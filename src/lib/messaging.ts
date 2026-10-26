@@ -22,7 +22,7 @@ const isObj = (v: unknown): v is Record<string, unknown> =>
 const isStr = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length < 8192;
 const isInt = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0;
 
-const ACTIONS = ['cancel', 'retry', 'pause', 'resume', 'remove'];
+const ACTIONS = ['cancel', 'retry', 'pause', 'resume', 'remove', 'stop'];
 const MODES = ['video-audio', 'audio-only', 'video-only', 'original'];
 const CONTAINERS = ['mp4', 'mkv', 'ts', 'original'];
 const AUDIO = ['mp3', 'm4a', 'aac', 'wav'];

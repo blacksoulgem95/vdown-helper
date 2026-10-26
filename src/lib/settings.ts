@@ -21,6 +21,9 @@ export const DEFAULT_SETTINGS: Settings = {
   segmentConcurrency: 4,
   maxMemoryMb: 2048,
   maxEncodeDurationSec: 0,
+  recordContainer: 'webm',
+  recordMaxMinutes: 120,
+  recordMaxMb: 4096,
   notifyOnComplete: true,
   notifyOnError: true,
 };
@@ -37,6 +40,8 @@ export const LIMITS = {
   segmentConcurrency: { min: 1, max: 8 },
   maxMemoryMb: { min: 128, max: 8192 },
   maxEncodeDurationSec: { min: 0, max: 86_400 },
+  recordMaxMinutes: { min: 1, max: 1440 },
+  recordMaxMb: { min: 64, max: 16_384 },
   namingTemplate: { maxLength: 200 },
 } as const;
 
@@ -80,6 +85,9 @@ export function sanitizeSettings(raw: unknown): Settings {
     segmentConcurrency: int(r['segmentConcurrency'], LIMITS.segmentConcurrency, d.segmentConcurrency),
     maxMemoryMb: int(r['maxMemoryMb'], LIMITS.maxMemoryMb, d.maxMemoryMb),
     maxEncodeDurationSec: int(r['maxEncodeDurationSec'], LIMITS.maxEncodeDurationSec, d.maxEncodeDurationSec),
+    recordContainer: oneOf(r['recordContainer'], ['webm', 'mp4'] as const, d.recordContainer),
+    recordMaxMinutes: int(r['recordMaxMinutes'], LIMITS.recordMaxMinutes, d.recordMaxMinutes),
+    recordMaxMb: int(r['recordMaxMb'], LIMITS.recordMaxMb, d.recordMaxMb),
     notifyOnComplete: bool(r['notifyOnComplete'], d.notifyOnComplete),
     notifyOnError: bool(r['notifyOnError'], d.notifyOnError),
   };

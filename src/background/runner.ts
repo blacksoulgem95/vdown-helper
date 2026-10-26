@@ -4,6 +4,7 @@ import {
   SpeedMeter,
   canRestage,
   canRetry,
+  canStop,
   canTransition,
   restage,
   createJob,
@@ -24,7 +25,7 @@ import { isDataLabel } from '@/lib/dataUrl';
 import { isFileKind } from '@/lib/filetypes';
 import { planZip } from '@/lib/zip';
 import { inspectVariant } from './detect';
-import { pumpHeld, runCapture, stopCapture } from './pageFetch';
+import { finishRecordingInPage, pumpHeld, runCapture, runRecord, stopCapture } from './pageFetch';
 import { t } from '@/lib/i18n';
 import { getJob, listJobs, mutateJobs, putJob, removeJobs, updateJob } from './jobStore';
 import { notifyJob } from './notify';
@@ -117,12 +118,18 @@ export async function submit(raw: DownloadRequest): Promise<Result<{ jobId: stri
       return fail(`inspect:${e instanceof Error ? e.message : 'failed'}`);
     }
   }
+  // Capturing and recording only exist for what the page holds: anything else claiming to be one is refused.
+  if ((req.capture || req.record) && !isDataLabel(req.sourceUrl)) return fail('unsafe-url');
   if (isDataLabel(req.sourceUrl)) {
     // Page-held bytes: only for a resource this background saw in its own scan of the tab.
     if (!resource?.held || resource.url !== req.sourceUrl) return fail('unsafe-url');
     // A MediaSource player is only ever captured (never "downloaded"), and only when the scan found it capturable.
     if ((resource.held.kind === 'mse') !== (req.capture !== undefined)) return fail('unsafe-url');
-    if (req.capture && resource.downloadability.status !== 'downloadable') return fail('protected');
+    // A MediaStream is only ever recorded (never "downloaded"); capture and record exclude each other.
+    if ((resource.held.kind === 'stream') !== (req.record !== undefined) || (req.capture && req.record))
+      return fail('unsafe-url');
+    if ((req.capture || req.record) && resource.downloadability.status !== 'downloadable')
+      return fail('protected');
     req = { ...req, held: { ...resource.held, frameId: resource.frameId ?? 0 } };
   } else if (resource?.frameUrl) {
     req = {
@@ -203,7 +210,12 @@ export async function pump(): Promise<void> {
   for (const id of startIds) void runJob(id);
 }
 
-function offscreenPlan(plan: Plan, maxMemoryMb: number, segmentConcurrency: number): OffscreenPlan {
+function offscreenPlan(
+  plan: Plan,
+  maxMemoryMb: number,
+  segmentConcurrency: number,
+  recordMaxMb: number,
+): OffscreenPlan {
   return {
     pipeline: plan.pipeline as OffscreenPlan['pipeline'],
     extension: plan.extension,
@@ -212,6 +224,7 @@ function offscreenPlan(plan: Plan, maxMemoryMb: number, segmentConcurrency: numb
     audio: plan.audio,
     maxMemoryMb,
     segmentConcurrency,
+    recordMaxMb,
   };
 }
 
@@ -247,8 +260,16 @@ async function runJob(id: string): Promise<void> {
     if ((job.staged || job.request.held) && plan.pipeline === 'native') plan.pipeline = 'file-staged';
     if (plan.pipeline === 'native') await runNative(job);
     else {
-      await runInOffscreenDoc(job, plan, settings.maxMemoryMb, settings.segmentConcurrency);
+      await runInOffscreenDoc(
+        job,
+        plan,
+        settings.maxMemoryMb,
+        settings.segmentConcurrency,
+        settings.recordMaxMb,
+      );
       if (job.request.capture) void captureInPage(job);
+      else if (job.request.record)
+        void recordInPage(job, settings.recordMaxMinutes * 60, settings.recordMaxMb * 1024 * 1024);
       else if (job.request.held) void sendHeldBytes(job);
     }
   } catch (e) {
@@ -273,6 +294,38 @@ async function captureInPage(job: DownloadJob): Promise<void> {
   await new Promise((r) => setTimeout(r, 500));
   const now = await getJob(job.id);
   if (!now || !isActive(now)) return; // cancelled (or already failed) meanwhile
+  await cancelInOffscreen(job.id);
+  if (res.code === 'cancelled') {
+    await updateJob(job.id, (j) =>
+      canTransition(j.stage, 'cancelled') ? transition(j, 'cancelled', Date.now()) : j,
+    );
+    await afterJobEnds(job.id);
+    return;
+  }
+  await settle(job.id, res.code === 'protected' ? 'protected' : 'capture', res.message);
+}
+
+/**
+ * Record a MediaStream in the page that plays it; the offscreen document is already waiting for what it sends. The
+ * recording moves the job to RECORDING as soon as the page has started, and ends when the user stops it or a limit hits.
+ */
+async function recordInPage(job: DownloadJob, maxSeconds: number, maxBytes: number): Promise<void> {
+  const held = job.request.held;
+  const record = job.request.record;
+  if (!held || !record) return;
+  const res = await runRecord(
+    job.request.tabId,
+    held.frameId ?? 0,
+    job.id,
+    held.id,
+    { prefer: record.prefer, maxSeconds, maxBytes },
+    { title: t('recordBanner'), cancel: t('captureCancel'), stop: t('recordStop'), progress: '$1' },
+  );
+  if (res.ok) return; // the offscreen document takes over from here
+  await new Promise((r) => setTimeout(r, 500));
+  const now = await getJob(job.id);
+  // Past RECORDING the offscreen document has the recording (e.g. the tab was closed): nothing is to be undone.
+  if (!now || (now.stage !== 'preparing' && now.stage !== 'recording')) return;
   await cancelInOffscreen(job.id);
   if (res.code === 'cancelled') {
     await updateJob(job.id, (j) =>
@@ -324,8 +377,9 @@ async function runInOffscreenDoc(
   plan: Plan,
   maxMemoryMb: number,
   concurrency: number,
+  recordMaxMb: number,
 ): Promise<void> {
-  await runInOffscreen(job.id, job.request, offscreenPlan(plan, maxMemoryMb, concurrency));
+  await runInOffscreen(job.id, job.request, offscreenPlan(plan, maxMemoryMb, concurrency, recordMaxMb));
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -530,7 +584,7 @@ async function syncFromChrome(job: DownloadJob): Promise<void> {
 
 export async function jobAction(
   jobId: string,
-  action: 'cancel' | 'retry' | 'pause' | 'resume' | 'remove',
+  action: 'cancel' | 'retry' | 'pause' | 'resume' | 'remove' | 'stop',
 ): Promise<Result<object>> {
   const job = await getJob(jobId);
   if (!job) return fail('not-found');
@@ -541,12 +595,18 @@ export async function jobAction(
       if (job.chromeDownloadId !== undefined)
         await chrome.downloads.cancel(job.chromeDownloadId).catch(() => undefined);
       if (job.viaOffscreen) await cancelInOffscreen(jobId);
-      if (job.request.capture && job.request.held)
+      if ((job.request.capture || job.request.record) && job.request.held)
         await stopCapture(job.request.tabId, job.request.held.frameId ?? 0, jobId);
       await updateJob(jobId, (j) =>
         canTransition(j.stage, 'cancelled') ? transition(j, 'cancelled', now) : j,
       );
       await afterJobEnds(jobId);
+      return ok();
+    }
+    case 'stop': {
+      // Stop and save: the recording ends here and what was recorded is kept (cancel would discard it).
+      if (!canStop(job) || !job.request.held) return fail('not-supported');
+      await finishRecordingInPage(job.request.tabId, job.request.held.frameId ?? 0, jobId);
       return ok();
     }
     case 'retry': {

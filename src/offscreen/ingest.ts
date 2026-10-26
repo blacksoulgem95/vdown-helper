@@ -19,8 +19,20 @@ export interface CaptureIngest {
   bytes: number;
 }
 
+/** What a recording delivers: the recorder's own output, staged on disk, in the container it chose. */
+export interface RecordingIngest {
+  file: File;
+  bytes: number;
+  mime: string;
+  /** The page went away (tab closed or navigated) before it said it was done: this is what had arrived by then. */
+  partial: boolean;
+}
+
+/** The only recorder types the page may announce (what MediaRecorder writes). */
+export const RECORDING_MIME = /^(video|audio)\/(webm|mp4)(;codecs=[a-z0-9.,= -]{1,100})?$/i;
+
 interface Pending {
-  mode: 'file' | 'capture';
+  mode: 'file' | 'capture' | 'record';
   tabId: number;
   frameId: number;
   fileName: string;
@@ -32,6 +44,8 @@ interface Pending {
   reject: (e: unknown) => void;
   timer: ReturnType<typeof setTimeout>;
   claimed: boolean;
+  /** A recording: called when the page has started recording. */
+  onStart?: () => void;
 }
 
 const pending = new Map<string, Pending>();
@@ -123,6 +137,52 @@ export function expectCapture(opts: {
   });
 }
 
+/**
+ * Register a recording (MediaStream) that is about to arrive: same rules as expectIngest. Its size is not announced;
+ * `maxBytes` is a hard limit (the page enforces the user's limit first and stops gracefully).
+ */
+export function expectRecording(opts: {
+  jobId: string;
+  tabId: number;
+  frameId: number;
+  maxBytes: number;
+  signal: AbortSignal;
+  onStart: () => void;
+  onProgress: (bytes: number) => void;
+}): Promise<RecordingIngest> {
+  return new Promise((resolve, reject) => {
+    const entry: Pending = {
+      mode: 'record',
+      tabId: opts.tabId,
+      frameId: opts.frameId,
+      fileName: 'recording.bin',
+      jobId: opts.jobId,
+      maxBytes: opts.maxBytes,
+      signal: opts.signal,
+      onProgress: (bytes) => opts.onProgress(bytes),
+      onStart: opts.onStart,
+      resolve,
+      reject,
+      claimed: false,
+      timer: setTimeout(() => {
+        if (pending.delete(opts.jobId))
+          reject(new PipelineError('network', 'The page did not start the recording'));
+      }, WAIT_FOR_PAGE_MS),
+    };
+    pending.set(opts.jobId, entry);
+    opts.signal.addEventListener(
+      'abort',
+      () => {
+        if (pending.delete(opts.jobId)) {
+          clearTimeout(entry.timer);
+          reject(new CancelledError());
+        }
+      },
+      { once: true },
+    );
+  });
+}
+
 const b64ToBytes = (b64: string): Uint8Array => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 
 /** Port handler: wire this to chrome.runtime.onConnect in the offscreen document. */
@@ -169,6 +229,19 @@ export function handleIngestPort(port: chrome.runtime.Port): void {
   let captureSeq = 0;
   let captureBytes = 0;
 
+  let recordMime = 'video/webm';
+  let recordBytes = 0;
+
+  /** The page is gone (or done): hand over the recording as far as it got. */
+  const finishRecording = async (partial: boolean) => {
+    if (finished || !writer) return;
+    finished = true;
+    pending.delete(jobId);
+    reply({ t: 'done' });
+    port.disconnect();
+    entry.resolve({ file: await writer.finish(), bytes: recordBytes, mime: recordMime, partial } as never);
+  };
+
   const fail = async (e: unknown, message: string) => {
     if (finished) return;
     finished = true;
@@ -183,7 +256,17 @@ export function handleIngestPort(port: chrome.runtime.Port): void {
   entry.signal.addEventListener('abort', () => void fail(new CancelledError(), 'Cancelled'), { once: true });
 
   port.onDisconnect.addListener(() => {
-    if (!finished) void fail(new PipelineError('network', 'The page closed the connection'), 'Closed');
+    if (finished) return;
+    // A recording whose tab was closed or navigated away is kept as far as it got: that is what the user would want.
+    if (entry.mode === 'record') {
+      queue = queue.then(async () => {
+        if (finished) return;
+        if (writer && recordBytes > 0) await finishRecording(true).catch((e: unknown) => fail(e, 'Failed'));
+        else await fail(new PipelineError('network', 'The page closed the connection'), 'Closed');
+      });
+      return;
+    }
+    void fail(new PipelineError('network', 'The page closed the connection'), 'Closed');
   });
 
   port.onMessage.addListener((m: IngestUp) => {
@@ -235,16 +318,46 @@ export function handleIngestPort(port: chrome.runtime.Port): void {
             return;
           }
           case 'cbegin': {
-            if (entry.mode !== 'capture' || captureStarted)
+            if (entry.mode === 'file' || captureStarted)
               return void (await fail(
                 new PipelineError('invalid', 'Unexpected capture start'),
                 'Unexpected',
               ));
+            if (entry.mode === 'record') {
+              if (typeof m.mime !== 'string' || !RECORDING_MIME.test(m.mime))
+                return void (await fail(new PipelineError('invalid', 'Unknown recording type'), 'Bad type'));
+              recordMime = m.mime.toLowerCase();
+            }
             captureStarted = true;
             await storageReady;
+            if (entry.mode === 'record') {
+              writer = await createStageFile(entry.jobId, entry.fileName);
+              entry.onStart?.();
+            }
             return;
           }
           case 'cchunk': {
+            if (entry.mode === 'record') {
+              if (!captureStarted || !writer || m.seq !== captureSeq || typeof m.b64 !== 'string')
+                return void (await fail(new PipelineError('invalid', 'Out-of-order data'), 'Out of order'));
+              if (captureSeq >= MAX_CAPTURE_CHUNKS)
+                return void (await fail(
+                  new PipelineError('too-large', 'Too many pieces'),
+                  'Too many pieces',
+                ));
+              const bytes = b64ToBytes(m.b64);
+              recordBytes += bytes.byteLength;
+              if (recordBytes > entry.maxBytes)
+                return void (await fail(
+                  new PipelineError('too-large', 'The recording exceeds the configured size limit'),
+                  'Too large',
+                ));
+              await writer.write(bytes);
+              captureSeq++;
+              entry.onProgress(recordBytes, 0);
+              reply({ t: 'ack', seq: m.seq });
+              return;
+            }
             if (entry.mode !== 'capture' || !captureStarted || m.seq !== captureSeq)
               return void (await fail(new PipelineError('invalid', 'Out-of-order data'), 'Out of order'));
             if (typeof m.track !== 'string' || !/^\d{1,6}$/.test(m.track) || typeof m.b64 !== 'string')
@@ -282,6 +395,11 @@ export function handleIngestPort(port: chrome.runtime.Port): void {
             return;
           }
           case 'cend': {
+            if (entry.mode === 'record') {
+              if (!captureStarted || !writer || m.chunks !== captureSeq || recordBytes === 0)
+                return void (await fail(new PipelineError('invalid', 'Incomplete recording'), 'Incomplete'));
+              return void (await finishRecording(false));
+            }
             if (entry.mode !== 'capture' || !captureStarted || m.chunks !== captureSeq)
               return void (await fail(new PipelineError('invalid', 'Incomplete capture'), 'Incomplete'));
             const files = new Map<string, File>();
@@ -295,7 +413,7 @@ export function handleIngestPort(port: chrome.runtime.Port): void {
           }
           case 'error':
             // A capture the user cancelled from the page's own banner is a cancellation, not a failure.
-            if (entry.mode === 'capture' && m.message === 'cancelled')
+            if (entry.mode !== 'file' && m.message === 'cancelled')
               return void (await fail(new CancelledError(), 'Cancelled'));
             return void (await fail(
               new PipelineError('network', 'The page could not send the data'),

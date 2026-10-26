@@ -6,7 +6,7 @@ import type { OffscreenEvent, OffscreenPlan } from '@/types/messages';
 import { CancelledError, PipelineError, asPipelineError } from './errors';
 import { runFfmpeg } from './ffmpeg';
 import { stageDashRepresentation } from './dash';
-import { expectCapture, expectIngest } from './ingest';
+import { expectCapture, expectIngest, expectRecording } from './ingest';
 import { stageDirectFile, stageHlsPlaylist, type StageOptions } from './hls';
 import { removeJobDir } from './opfs';
 import { storageReady } from './startup';
@@ -66,6 +66,13 @@ export async function releaseJob(jobId: string): Promise<void> {
   await removeJobDir(jobId);
 }
 
+/** The file extension of a recorder's output type. */
+export function recordingExtension(mime: string): string {
+  const mp4 = /mp4/i.test(mime);
+  if (mp4) return mime.startsWith('audio/') ? 'm4a' : 'mp4';
+  return 'webm';
+}
+
 function ext(fragmented: boolean): string {
   return fragmented ? 'mp4' : 'ts';
 }
@@ -87,7 +94,25 @@ async function execute(
   const send = makeProgressSender(jobId);
   const maxBytes = plan.requiresFfmpeg ? plan.maxMemoryMb * MB : undefined;
   const credentialedOrigins = req.credentialedOrigins ?? [];
-  stage(jobId, 'downloading');
+  // A recording is not a download: its stage (RECORDING) starts when the page has begun to record.
+  if (plan.pipeline !== 'record') stage(jobId, 'downloading');
+
+  // A recording of a MediaStream: the page connects and streams the recorder's output as it is made.
+  const recordStarted = Date.now();
+  const recorded =
+    plan.pipeline === 'record' && req.held
+      ? expectRecording({
+          jobId,
+          tabId: req.tabId,
+          frameId: req.held.frameId ?? 0,
+          // the page stops itself at the user's limit; this is the hard stop in case it does not
+          maxBytes: Math.ceil((plan.recordMaxMb ?? 4096) * MB * 1.05) + 16 * MB,
+          signal,
+          onStart: () => stage(jobId, 'recording'),
+          onProgress: (bytes) => send({ bytesDone: bytes, elapsedSec: (Date.now() - recordStarted) / 1000 }),
+        })
+      : undefined;
+  recorded?.catch(() => undefined);
 
   // A capture registers like the held bytes below: the page connects the moment the background starts it.
   const captured =
@@ -106,7 +131,7 @@ async function execute(
 
   // The page may connect with its bytes at any moment, so the expectation is registered before anything is awaited.
   const heldBytes =
-    req.held && !req.capture
+    req.held && !req.capture && !req.record
       ? expectIngest({
           jobId,
           tabId: req.tabId,
@@ -121,6 +146,56 @@ async function execute(
       : undefined;
   heldBytes?.catch(() => undefined); // reported where it is awaited
   await storageReady;
+
+  // Recording of a MediaStream: tidy the recorder's output with a stream copy (duration, index), within the memory limit.
+  if (recorded) {
+    const rec = await recorded;
+    stage(jobId, 'merging');
+    const extension = recordingExtension(rec.mime);
+    let blob: Blob = new Blob([rec.file], { type: rec.mime.split(';')[0] ?? 'application/octet-stream' });
+    if (rec.bytes <= (plan.maxMemoryMb * MB) / 2) {
+      try {
+        const output = `out.${extension}`;
+        const hasVideo = rec.mime.startsWith('video/');
+        const data = await runFfmpeg({
+          inputs: [rec.file],
+          output,
+          signal,
+          onProgress: (fraction) => send(fraction === undefined ? {} : { fraction }),
+          args: (paths) =>
+            buildFfmpegArgs({
+              mode: hasVideo ? 'video-audio' : 'audio-only',
+              extension,
+              video: hasVideo ? 'copy' : 'none',
+              audio: 'copy',
+              videoPath: paths[0] as string,
+              audioFormat: 'm4a',
+              audioBitrate: 192,
+              output,
+            }),
+        });
+        if (data.byteLength > 0)
+          blob = new Blob([data as Uint8Array<ArrayBuffer>], {
+            type: MIME_BY_EXTENSION[extension] ?? 'application/octet-stream',
+          });
+      } catch (e) {
+        if (asPipelineError(e) instanceof CancelledError) throw e;
+        // The recording itself is what matters: keep it as the recorder wrote it.
+        log.warn('could not tidy the recording, keeping it as recorded:', asPipelineError(e).message);
+      }
+    }
+    if (signal.aborted) throw new CancelledError();
+    entry.blobUrl = URL.createObjectURL(blob);
+    emit({
+      channel: 'vdown-offscreen-event',
+      type: 'ready',
+      jobId,
+      blobUrl: entry.blobUrl,
+      bytes: blob.size,
+      extension,
+    });
+    return;
+  }
 
   // Capture of a MediaSource player: what the page recorded is assembled into one file per quality it played.
   if (captured) {

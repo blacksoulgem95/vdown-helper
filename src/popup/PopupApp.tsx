@@ -16,6 +16,7 @@ import {
   quickDownload,
   requestAccess,
   startCapture,
+  startRecord,
   startZip,
 } from '@/lib/uiActions';
 import type { MediaResource } from '@/types/media';
@@ -97,6 +98,20 @@ export function PopupApp() {
       setFb(r.id, undefined);
       try {
         const out = await startCapture(r, settings, speed);
+        setFb(r.id, out.ok ? { tone: 'acid', text: t('queuedOk') } : { tone: 'danger', text: out.error });
+      } finally {
+        setBusy(undefined);
+      }
+    },
+    [settings],
+  );
+
+  const onRecord = useCallback(
+    async (r: MediaResource) => {
+      setBusy(r.id);
+      setFb(r.id, undefined);
+      try {
+        const out = await startRecord(r, settings);
         setFb(r.id, out.ok ? { tone: 'acid', text: t('queuedOk') } : { tone: 'danger', text: out.error });
       } finally {
         setBusy(undefined);
@@ -276,6 +291,7 @@ export function PopupApp() {
             onConfigure={(x) => void onConfigure(x)}
             onGrantAccess={(x) => void onGrantAccess(x)}
             onCapture={(x, speed) => void onCapture(x, speed)}
+            onRecord={(x) => void onRecord(x)}
             onBulk={onBulk}
             onZip={onZip}
             onMinImage={(px) => void update({ imageMinPx: px })}

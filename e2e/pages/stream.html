@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>MediaStream fixture</title>
+  </head>
+  <body>
+    <h1>A video that plays a MediaStream (canvas + tone)</h1>
+    <video id="v" muted playsinline width="320" title="Live canvas"></video>
+    <canvas id="c" width="320" height="180" hidden></canvas>
+    <script>
+      // A genuine MediaStream: an animated canvas (captureStream) and, optionally, a WebAudio tone. ?audio=0 leaves the
+      // tone out, ?video=0 leaves the picture out (audio only).
+      const q = new URLSearchParams(location.search);
+      const canvas = document.getElementById('c');
+      const g = canvas.getContext('2d');
+      let n = 0;
+      const stream = new MediaStream();
+      if (q.get('video') !== '0') {
+        const cs = canvas.captureStream(25);
+        cs.getVideoTracks().forEach((t) => stream.addTrack(t));
+        (function draw() {
+          n++;
+          g.fillStyle = `hsl(${(n * 3) % 360} 80% 45%)`;
+          g.fillRect(0, 0, 320, 180);
+          g.fillStyle = '#fff';
+          g.font = '40px sans-serif';
+          g.fillText(String(n), 20, 100);
+          requestAnimationFrame(draw);
+        })();
+      }
+      if (q.get('audio') !== '0') {
+        const ac = new AudioContext();
+        const osc = ac.createOscillator();
+        osc.frequency.value = 440;
+        const dest = ac.createMediaStreamDestination();
+        osc.connect(dest);
+        osc.start();
+        dest.stream.getAudioTracks().forEach((t) => stream.addTrack(t));
+        window.audioContext = ac;
+        // Chrome starts an AudioContext only after a user gesture; a recording of a silent track would never produce data
+        addEventListener('pointerdown', () => ac.resume());
+      }
+      const video = document.getElementById('v');
+      video.srcObject = stream;
+      window.stream = stream;
+      video.play().then(() => (window.ready = true));
+    </script>
+  </body>
+</html>

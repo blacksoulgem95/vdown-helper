@@ -52,7 +52,7 @@ export interface RequestMap {
   };
   'start-download': { req: { request: DownloadRequest }; res: Result<{ jobId: string }> };
   'job-action': {
-    req: { jobId: string; action: 'cancel' | 'retry' | 'pause' | 'resume' | 'remove' };
+    req: { jobId: string; action: 'cancel' | 'retry' | 'pause' | 'resume' | 'remove' | 'stop' };
     res: Result<object>;
   };
   'clear-history': { req: Record<string, never>; res: Result<object> };
@@ -89,13 +89,16 @@ export interface OffscreenPlan {
     | 'file-staged'
     | 'subtitle'
     | 'zip'
-    | 'capture';
+    | 'capture'
+    | 'record';
   extension: string;
   requiresFfmpeg: boolean;
   video: 'copy' | 'transcode' | 'none';
   audio: 'copy' | 'transcode' | 'none';
   maxMemoryMb: number;
   segmentConcurrency: number;
+  /** Largest recording (MB) a MediaStream or live recording may reach. */
+  recordMaxMb?: number;
 }
 
 /** Offscreen document -> background events. */

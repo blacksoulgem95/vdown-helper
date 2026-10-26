@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS } from '@/lib/settings';
-import { audioOptions, buildRequest, defaultChoices, planFromRequest, sanitizeRequest } from '@/lib/request';
+import {
+  audioOptions,
+  buildRecordRequest,
+  buildRequest,
+  defaultChoices,
+  planFromRequest,
+  sanitizeRequest,
+} from '@/lib/request';
 import type { HlsRendition } from '@/types/hls';
 import type { VariantInspection } from '@/types/messages';
 import { makeResource } from './helpers';
@@ -396,5 +403,57 @@ describe('sanitizeRequest: page-held sources', () => {
     });
     expect(out?.held).toBeUndefined();
     expect(out?.replay).toBeUndefined();
+  });
+});
+
+describe('recording a MediaStream', () => {
+  const stream = makeResource('data:application/x-vdh-stream;vdh=0a1b2c3d', {
+    kind: 'blob',
+    format: 'unknown',
+    title: 'Camera',
+    held: { kind: 'stream', id: '0a1b2c3d', bytes: 0 },
+    downloadability: { status: 'downloadable', reason: 'ok', detail: 'stream-recordable' },
+    width: 640,
+    height: 360,
+  });
+
+  it('builds a record request with the format the user prefers, named after the page', () => {
+    const req = buildRecordRequest(stream, { ...DEFAULT_SETTINGS, recordContainer: 'mp4' });
+    expect(req).toMatchObject({
+      record: { prefer: 'mp4' },
+      held: { kind: 'stream' },
+      hasVideo: true,
+      qualityLabel: 'RECORD',
+    });
+    expect(req.filename).toMatch(/^Camera \[360p\]\.mp4$/);
+    expect(req.capture).toBeUndefined();
+  });
+
+  it('plans the record pipeline: a stream copy, never a re-encode', () => {
+    const plan = planFromRequest(buildRecordRequest(stream, DEFAULT_SETTINGS), {
+      maxMemoryMb: 2048,
+      maxEncodeDurationSec: 0,
+    });
+    expect(plan).toMatchObject({
+      valid: true,
+      pipeline: 'record',
+      video: 'copy',
+      audio: 'copy',
+      extension: 'webm',
+    });
+    const audioOnly = buildRecordRequest({ ...stream, mediaType: 'audio' }, DEFAULT_SETTINGS);
+    expect(audioOnly.hasVideo).toBe(false);
+    expect(planFromRequest(audioOnly, { maxMemoryMb: 2048, maxEncodeDurationSec: 0 })).toMatchObject({
+      video: 'none',
+      audio: 'copy',
+    });
+  });
+
+  it('keeps only a well-formed record choice from the UI, and never what the page holds', () => {
+    const base = buildRecordRequest(stream, DEFAULT_SETTINGS);
+    expect(sanitizeRequest(base)?.record).toEqual({ prefer: 'webm' });
+    expect(sanitizeRequest(base)?.held).toBeUndefined();
+    const forged = { ...base, record: { prefer: 'avi' } } as unknown as typeof base;
+    expect(sanitizeRequest(forged)?.record).toBeUndefined();
   });
 });

@@ -2586,8 +2586,13 @@ await step(
       .getByRole('button', { name: 'RECORD (REAL TIME)' })
       .click();
     await until(async () => (await videoState(pg)).banner, 'the capture banner', 10000, 50);
-    const live = await videoState(pg);
-    assert(live.muted === true, 'the video is muted while capturing');
+    // the banner appears first; the page is muted once the hook has been armed
+    await until(
+      async () => (await videoState(pg)).muted === true,
+      'the video to be muted while capturing',
+      10000,
+      50,
+    );
     // cancel from the queue
     const job = await until(
       async () => (await jobs()).slice(before).find((j) => j.request.capture),
@@ -2672,6 +2677,283 @@ await step(
     assert(after.muted === false && after.rate === 1, `restored ${JSON.stringify(after)}`);
     await pop.close();
     await pg.close();
+  },
+);
+
+// ---- MediaStream recording (VDH-039): a video that plays a live stream, recorded until Stop
+async function openStream(query = '') {
+  const pg = await ctx.newPage();
+  await pg.goto(`${A}/pages/stream.html${query}`);
+  await pg.waitForFunction(() => window.ready === true, null, { timeout: 15000 });
+  await pg.mouse.click(5, 5); // the gesture that lets the page's audio start
+  await pg.waitForFunction(() => !window.audioContext || window.audioContext.state === 'running', null, {
+    timeout: 5000,
+  });
+  const id = await ext(
+    async (u) => (await chrome.tabs.query({})).filter((t) => t.url?.startsWith(u)).at(-1)?.id,
+    `${A}/pages/stream.html`,
+  );
+  return { pg, id };
+}
+const streamResource = async (id) => {
+  const pop = await openPopup(id);
+  await pop.getByRole('status').filter({ hasText: 'READY' }).waitFor({ timeout: 45000 });
+  const st = (await ext((i) => chrome.storage.session.get(`tab:${i}`), id))[`tab:${id}`];
+  return { pop, st, r: st.resources.find((x) => x.held?.kind === 'stream') };
+};
+const bannerState = (pg) => pg.evaluate(() => !!document.querySelector('[data-vdown-banner]'));
+// The banner lives in a closed shadow root: the DevTools protocol can see into it, so a button is found by its text.
+async function clickBannerButton(pg, text) {
+  const cdp = await ctx.newCDPSession(pg);
+  try {
+    const { root } = await cdp.send('DOM.getDocument', { depth: -1, pierce: true });
+    const find = (node) => {
+      if (node.nodeName === 'BUTTON' && (node.children ?? []).some((c) => c.nodeValue === text)) return node;
+      for (const c of [...(node.children ?? []), ...(node.shadowRoots ?? [])]) {
+        const f = find(c);
+        if (f) return f;
+      }
+      return undefined;
+    };
+    const button = find(root);
+    assert(button, `no "${text}" button in the banner`);
+    const { model } = await cdp.send('DOM.getBoxModel', { backendNodeId: button.backendNodeId });
+    const q = model.content;
+    await pg.mouse.click((q[0] + q[2]) / 2, (q[1] + q[5]) / 2);
+  } finally {
+    await cdp.detach();
+  }
+}
+const newRecordJob = async (known) => (await jobs()).find((j) => j.request.record && !known.has(j.id));
+const recordAndWait = async (pg, pop, r, seconds) => {
+  const known = new Set((await jobs()).map((j) => j.id));
+  await pop
+    .locator(`[data-resource-id="${r.id}"]`)
+    .getByRole('button', { name: 'RECORD', exact: true })
+    .click();
+  await until(
+    async () => (await bannerState(pg)) && (await newRecordJob(known))?.stage === 'recording',
+    'recording',
+    15000,
+    100,
+  );
+  await new Promise((res) => setTimeout(res, seconds * 1000));
+  return { job: await newRecordJob(known), known };
+};
+
+await step(
+  'stream: a MediaStream is listed as recordable without any address; RECORD, then Stop in the queue, saves a decodable WebM',
+  async () => {
+    const { pg, id } = await openStream();
+    const { pop, st, r } = await streamResource(id);
+    assert(
+      r,
+      `no stream resource; saw ${JSON.stringify(st.resources.map((x) => [x.kind, x.url.slice(0, 40)]))}`,
+    );
+    assert(
+      r.kind === 'blob' && r.mediaType === 'video' && r.width === 320,
+      JSON.stringify([r.kind, r.mediaType, r.width]),
+    );
+    assert(
+      r.downloadability.status === 'downloadable' && r.downloadability.detail === 'stream-recordable',
+      JSON.stringify(r.downloadability),
+    );
+    assert(!JSON.stringify(st).includes('blob:http'), 'no blob: URL may be kept in the extension state');
+    await shot(pop, 'popup-stream');
+    const { job } = await recordAndWait(pg, pop, r, 3);
+    assert(
+      job.stage === 'recording' && job.request.record.prefer === 'webm',
+      JSON.stringify([job.stage, job.request.record]),
+    );
+    // the queue shows the elapsed time and offers "stop and save"
+    await pop.getByRole('button', { name: 'Stop and save' }).waitFor({ timeout: 10000 });
+    await shot(pop, 'popup-recording');
+    await pop.getByRole('button', { name: 'Stop and save' }).click();
+    const done = await jobFinished((j) => j.id === job.id, 90000);
+    assert(done.stage === 'completed', `stage ${done.stage}: ${JSON.stringify(done.error)}`);
+    assert(/\.webm$/.test(done.request.filename), `name ${done.request.filename}`);
+    const stages = await stagesOf(job.id);
+    assert(
+      stages.includes('recording') && stages.includes('merging') && !stages.includes('encoding'),
+      `stages ${stages}`,
+    );
+    const file = fileOf(done);
+    const p = probe(file);
+    assert(p.types.includes('video') && p.types.includes('audio'), `streams ${p.types}`);
+    assert(/matroska|webm/.test(p.format), p.format);
+    assert(p.duration > 2.5 && p.duration < 8, `duration ${p.duration}`);
+    assert(p.width === 320, `width ${p.width}`);
+    assert(decodeErrors(file) === '', 'decode errors');
+    // the page is left as it was: the banner is gone and the stream still plays
+    await until(async () => !(await bannerState(pg)), 'banner removal', 10000);
+    assert(
+      await pg.evaluate(() => !document.getElementById('v').paused && window.stream.active),
+      'stream stopped playing',
+    );
+    await pop.close();
+    await pg.close();
+  },
+);
+
+await step(
+  'stream: the banner on the page has its own Stop button, which saves; Cancel discards',
+  async () => {
+    const { pg, id } = await openStream('?audio=0');
+    const { pop, r } = await streamResource(id);
+    const a = await recordAndWait(pg, pop, r, 2);
+    await clickBannerButton(pg, 'Stop and save');
+    const done = await jobFinished((j) => j.id === a.job.id, 90000);
+    assert(done.stage === 'completed', `stage ${done.stage}: ${JSON.stringify(done.error)}`);
+    const p = probe(fileOf(done));
+    assert(p.types.join() === 'video', `a stream without sound records without sound: ${p.types}`);
+    assert(decodeErrors(fileOf(done)) === '', 'decode errors');
+
+    const b = await recordAndWait(pg, pop, r, 1.5);
+    await clickBannerButton(pg, 'Cancel');
+    const cancelled = await jobFinished((j) => j.id === b.job.id, 30000);
+    assert(cancelled.stage === 'cancelled', `stage ${cancelled.stage}`);
+    assert(!cancelled.filePath, 'a cancelled recording must not be saved');
+    await until(async () => !(await bannerState(pg)), 'banner removal after cancel', 10000);
+    await pop.close();
+    await pg.close();
+  },
+);
+
+await step('stream: cancelling from the queue discards the recording', async () => {
+  const { pg, id } = await openStream();
+  const { pop, r } = await streamResource(id);
+  const a = await recordAndWait(pg, pop, r, 1.5);
+  await ext(
+    (i) =>
+      chrome.runtime.sendMessage({
+        channel: 'vdown',
+        type: 'job-action',
+        payload: { jobId: i, action: 'cancel' },
+      }),
+    a.job.id,
+  );
+  const done = await jobFinished((j) => j.id === a.job.id, 30000);
+  assert(done.stage === 'cancelled' && !done.filePath, `stage ${done.stage}`);
+  await until(async () => !(await bannerState(pg)), 'banner removal after cancel', 10000);
+  await pop.close();
+  await pg.close();
+});
+
+await step('stream: closing the tab while recording keeps what was recorded', async () => {
+  const { pg, id } = await openStream();
+  const { pop, r } = await streamResource(id);
+  const a = await recordAndWait(pg, pop, r, 3);
+  await pg.close();
+  const done = await jobFinished((j) => j.id === a.job.id, 90000);
+  assert(done.stage === 'completed', `stage ${done.stage}: ${JSON.stringify(done.error)}`);
+  const file = fileOf(done);
+  assert(probe(file).duration > 1.5, `duration ${probe(file).duration}`);
+  assert(decodeErrors(file) === '', 'decode errors');
+  await pop.close();
+});
+
+await step('stream: an audio-only stream is listed under Audio and recorded as audio', async () => {
+  const { pg, id } = await openStream('?video=0');
+  const { pop, st, r } = await streamResource(id);
+  assert(r.mediaType === 'audio', `mediaType ${r.mediaType}`);
+  assert(st.resources.filter((x) => x.held?.kind === 'stream').length === 1, 'one stream');
+  const a = await recordAndWait(pg, pop, r, 2);
+  await ext(
+    (i) =>
+      chrome.runtime.sendMessage({
+        channel: 'vdown',
+        type: 'job-action',
+        payload: { jobId: i, action: 'stop' },
+      }),
+    a.job.id,
+  );
+  const done = await jobFinished((j) => j.id === a.job.id, 90000);
+  assert(done.stage === 'completed', `stage ${done.stage}: ${JSON.stringify(done.error)}`);
+  const p = probe(fileOf(done));
+  assert(p.types.join() === 'audio' && p.codecs.includes('opus'), `${p.types} ${p.codecs}`);
+  assert(decodeErrors(fileOf(done)) === '', 'decode errors');
+  await pop.close();
+  await pg.close();
+});
+
+await step(
+  'stream: an ended stream is no longer offered, and a forged record request is refused',
+  async () => {
+    const { pg, id } = await openStream();
+    const first = await streamResource(id);
+    const res = await ext(
+      (req) =>
+        chrome.runtime.sendMessage({ channel: 'vdown', type: 'start-download', payload: { request: req } }),
+      {
+        resourceId: first.r.id,
+        sourceUrl: 'https://example.com/file.mp4', // a record request must name the stream the scan found
+        tabId: id,
+        pageUrl: first.r.pageUrl,
+        host: first.r.host,
+        mode: 'original',
+        container: 'original',
+        audioFormat: 'mp3',
+        audioBitrate: 192,
+        filename: 'x.webm',
+        subfolder: '',
+        qualityLabel: 'x',
+        sourceFormat: 'unknown',
+        isHls: false,
+        hasMuxedAudio: true,
+        hasVideo: true,
+        record: { prefer: 'webm' },
+      },
+    );
+    assert(
+      res.ok === false,
+      `accepted a record request for something that is not a stream: ${JSON.stringify(res)}`,
+    );
+    await first.pop.close();
+    await pg.evaluate(() => window.stream.getTracks().forEach((t) => t.stop()));
+    const second = await streamResource(id);
+    assert(!second.r, 'a stream whose tracks have ended cannot be recorded any more');
+    await second.pop.close();
+    await pg.close();
+  },
+);
+
+await step(
+  'stream: the recording limit is enforced by the page: it stops by itself at the limit and the file is saved',
+  async () => {
+    const prev = await ext(async () => (await chrome.storage.local.get('settings')).settings);
+    await ext(
+      (s) => chrome.storage.local.set({ settings: { ...s, schemaVersion: 1, recordMaxMinutes: 1 } }),
+      prev ?? {},
+    );
+    try {
+      const { pg, id } = await openStream();
+      const { pop, r } = await streamResource(id);
+      const started = Date.now();
+      const known = new Set((await jobs()).map((j) => j.id));
+      await pop
+        .locator(`[data-resource-id="${r.id}"]`)
+        .getByRole('button', { name: 'RECORD', exact: true })
+        .click();
+      const done = await until(
+        async () => {
+          const j = await newRecordJob(known);
+          return j && ['completed', 'failed', 'cancelled'].includes(j.stage) ? j : undefined;
+        },
+        'the recording to end by itself',
+        120000,
+        500,
+      );
+      assert(done.stage === 'completed', `stage ${done.stage}: ${JSON.stringify(done.error)}`);
+      const took = (Date.now() - started) / 1000;
+      assert(took > 55 && took < 100, `stopped after ${took} s, expected about 60`);
+      const p = probe(fileOf(done));
+      assert(p.duration > 55 && p.duration < 66, `duration ${p.duration}`);
+      assert(decodeErrors(fileOf(done)) === '', 'decode errors');
+      await pop.close();
+      await pg.close();
+    } finally {
+      await ext((s) => chrome.storage.local.set({ settings: s }), prev ?? {});
+    }
   },
 );
 

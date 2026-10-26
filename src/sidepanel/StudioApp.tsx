@@ -533,6 +533,8 @@ function pipelineText(plan: Plan): string {
       return t('pipeZip');
     case 'capture':
       return t('pipeCapture');
+    case 'record':
+      return t('pipeRecord');
   }
 }
 

@@ -14,7 +14,7 @@ export type IngestUp =
    * A capture (MSE recording): chunks of several SourceBuffers, in the order the player appended them, with no known
    * total. `track` names the SourceBuffer; the bytes are one append, exactly as the player gave them to the browser.
    */
-  | { t: 'cbegin' }
+  | { t: 'cbegin'; mime?: string }
   | { t: 'cchunk'; seq: number; track: string; b64: string; frac?: number }
   | { t: 'cend'; chunks: number }
   | { t: 'error'; message: string };
@@ -36,5 +36,5 @@ export const MAX_CAPTURE_TRACKS = 8;
 export const MAX_CAPTURE_CHUNKS = 100_000;
 
 /** The most a held source of this kind may be. */
-export const heldLimit = (kind: 'data' | 'blob' | 'mse'): number =>
+export const heldLimit = (kind: 'data' | 'blob' | 'mse' | 'stream'): number =>
   kind === 'data' ? MAX_HELD_BYTES : HELD_BLOB_LIMIT;

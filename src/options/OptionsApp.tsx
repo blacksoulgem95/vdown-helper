@@ -260,6 +260,39 @@ export function OptionsApp() {
           <Notice tone="magenta">{t('processingWarning')}</Notice>
         </Section>
 
+        <Section title={t('secRecording')} hint={t('secRecordingHint')}>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <SelectField
+              label={t('optRecordContainer')}
+              hint={t('optRecordContainerHint')}
+              value={settings.recordContainer}
+              onChange={(e) => void update({ recordContainer: e.target.value === 'mp4' ? 'mp4' : 'webm' })}
+              options={[
+                { value: 'webm', label: 'WebM' },
+                { value: 'mp4', label: 'MP4' },
+              ]}
+            />
+            <TextField
+              label={t('optRecordMaxMinutes')}
+              type="number"
+              min={LIMITS.recordMaxMinutes.min}
+              max={LIMITS.recordMaxMinutes.max}
+              value={settings.recordMaxMinutes}
+              onChange={(e) =>
+                void update({ recordMaxMinutes: num(e.target.value, settings.recordMaxMinutes) })
+              }
+            />
+            <TextField
+              label={t('optRecordMaxMb')}
+              type="number"
+              min={LIMITS.recordMaxMb.min}
+              max={LIMITS.recordMaxMb.max}
+              value={settings.recordMaxMb}
+              onChange={(e) => void update({ recordMaxMb: num(e.target.value, settings.recordMaxMb) })}
+            />
+          </div>
+        </Section>
+
         <Section title={t('secNotifications')}>
           <Toggle
             label={t('optNotifyDone')}

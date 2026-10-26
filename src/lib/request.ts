@@ -363,6 +363,7 @@ export function planFromRequest(
   if (req.file) return planPlainFile(req);
   if (req.zip) return planZipJob(req, limits);
   if (req.capture) return planCapture();
+  if (req.record) return planRecord(req);
   const segmented = req.isHls || req.isDash === true;
   const input: PlanInput = {
     isHls: segmented, // the planner's "isHls" means: a segmented stream (HLS or DASH)
@@ -397,6 +398,57 @@ function planCapture(): Plan {
     extension: 'mp4',
     usesBitrate: false,
   };
+}
+
+/** A MediaStream recorded in the page until Stop: the recorder's own WebM/MP4, tidied with a stream copy. */
+function planRecord(req: Pick<DownloadRequest, 'record' | 'hasVideo'>): Plan {
+  return {
+    valid: true,
+    issues: [],
+    pipeline: 'record',
+    requiresFfmpeg: true,
+    video: req.hasVideo ? 'copy' : 'none',
+    audio: 'copy',
+    // the recorder decides the container (WebM, or MP4 where this Chrome records it)
+    extension: req.record?.prefer ?? 'webm',
+    usesBitrate: false,
+  };
+}
+
+/** A recording request for a MediaStream the scan found (`held.kind === 'stream'`). */
+export function buildRecordRequest(resource: MediaResource, settings: Settings): DownloadRequest {
+  const hasVideo = resource.mediaType !== 'audio';
+  const prefer = settings.recordContainer;
+  const base = renderNameTemplate(settings.namingTemplate, {
+    title: resource.title,
+    host: resource.host,
+    resolution: hasVideo ? resolutionLabel(resource.height) : '',
+    date: new Date().toISOString().slice(0, 10),
+    format: prefer,
+    id: resource.id,
+  });
+  const req: DownloadRequest = {
+    resourceId: resource.id,
+    sourceUrl: resource.url,
+    tabId: resource.tabId,
+    pageUrl: resource.pageUrl,
+    host: resource.host,
+    mode: 'original',
+    container: 'original',
+    audioFormat: settings.defaultAudioFormat,
+    audioBitrate: settings.defaultAudioBitrate,
+    filename: withExtension(base, prefer),
+    subfolder: sanitizeSubfolder(settings.subfolder),
+    saveAs: settings.askWhereToSave,
+    qualityLabel: 'RECORD',
+    sourceFormat: 'unknown',
+    isHls: false,
+    hasMuxedAudio: true,
+    hasVideo,
+    record: { prefer },
+  };
+  if (resource.held) req.held = resource.held;
+  return req;
 }
 
 /** A capture request for a MediaSource player the scan found (`held.kind === 'mse'`). */
@@ -532,6 +584,10 @@ export function sanitizeRequest(req: DownloadRequest): DownloadRequest | undefin
     capture:
       req.capture && (req.capture.speed === 'fast' || req.capture.speed === 'realtime')
         ? { speed: req.capture.speed }
+        : undefined,
+    record:
+      req.record && (req.record.prefer === 'webm' || req.record.prefer === 'mp4')
+        ? { prefer: req.record.prefer }
         : undefined,
     // The names and URLs inside a ZIP are the background's to decide.
     zip: sanitizeZip(req.zip),
