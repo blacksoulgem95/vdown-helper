@@ -58,11 +58,24 @@ bundled with the extension and never downloaded at runtime.
 (+ a `.sha256`). `manifest.json` is at the root of the zip, source maps are excluded and the archive is reproducible:
 the same commit gives the same SHA-256.
 
-The **Release** workflow (`.github/workflows/release.yml`) runs on every push to `main`: typecheck, lint, format,
-unit tests, build, `check:dist`, package, then it uploads the zip as a build artifact. If `package.json`'s version has
-not been released yet it also creates the tag `v<version>` and a GitHub Release with the zip and checksum attached.
-Pushes that don't change the version never touch an existing release. **To ship a new version, bump `version` in
-`package.json` (the manifest follows it) and merge to `main`.**
+The **Release** workflow (`.github/workflows/release.yml`) runs on every push to `main` that changes more than docs
+(`*.md`, `BACKLOG/`, `docs/` and `.claude/` are ignored): typecheck, lint, format, unit tests, build, `check:dist`,
+package, then it uploads the zip as a build artifact, tags the commit `v<version>` and publishes a GitHub Release
+with the zip and checksum attached. A re-run on a commit that already has a release tag publishes nothing new.
+
+**The version is bumped automatically** (`scripts/next-version.mjs`):
+
+| Situation                                                                                  | Version                                                                  |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| No release yet                                                                             | the version in `package.json` (first release: `0.1.0`)                   |
+| Normal push to `main`                                                                      | latest `v*` tag + **patch** (`0.1.0` → `0.1.1`)                          |
+| `#minor` or `#major` (or `[minor]` / `[major]`) in a commit message since the last release | minor (`0.1.5` → `0.2.0`) / major (`0.2.0` → `1.0.0`)                    |
+| _Run workflow_ by hand                                                                     | choose `auto`, `patch`, `minor` or `major`                               |
+| `package.json` is ahead of the result                                                      | `package.json` wins, so you can still jump to e.g. `1.0.0` by editing it |
+
+Nothing is committed back to `main`: the released version lives in the tag, the zip name and the manifest inside the
+zip (`VDH_VERSION` is injected at build time), so `package.json` keeps the _first/base_ version and a local
+`npm run package` produces that base version.
 
 Install a release: download `vdown-helper-<version>.zip`, unzip it, open `chrome://extensions`, enable _Developer
 mode_, **Load unpacked** and pick the unzipped folder. The same zip is what the Chrome Web Store accepts for upload

@@ -19,13 +19,15 @@ A GitHub Actions workflow that runs on `main`: verifies the project, builds the 
 - [x] The zip contains the bundled FFmpeg core and loads unpacked in Chromium without manifest/CSP errors
 - [x] Workflow verifies (typecheck, lint, format, unit tests, build, dist check) before packaging
 - [ ] A release is created only once per version (tag `v<version>`), re-runs on the same version do not fail or overwrite it
-- [ ] Every release-worthy push to `main` gets the next version automatically (patch by default, `#minor` / `#major` in a commit message or a manual run input raise it); package.json can still force a higher version
-- [ ] The version computation is unit-tested (no tags, patch/minor/major, forced, package.json ahead, re-run on a tagged commit)
+- [x] Every release-worthy push to `main` gets the next version automatically (patch by default, `#minor` / `#major` in a commit message or a manual run input raise it); package.json can still force a higher version
+- [x] The version computation is unit-tested (no tags, patch/minor/major, forced, package.json ahead, re-run on a tagged commit)
 - [ ] A new version produces a new tag + release (verified on GitHub)
 - [x] Workflow YAML valid; every `npm run` it uses exists
 
 ## Notes
 
 Verified locally: `npm run package` in a clean clone after `npm ci` (same SHA-256 as the working copy: reproducible), zip integrity and checksum, and the unzipped package loaded in Chromium (popup, options, side panel, FFmpeg core reachable, no console errors). The once-per-version tag check was exercised in a shell with and without a tag.
+
+Automatic bumping: `scripts/lib/version.ts` (19 tests, including a test that drives `scripts/next-version.mjs` through a real git history with tags, `#minor`, `#major`, re-runs and a package.json jump) and a simulated second release in a fresh clone (tag `v0.1.0` + one commit -> `0.1.1`, zip and manifest agree).
 
 **Not verified:** the workflow itself has not run on GitHub, so `gh release create`, the `contents: write` permission and the artifact hand-off between the two jobs are untested. It also only runs for pushes to `main`, and `main` does not contain the project yet. Close this task after the first real release appears.
