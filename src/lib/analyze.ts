@@ -435,6 +435,13 @@ async function analyzeSubtitleFile(r: MediaResource, e: Entry, fetcher: Fetcher)
 /** Media embedded in the page as a data: URL: nothing to probe, its size is known and the page hands it over. */
 function analyzeHeld(r: MediaResource, e: Entry, ctx: AnalyzeContext): MediaResource {
   const held = e.held as PageHeld;
+  if (held.kind === 'mse') {
+    // A player fed through MediaSource: there is nothing to fetch. The background upgrades this to "capturable"
+    // when the page hook has seen how the player is fed.
+    r.kind = 'blob';
+    r.downloadability = verdict('unsupported', 'mse-needs-hook');
+    return r;
+  }
   r.sizeBytes = held.bytes;
   if (!e.hints.title && !e.hints.fileKind) r.title = clip(ctx.pageTitle) || r.host;
   if (held.bytes < 0) delete r.sizeBytes; // not measured yet

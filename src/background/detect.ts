@@ -1,5 +1,5 @@
 import { analyzeCandidates, provisionalResources, type AnalyzeContext } from '@/lib/analyze';
-import { hookCandidates, markProtectedFrames, protectedKeySystems } from '@/lib/hookData';
+import { hookCandidates, markMseResources, markProtectedFrames, protectedKeySystems } from '@/lib/hookData';
 import { inspectDashRepresentation, inspectMediaPlaylist } from '@/lib/inspect';
 import { parseHls } from '@/lib/hls/parser';
 import { parseDash, mainPeriodIndex } from '@/lib/dash/parser';
@@ -153,7 +153,10 @@ async function runScan(tabId: number, automatic: boolean): Promise<TabState> {
       ctx,
       combinedFetcher(tabId, report.pageUrl, !automatic, frameUrls as ReadonlyMap<number, string>),
     );
-    const resources = sortResources(markProtectedFrames(analysed, protectedFrames));
+    const reportsByFrame = new Map(hookReports.map((h) => [h.frameId, h.report] as const));
+    const resources = sortResources(
+      markProtectedFrames(markMseResources(analysed, reportsByFrame), protectedFrames),
+    );
     const done: TabState = {
       ...base,
       status: 'ready',

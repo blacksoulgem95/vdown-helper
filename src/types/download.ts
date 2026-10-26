@@ -18,6 +18,7 @@ export type JobErrorCode =
   | 'ffmpeg'
   | 'decrypt'
   | 'chrome-download'
+  | 'capture'
   | 'interrupted'
   | 'invalid'
   | 'unknown';
@@ -78,6 +79,11 @@ export interface DownloadRequest {
     /** Selected files that could not be included (page-held, not downloadable, over the item limit). */
     left?: number;
   };
+  /**
+   * Record what a player appends to its MediaSource (the page must be playing it through; see content/capture.ts).
+   * `fast` raises the playback rate; `realtime` plays at the normal rate.
+   */
+  capture?: { speed: 'fast' | 'realtime' };
   /** A plain file (image, document, archive, page asset) saved as it is. */
   file?: { kind: 'image' | 'document' | 'archive' | 'asset' };
   /** Source description for the queue display. */

@@ -6,6 +6,7 @@ import {
   Film,
   KeyRound,
   Layers,
+  Radio,
   ListMusic,
   Settings2,
   ShieldCheck,
@@ -61,6 +62,8 @@ export interface MediaCardProps {
   onDownload: (r: MediaResource) => void;
   onConfigure: (r: MediaResource) => void;
   onGrantAccess: (r: MediaResource) => void;
+  /** MediaSource players are captured (the page plays the video through), not downloaded. */
+  onCapture?: (r: MediaResource, speed: 'fast' | 'realtime') => void;
 }
 
 export function MediaCard({
@@ -70,6 +73,7 @@ export function MediaCard({
   onDownload,
   onConfigure,
   onGrantAccess,
+  onCapture,
 }: MediaCardProps) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
@@ -128,48 +132,88 @@ export function MediaCard({
         </div>
       )}
 
-      <div className="mt-2.5 flex items-center gap-2">
-        <Button
-          variant="primary"
-          onClick={() => onDownload(r)}
-          disabled={!ok || busy}
-          icon={<Download size={13} aria-hidden="true" />}
-        >
-          {busy ? t('working') : t('download')}
-        </Button>
-        {canGrant ? (
-          <Button
-            variant="secondary"
-            onClick={() => onGrantAccess(r)}
-            icon={<ShieldCheck size={13} aria-hidden="true" />}
+      {r.held?.kind === 'mse' ? (
+        <div className="mt-2.5 space-y-2">
+          {ok && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="primary"
+                onClick={() => onCapture?.(r, 'fast')}
+                disabled={busy}
+                icon={<Download size={13} aria-hidden="true" />}
+              >
+                {busy ? t('working') : t('captureFast')}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => onCapture?.(r, 'realtime')}
+                disabled={busy}
+                icon={<Radio size={13} aria-hidden="true" />}
+              >
+                {t('captureRealtime')}
+              </Button>
+            </div>
+          )}
+          {ok && <p className="text-[10.5px] leading-snug text-muted">{t('captureHint')}</p>}
+          <button
+            type="button"
+            className="mono inline-flex items-center gap-1 rounded px-1.5 py-1 text-[10px] uppercase tracking-wider text-muted hover:text-neon"
+            aria-expanded={open}
+            aria-controls={panelId}
+            onClick={() => setOpen((v) => !v)}
           >
-            {t('allowAccess')}
-          </Button>
-        ) : (
+            {t('details')}
+            <ChevronDown
+              size={12}
+              aria-hidden="true"
+              className={cx('transition-transform', open && 'rotate-180')}
+            />
+          </button>
+        </div>
+      ) : (
+        <div className="mt-2.5 flex items-center gap-2">
           <Button
-            variant="secondary"
-            onClick={() => onConfigure(r)}
-            disabled={!ok}
-            icon={<Settings2 size={13} aria-hidden="true" />}
+            variant="primary"
+            onClick={() => onDownload(r)}
+            disabled={!ok || busy}
+            icon={<Download size={13} aria-hidden="true" />}
           >
-            {t('configure')}
+            {busy ? t('working') : t('download')}
           </Button>
-        )}
-        <button
-          type="button"
-          className="mono ml-auto inline-flex items-center gap-1 rounded px-1.5 py-1 text-[10px] uppercase tracking-wider text-muted hover:text-neon"
-          aria-expanded={open}
-          aria-controls={panelId}
-          onClick={() => setOpen((v) => !v)}
-        >
-          {t('details')}
-          <ChevronDown
-            size={12}
-            aria-hidden="true"
-            className={cx('transition-transform', open && 'rotate-180')}
-          />
-        </button>
-      </div>
+          {canGrant ? (
+            <Button
+              variant="secondary"
+              onClick={() => onGrantAccess(r)}
+              icon={<ShieldCheck size={13} aria-hidden="true" />}
+            >
+              {t('allowAccess')}
+            </Button>
+          ) : (
+            <Button
+              variant="secondary"
+              onClick={() => onConfigure(r)}
+              disabled={!ok}
+              icon={<Settings2 size={13} aria-hidden="true" />}
+            >
+              {t('configure')}
+            </Button>
+          )}
+          <button
+            type="button"
+            className="mono ml-auto inline-flex items-center gap-1 rounded px-1.5 py-1 text-[10px] uppercase tracking-wider text-muted hover:text-neon"
+            aria-expanded={open}
+            aria-controls={panelId}
+            onClick={() => setOpen((v) => !v)}
+          >
+            {t('details')}
+            <ChevronDown
+              size={12}
+              aria-hidden="true"
+              className={cx('transition-transform', open && 'rotate-180')}
+            />
+          </button>
+        </div>
+      )}
 
       {open && (
         <dl

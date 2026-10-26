@@ -868,5 +868,47 @@
   },
   "sourceBlob": {
     "message": "held by the page (blob:)"
+  },
+  "reasonMseNeedsHook": {
+    "message": "This video is fed to the player piece by piece (Media Source Extensions), so there is no file to download. Turn on \"Look inside players\" in Settings to capture what it plays."
+  },
+  "reasonMseUnrecordable": {
+    "message": "This video is fed to the player piece by piece, and the page hook never saw how: it cannot be captured."
+  },
+  "reasonMseCapturable": {
+    "message": "There is no file or stream address for this video. It can be captured: the page plays it through (muted, optionally faster) while vdown-helper records what the player receives. You get the quality the player chose."
+  },
+  "jobErrCapture": {
+    "message": "The capture could not be completed"
+  },
+  "captureBanner": {
+    "message": "vdown-helper is capturing this video"
+  },
+  "captureCancel": {
+    "message": "Cancel"
+  },
+  "captureProgressFast": {
+    "message": "$1% · fast capture"
+  },
+  "captureProgressRealtime": {
+    "message": "$1% · real-time capture"
+  },
+  "captureFast": {
+    "message": "CAPTURE (FAST)"
+  },
+  "captureRealtime": {
+    "message": "RECORD (REAL TIME)"
+  },
+  "captureHint": {
+    "message": "Plays the video through in the page, muted, and records what the player receives. It is put back as it was afterwards."
+  },
+  "errCaptureProtected": {
+    "message": "This video uses protected playback and is never captured."
+  },
+  "errCaptureNoHook": {
+    "message": "Capturing needs \"Look inside players\" (Settings) and a reload of the page."
+  },
+  "pipeCapture": {
+    "message": "Capture: the page plays the video through while what the player receives is recorded, then the streams are copied into a file. Nothing is re-encoded."
   }
 }

@@ -29,6 +29,8 @@ const REASONS: Record<ReasonCode, MessageKey> = {
   'dash-clearkey': 'reasonDashClearKey',
   'subtitle-unsupported': 'reasonSubtitleUnsupported',
   'too-large': 'reasonTooLarge',
+  'mse-needs-hook': 'reasonMseNeedsHook',
+  'mse-unrecordable': 'reasonMseUnrecordable',
   cors: 'reasonCors',
   'http-error': 'reasonHttp',
   network: 'reasonNetwork',
@@ -49,6 +51,7 @@ export function reasonText(d: Downloadability): string {
   if (d.status === 'downloadable' && d.detail === 'headers-unreadable') return t('reasonHeadersUnreadable');
   if (d.status === 'downloadable' && d.detail === 'in-page-data') return t('reasonInPageData');
   if (d.status === 'downloadable' && d.detail === 'in-page-blob') return t('reasonInPageBlob');
+  if (d.status === 'downloadable' && d.detail === 'mse-capturable') return t('reasonMseCapturable');
   return base;
 }
 
@@ -110,11 +113,15 @@ export function jobErrorText(job: DownloadJob): string {
     'chrome-download': 'jobErrChrome',
     interrupted: 'jobErrInterrupted',
     invalid: 'jobErrInvalid',
+    capture: 'jobErrCapture',
   };
   if (e.code === 'too-large' && job.request.zip) return t('zipTooLarge');
   const key = map[e.code];
   const base = key ? t(key) : t('errGeneric');
-  return e.code === 'http-error' || e.code === 'chrome-download' || e.code === 'ffmpeg'
+  return e.code === 'http-error' ||
+    e.code === 'chrome-download' ||
+    e.code === 'ffmpeg' ||
+    e.code === 'capture'
     ? `${base} (${e.message.slice(0, 120)})`
     : base;
 }

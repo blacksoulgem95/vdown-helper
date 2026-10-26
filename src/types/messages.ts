@@ -88,7 +88,8 @@ export interface OffscreenPlan {
     | 'file-ffmpeg-copy'
     | 'file-staged'
     | 'subtitle'
-    | 'zip';
+    | 'zip'
+    | 'capture';
   extension: string;
   requiresFfmpeg: boolean;
   video: 'copy' | 'transcode' | 'none';
@@ -109,6 +110,10 @@ export type OffscreenEvent =
       bytes: number;
       /** Files left out of the result (a ZIP). */
       skipped?: number;
+      /** Extension of the produced file when the pipeline decides it late (a capture). */
+      extension?: string;
+      /** A capture split into parts at a quality switch: the other parts, each its own download. */
+      extraParts?: Array<{ jobId: string; blobUrl: string; bytes: number; extension: string }>;
     }
   | { channel: 'vdown-offscreen-event'; type: 'failed'; jobId: string; code: string; message: string }
   | { channel: 'vdown-offscreen-event'; type: 'cancelled'; jobId: string };

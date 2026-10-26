@@ -531,6 +531,8 @@ function pipelineText(plan: Plan): string {
       return t('pipeSubtitle');
     case 'zip':
       return t('pipeZip');
+    case 'capture':
+      return t('pipeCapture');
   }
 }
 

@@ -61,6 +61,7 @@ export const MIME_BY_EXTENSION: Record<string, string> = {
   webm: 'video/webm',
   mp3: 'audio/mpeg',
   m4a: 'audio/mp4',
+  mka: 'audio/x-matroska',
   aac: 'audio/aac',
   wav: 'audio/wav',
   srt: 'application/x-subrip',

@@ -38,6 +38,12 @@ const TYPES = {
   '.ttml': 'application/ttml+xml',
 };
 
+const NM = join(import.meta.dirname, '..', 'node_modules');
+const LIBS = {
+  'hls.min.js': join(NM, 'hls.js/dist/hls.min.js'),
+  'dash.all.min.js': join(NM, 'dashjs/dist/modern/umd/dash.all.min.js'),
+};
+
 export function startServers(root, pagesDir) {
   const state = { flakyEnabled: false, hits: [] };
 
@@ -70,6 +76,15 @@ export function startServers(root, pagesDir) {
         if (req.method === 'OPTIONS') return void res.writeHead(204, headers).end();
       }
       if (m[1] === 'slow' && path.endsWith('.ts')) await new Promise((r) => setTimeout(r, 1500));
+    }
+
+    // Test players (hls.js, dash.js) are dev dependencies served from node_modules, on every origin: pages in nested
+    // frames load their own copy. They are never part of the extension.
+    if (req.method === 'GET' && path.startsWith('/__lib/')) {
+      const lib = LIBS[path.slice('/__lib/'.length)];
+      if (!lib || !existsSync(lib)) return void res.writeHead(404).end();
+      res.writeHead(200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'no-store' });
+      return void createReadStream(lib).pipe(res);
     }
 
     // A file that looks fine to a HEAD request (so it can be selected) but whose body fails: for the ZIP "not saved" list.

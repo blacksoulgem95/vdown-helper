@@ -9,7 +9,7 @@ const ff = (args) =>
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...args], { stdio: 'inherit' });
 
 export function ensureFixtures(dir) {
-  if (existsSync(join(dir, '.complete10'))) return;
+  if (existsSync(join(dir, '.complete12'))) return;
   mkdirSync(dir, { recursive: true });
   for (const d of [
     'media',
@@ -33,6 +33,8 @@ export function ensureFixtures(dir) {
     'subs',
     'formats',
     'files',
+    'mse',
+    'mse/hls',
     'gen',
     'hls-subs/sub-en',
     'dash-vod/t',
@@ -345,6 +347,85 @@ video/index.m3u8
     vodMpd.replace('type="static"', 'type="dynamic" minimumUpdatePeriod="PT2S"'),
   );
 
+  // ---- Media Source Extensions: VP9 + Opus in fragmented MP4 (what an open-source Chromium can play through MSE),
+  // two qualities (320x180, 640x360) of 3 x 2 s segments plus one Opus track. Split into an init and media segments.
+  ff([
+    '-f',
+    'lavfi',
+    '-i',
+    'testsrc2=size=640x360:rate=25',
+    '-f',
+    'lavfi',
+    '-i',
+    'sine=frequency=440:sample_rate=48000',
+    '-t',
+    '6',
+    '-map',
+    '0:v',
+    '-map',
+    '0:v',
+    '-map',
+    '1:a',
+    '-c:v:0',
+    'libvpx-vp9',
+    '-s:v:0',
+    '320x180',
+    '-b:v:0',
+    '150k',
+    '-c:v:1',
+    'libvpx-vp9',
+    '-s:v:1',
+    '640x360',
+    '-b:v:1',
+    '400k',
+    '-c:a',
+    'libopus',
+    '-b:a',
+    '48k',
+    '-g',
+    '50',
+    '-keyint_min',
+    '50',
+    '-f',
+    'dash',
+    '-dash_segment_type',
+    'mp4',
+    '-seg_duration',
+    '2',
+    '-use_template',
+    '1',
+    '-use_timeline',
+    '1',
+    '-init_seg_name',
+    'init-$RepresentationID$.m4s',
+    '-media_seg_name',
+    'chunk-$RepresentationID$-$Number$.m4s',
+    '-adaptation_sets',
+    'id=0,streams=v id=1,streams=a',
+    join(dir, 'mse/out.mpd'),
+  ]);
+
+  // The same segments as an HLS (fMP4) stream, for hls.js: a master with the 640x360 video and the Opus track.
+  const hlsMedia = (init, chunk, count) =>
+    '#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-PLAYLIST-TYPE:VOD\n' +
+    `#EXT-X-MAP:URI="../${init}"\n` +
+    Array.from({ length: count }, (_, i) => `#EXTINF:2.000,\n../${chunk(i + 1)}\n`).join('') +
+    '#EXT-X-ENDLIST\n';
+  writeFileSync(
+    join(dir, 'mse/hls/video.m3u8'),
+    hlsMedia('init-1.m4s', (i) => `chunk-1-${i}.m4s`, 3),
+  );
+  writeFileSync(
+    join(dir, 'mse/hls/audio.m3u8'),
+    hlsMedia('init-2.m4s', (i) => `chunk-2-${i}.m4s`, 3),
+  );
+  writeFileSync(
+    join(dir, 'mse/hls/master.m3u8'),
+    '#EXTM3U\n#EXT-X-VERSION:7\n' +
+      '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="a",NAME="English",LANGUAGE="en",DEFAULT=YES,AUTOSELECT=YES,URI="audio.m3u8"\n' +
+      '#EXT-X-STREAM-INF:BANDWIDTH=450000,RESOLUTION=640x360,CODECS="vp09.00.21.08,opus",AUDIO="a"\nvideo.m3u8\n',
+  );
+
   // ---- Other container/audio formats: 2 s clips, each encoded with a codec typical of the format.
   const clip = (name, args) => ff(['-i', sample, '-t', '2', ...args, join(dir, 'formats', name)]);
   const v264 = ['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'ultrafast'];
@@ -524,5 +605,5 @@ video/index.m3u8
     join(dir, 'big/index.m3u8'),
     '#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:10.0,\nseg0.ts\n#EXTINF:10.0,\nseg1.ts\n#EXT-X-ENDLIST\n',
   );
-  writeFileSync(join(dir, '.complete10'), 'ok');
+  writeFileSync(join(dir, '.complete12'), 'ok');
 }

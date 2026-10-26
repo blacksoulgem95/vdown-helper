@@ -24,7 +24,8 @@ import { isDataLabel } from '@/lib/dataUrl';
 import { isFileKind } from '@/lib/filetypes';
 import { planZip } from '@/lib/zip';
 import { inspectVariant } from './detect';
-import { pumpHeld } from './pageFetch';
+import { pumpHeld, runCapture, stopCapture } from './pageFetch';
+import { t } from '@/lib/i18n';
 import { getJob, listJobs, mutateJobs, putJob, removeJobs, updateJob } from './jobStore';
 import { notifyJob } from './notify';
 import { getTabState } from './tabState';
@@ -119,6 +120,9 @@ export async function submit(raw: DownloadRequest): Promise<Result<{ jobId: stri
   if (isDataLabel(req.sourceUrl)) {
     // Page-held bytes: only for a resource this background saw in its own scan of the tab.
     if (!resource?.held || resource.url !== req.sourceUrl) return fail('unsafe-url');
+    // A MediaSource player is only ever captured (never "downloaded"), and only when the scan found it capturable.
+    if ((resource.held.kind === 'mse') !== (req.capture !== undefined)) return fail('unsafe-url');
+    if (req.capture && resource.downloadability.status !== 'downloadable') return fail('protected');
     req = { ...req, held: { ...resource.held, frameId: resource.frameId ?? 0 } };
   } else if (resource?.frameUrl) {
     req = {
@@ -244,12 +248,40 @@ async function runJob(id: string): Promise<void> {
     if (plan.pipeline === 'native') await runNative(job);
     else {
       await runInOffscreenDoc(job, plan, settings.maxMemoryMb, settings.segmentConcurrency);
-      if (job.request.held) void sendHeldBytes(job);
+      if (job.request.capture) void captureInPage(job);
+      else if (job.request.held) void sendHeldBytes(job);
     }
   } catch (e) {
     log.error('job start failed:', e);
     await settle(id, 'unknown', e instanceof Error ? e.message : 'Failed to start');
   }
+}
+
+/** Run the capture in the page that owns the video; the offscreen document is already waiting for what it sends. */
+async function captureInPage(job: DownloadJob): Promise<void> {
+  const held = job.request.held;
+  const speed = job.request.capture?.speed;
+  if (!held || !speed) return;
+  const res = await runCapture(job.request.tabId, held.frameId ?? 0, job.id, held.id, speed, {
+    title: t('captureBanner'),
+    cancel: t('captureCancel'),
+    progress: t(speed === 'fast' ? 'captureProgressFast' : 'captureProgressRealtime', '$1'),
+  });
+  if (res.ok) return; // the offscreen document takes over from here
+  // When the page gave up because the other side closed the connection, the offscreen document knows why: give it a
+  // moment to say so before settling with the page's view of it.
+  await new Promise((r) => setTimeout(r, 500));
+  const now = await getJob(job.id);
+  if (!now || !isActive(now)) return; // cancelled (or already failed) meanwhile
+  await cancelInOffscreen(job.id);
+  if (res.code === 'cancelled') {
+    await updateJob(job.id, (j) =>
+      canTransition(j.stage, 'cancelled') ? transition(j, 'cancelled', Date.now()) : j,
+    );
+    await afterJobEnds(job.id);
+    return;
+  }
+  await settle(job.id, res.code === 'protected' ? 'protected' : 'capture', res.message);
 }
 
 /** The offscreen document is waiting for the bytes: tell the page that holds them to send them now. */
@@ -299,7 +331,38 @@ async function runInOffscreenDoc(
 // ---------------------------------------------------------------------------------------------------------------
 // Offscreen events
 
+/** "Clip.mp4" -> "Clip (part 2).mkv" when the pipeline decided the extension and the capture was split. */
+export function partFileName(
+  filename: string,
+  extension: string | undefined,
+  part: number | undefined,
+): string {
+  const dot = filename.lastIndexOf('.');
+  const stem = dot > 0 ? filename.slice(0, dot) : filename;
+  const ext = extension ?? (dot > 0 ? filename.slice(dot + 1) : '');
+  const name = part === undefined ? stem : `${stem} (part ${part})`;
+  return ext ? `${name}.${ext}` : name;
+}
+
+/** A further part of a split capture, as a job that is already past the point where it fetches anything. */
+function childJob(parent: DownloadJob, id: string, request: DownloadRequest, now: number): DownloadJob {
+  return {
+    ...parent,
+    id,
+    request,
+    stage: 'downloading',
+    stages: parent.stages,
+    progress: {},
+    paused: false,
+    createdAt: now,
+    updatedAt: now,
+    attempts: 0,
+    viaOffscreen: true,
+  };
+}
+
 const OFFSCREEN_CODES: ReadonlySet<string> = new Set<JobErrorCode>([
+  'capture',
   'cors',
   'http-error',
   'network',
@@ -322,17 +385,46 @@ export async function handleOffscreenEvent(ev: OffscreenEvent): Promise<void> {
       return;
     case 'ready': {
       const job = await getJob(ev.jobId);
-      if (!job || isTerminal(job)) return void (await releaseInOffscreen(ev.jobId));
-      try {
-        const downloadId = await startChromeDownload(ev.blobUrl, job.request);
-        await updateJob(ev.jobId, (j) => ({
-          ...withProgress(j, { fraction: 1, bytesDone: ev.bytes, bytesTotal: ev.bytes }, now),
-          chromeDownloadId: downloadId,
-          ...(ev.skipped ? { skipped: ev.skipped } : {}),
-        }));
-        startPolling();
-      } catch (e) {
-        await settle(ev.jobId, 'chrome-download', e instanceof Error ? e.message : 'Chrome refused the file');
+      if (!job || isTerminal(job)) {
+        for (const p of ev.extraParts ?? []) await releaseInOffscreen(p.jobId);
+        return void (await releaseInOffscreen(ev.jobId));
+      }
+      // A capture that switched quality becomes several files: each further part is a job of its own, recorded before
+      // any download starts so the offscreen document is not closed while one of them is still being saved.
+      const total = 1 + (ev.extraParts?.length ?? 0);
+      const named = (index: number, extension: string | undefined): DownloadRequest => ({
+        ...job.request,
+        filename: partFileName(job.request.filename, extension, total > 1 ? index + 1 : undefined),
+      });
+      for (const [i, p] of (ev.extraParts ?? []).entries()) {
+        await putJob(childJob(job, p.jobId, named(i + 1, p.extension), now));
+      }
+      const parts = [
+        { id: ev.jobId, url: ev.blobUrl, bytes: ev.bytes, request: named(0, ev.extension) },
+        ...(ev.extraParts ?? []).map((p, i) => ({
+          id: p.jobId,
+          url: p.blobUrl,
+          bytes: p.bytes,
+          request: named(i + 1, p.extension),
+        })),
+      ];
+      for (const part of parts) {
+        try {
+          await updateJob(part.id, (j) => ({ ...j, request: part.request }));
+          const downloadId = await startChromeDownload(part.url, part.request);
+          await updateJob(part.id, (j) => ({
+            ...withProgress(j, { fraction: 1, bytesDone: part.bytes, bytesTotal: part.bytes }, now),
+            chromeDownloadId: downloadId,
+            ...(ev.skipped && part.id === ev.jobId ? { skipped: ev.skipped } : {}),
+          }));
+          startPolling();
+        } catch (e) {
+          await settle(
+            part.id,
+            'chrome-download',
+            e instanceof Error ? e.message : 'Chrome refused the file',
+          );
+        }
       }
       return;
     }
@@ -449,6 +541,8 @@ export async function jobAction(
       if (job.chromeDownloadId !== undefined)
         await chrome.downloads.cancel(job.chromeDownloadId).catch(() => undefined);
       if (job.viaOffscreen) await cancelInOffscreen(jobId);
+      if (job.request.capture && job.request.held)
+        await stopCapture(job.request.tabId, job.request.held.frameId ?? 0, jobId);
       await updateJob(jobId, (j) =>
         canTransition(j.stage, 'cancelled') ? transition(j, 'cancelled', now) : j,
       );

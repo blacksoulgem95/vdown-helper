@@ -868,5 +868,47 @@
   },
   "sourceBlob": {
     "message": "tenuto dalla pagina (blob:)"
+  },
+  "reasonMseNeedsHook": {
+    "message": "Questo video viene dato al lettore a pezzi (Media Source Extensions), quindi non c'è un file da scaricare. Attiva \"Guarda dentro i player\" nelle Impostazioni per catturare ciò che riproduce."
+  },
+  "reasonMseUnrecordable": {
+    "message": "Questo video viene dato al lettore a pezzi e l'hook della pagina non ha visto come: non si può catturare."
+  },
+  "reasonMseCapturable": {
+    "message": "Per questo video non c'è un file né un indirizzo di flusso. Si può catturare: la pagina lo riproduce fino in fondo (muto, volendo più veloce) mentre vdown-helper registra ciò che il lettore riceve. Ottieni la qualità scelta dal lettore."
+  },
+  "jobErrCapture": {
+    "message": "La cattura non è stata completata"
+  },
+  "captureBanner": {
+    "message": "vdown-helper sta catturando questo video"
+  },
+  "captureCancel": {
+    "message": "Annulla"
+  },
+  "captureProgressFast": {
+    "message": "$1% · cattura veloce"
+  },
+  "captureProgressRealtime": {
+    "message": "$1% · cattura in tempo reale"
+  },
+  "captureFast": {
+    "message": "CATTURA (VELOCE)"
+  },
+  "captureRealtime": {
+    "message": "REGISTRA (TEMPO REALE)"
+  },
+  "captureHint": {
+    "message": "Riproduce il video fino in fondo nella pagina, muto, e registra ciò che il lettore riceve. Poi viene rimesso com'era."
+  },
+  "errCaptureProtected": {
+    "message": "Questo video usa una riproduzione protetta e non viene mai catturato."
+  },
+  "errCaptureNoHook": {
+    "message": "Per catturare serve \"Guarda dentro i player\" (Impostazioni) e un ricaricamento della pagina."
+  },
+  "pipeCapture": {
+    "message": "Cattura: la pagina riproduce il video fino in fondo mentre ciò che il lettore riceve viene registrato, poi i flussi vengono copiati in un file. Nulla viene ricodificato."
   }
 }

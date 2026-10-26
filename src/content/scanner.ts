@@ -11,6 +11,7 @@ import { fileKindOfExtension, fileKindOfMime, urlExtension, type FileKind } from
 import { sniffMime } from '@/lib/sniff';
 import { HELD_BLOB_LIMIT } from '@/types/ingest';
 import { fetchText, probeHeaders } from '@/lib/netprobe';
+import { mseVideos, startCapture, stopCapture, type BannerLabels, type CaptureResult } from './capture';
 import { pumpBlob, pumpData, type PumpResult } from './ingest';
 import type { DetectionMethod, RawCandidate, ScanReport } from '@/types/media';
 
@@ -37,6 +38,8 @@ interface PendingBlob {
   extra: Partial<RawCandidate>;
   /** Already counted in `notes.blobSources` (media sources are; images are not). */
   counted: boolean;
+  /** The media element that uses it: if the blob cannot be read it is most likely a MediaSource (see capture.ts). */
+  el?: HTMLMediaElement;
 }
 /** blob: sources the last synchronous scan met; scanAsync() reads them. */
 let pendingBlobs: PendingBlob[] = [];
@@ -114,6 +117,7 @@ function addUrl(
   base: string,
   method: DetectionMethod,
   extra: Partial<RawCandidate> = {},
+  el?: HTMLMediaElement,
 ): void {
   if (raw && /^data:/i.test(raw)) {
     addData(c, raw, method, extra);
@@ -127,7 +131,8 @@ function addUrl(
       c.blobUrls.add(url);
       c.notes.blobSources++;
     }
-    if (pendingBlobs.length < MAX_HELD) pendingBlobs.push({ url, method, extra, counted: true });
+    if (pendingBlobs.length < MAX_HELD)
+      pendingBlobs.push({ url, method, extra, counted: true, ...(el ? { el } : {}) });
     return;
   }
   if (!/^https?:/i.test(url)) return; // data:, javascript:, etc. are never candidates
@@ -163,8 +168,8 @@ function scanElements(c: Collector, doc: Document): void {
           ...(label ? { title: label } : {}),
         });
       }
-      addUrl(c, media.currentSrc, base, 'dom-element', extra);
-      addUrl(c, media.getAttribute('src'), base, 'dom-element', extra);
+      addUrl(c, media.currentSrc, base, 'dom-element', extra, media);
+      addUrl(c, media.getAttribute('src'), base, 'dom-element', extra, media);
       for (const s of media.querySelectorAll('source')) {
         const type = s.getAttribute('type') ?? undefined;
         addUrl(c, s.getAttribute('src'), base, 'dom-source', type ? { ...extra, mimeType: type } : extra);
@@ -369,6 +374,7 @@ async function probeBlob(url: string): Promise<{ blob: Blob; mime: string } | un
  */
 export async function scanAsync(): Promise<ScanReport> {
   heldBlobs.clear();
+  mseVideos.clear();
   const report = scan();
   const pending = pendingBlobs;
   pendingBlobs = [];
@@ -377,7 +383,26 @@ export async function scanAsync(): Promise<ScanReport> {
   const uncounted = new Set<string>();
   for (const p of pending) {
     const found = probed.get(p.url);
-    if (!found) continue;
+    if (!found) {
+      // A media element playing from a blob: URL we cannot read is most likely fed through MediaSource. List it as a
+      // video that can be captured (if the page hook saw how; the background decides), instead of hiding it.
+      if (p.counted && p.el instanceof HTMLMediaElement && /^blob:/i.test(p.url)) {
+        const id = dataHandle(p.url);
+        mseVideos.set(id, p.el);
+        if (!uncounted.has(p.url)) {
+          uncounted.add(p.url);
+          report.notes.blobSources = Math.max(0, report.notes.blobSources - 1);
+        }
+        if (!report.candidates.some((c) => c.held?.id === id && c.method === p.method))
+          report.candidates.push({
+            ...p.extra,
+            url: dataLabel('application/x-vdh-mse', id),
+            method: p.method,
+            held: { kind: 'mse', id, bytes: 0 },
+          });
+      }
+      continue;
+    }
     const id = dataHandle(p.url);
     const isMedia = /^(video|audio)\//.test(found.mime);
     const kind = isMedia ? undefined : fileKindOfMime(found.mime);
@@ -408,11 +433,21 @@ export interface VdhApi {
   fetchText: (url: string) => ReturnType<typeof fetchText>;
   /** Send the page-held bytes behind `handle` to the offscreen document of `jobId`. */
   pumpHeld: (jobId: string, handle: string) => Promise<PumpResult>;
+  /** Capture the MediaSource video behind `handle` (resolves when the capture has ended). */
+  startCapture: (
+    jobId: string,
+    handle: string,
+    speed: 'fast' | 'realtime',
+    labels: BannerLabels,
+  ) => Promise<CaptureResult>;
+  stopCapture: (jobId: string) => boolean;
 }
 
 const api: VdhApi = {
   scan,
   scanAsync,
+  startCapture,
+  stopCapture,
   probeHeaders: (url) => probeHeaders(url),
   fetchText: (url) => fetchText(url),
   pumpHeld: async (jobId, handle) => {

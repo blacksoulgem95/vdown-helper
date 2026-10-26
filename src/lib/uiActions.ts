@@ -9,6 +9,7 @@ import { send } from './messaging';
 import {
   audioOptions,
   buildRequest,
+  buildCaptureRequest,
   buildZipRequest,
   defaultChoices,
   planFromRequest,
@@ -251,6 +252,17 @@ export async function startZip(resources: MediaResource[], settings: Settings): 
   if (missing.length > 0 && !(await requestAccess(missing))) {
     return { ok: false, error: t('errAccessDenied'), needsAccess: missing };
   }
+  const res = await send('start-download', { request });
+  return res.ok ? { ok: true, jobId: res.jobId } : { ok: false, error: describeError(res.error) };
+}
+
+/** Capture a MediaSource video. The click on the button is the user's decision to let the page play it through. */
+export async function startCapture(
+  resource: MediaResource,
+  settings: Settings,
+  speed: 'fast' | 'realtime',
+): Promise<StartOutcome> {
+  const request = buildCaptureRequest(resource, settings, speed);
   const res = await send('start-download', { request });
   return res.ok ? { ok: true, jobId: res.jobId } : { ok: false, error: describeError(res.error) };
 }

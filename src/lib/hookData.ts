@@ -1,3 +1,4 @@
+import { dataHandle } from './dataUrl';
 import { isSafeFetchUrl, normalizeUrl } from './security';
 import type { DetectionMethod, MediaResource, RawCandidate } from '@/types/media';
 
@@ -16,10 +17,18 @@ export interface HookReport {
   requests: HookRequest[];
   /** Key systems the page asked for through EME (e.g. "com.widevine.alpha"). */
   emeKeySystems: string[];
+  /** MediaSources the page created, by the blob: URL it gave its player, with their SourceBuffers. */
+  mediaSources: HookMediaSource[];
+}
+
+export interface HookMediaSource {
+  url: string;
+  buffers: Array<{ id: string; mime: string }>;
 }
 
 const MAX_REQUESTS = 300;
 const MAX_KEY_SYSTEMS = 8;
+const MAX_MEDIA_SOURCES = 30;
 
 const MANIFEST_EXT = /\.(m3u8|mpd|ism\/manifest|f4m)(?:$|[?#])/i;
 const FILE_EXT =
@@ -41,7 +50,7 @@ function str(v: unknown, max: number): string | undefined {
 
 /** Parse arbitrary data from the page into a clean report. Never throws. */
 export function parseHookReport(raw: unknown): HookReport {
-  const out: HookReport = { requests: [], emeKeySystems: [] };
+  const out: HookReport = { requests: [], emeKeySystems: [], mediaSources: [] };
   if (typeof raw !== 'object' || raw === null) return out;
   const r = raw as Record<string, unknown>;
   if (Array.isArray(r['requests'])) {
@@ -55,6 +64,24 @@ export function parseHookReport(raw: unknown): HookReport {
       if (ct) req.contentType = ct;
       out.requests.push(req);
       if (out.requests.length >= MAX_REQUESTS) break;
+    }
+  }
+  if (Array.isArray(r['mediaSources'])) {
+    for (const item of r['mediaSources'].slice(0, MAX_MEDIA_SOURCES)) {
+      if (typeof item !== 'object' || item === null) continue;
+      const i = item as Record<string, unknown>;
+      const url = str(i['url'], 4096);
+      if (!url || !/^blob:/i.test(url)) continue;
+      const buffers: HookMediaSource['buffers'] = [];
+      if (Array.isArray(i['buffers'])) {
+        for (const b of i['buffers'].slice(0, 8)) {
+          if (typeof b !== 'object' || b === null) continue;
+          const id = str((b as Record<string, unknown>)['id'], 20);
+          const mime = str((b as Record<string, unknown>)['mime'], 200);
+          if (id && /^\d+$/.test(id) && mime) buffers.push({ id, mime });
+        }
+      }
+      out.mediaSources.push({ url, buffers });
     }
   }
   if (Array.isArray(r['emeKeySystems'])) {
@@ -109,5 +136,35 @@ export function markProtectedFrames(
       ...r,
       downloadability: { status: 'protected', reason: 'eme', detail: systems[0] as string },
     };
+  });
+}
+
+/**
+ * Decide whether a MediaSource player (`held.kind === 'mse'`) can be captured, from what the page hook of its own
+ * frame saw. Without the hook there is no way to know how the player is fed.
+ */
+export function markMseResources(
+  resources: MediaResource[],
+  reports: Map<number, HookReport>,
+): MediaResource[] {
+  return resources.map((r) => {
+    if (r.held?.kind !== 'mse') return r;
+    const report = reports.get(r.frameId ?? 0);
+    if (!report) return r; // no hook in this frame: stays "needs the hook"
+    const source = report.mediaSources.find((m) => dataHandle(m.url) === r.held?.id);
+    const verdict = (d: MediaResource['downloadability']) => ({ ...r, downloadability: d });
+    if (!source || source.buffers.length === 0)
+      return verdict({ status: 'unsupported', reason: 'mse-unrecordable' });
+    // Any key system means the data the player is given is encrypted: nothing usable could be recorded.
+    if (report.emeKeySystems.length > 0) {
+      return protectedKeySystems(report.emeKeySystems).length > 0
+        ? verdict({
+            status: 'protected',
+            reason: 'eme',
+            detail: protectedKeySystems(report.emeKeySystems)[0] as string,
+          })
+        : verdict({ status: 'unsupported', reason: 'mse-unrecordable', detail: 'clearkey' });
+    }
+    return verdict({ status: 'downloadable', reason: 'ok', detail: 'mse-capturable' });
   });
 }

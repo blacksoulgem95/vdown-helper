@@ -158,3 +158,63 @@ export async function pumpHeld(
     return { ok: false, error: 'The page is no longer available' };
   }
 }
+
+export interface CaptureLabels {
+  title: string;
+  cancel: string;
+  progress: string;
+}
+
+export type CaptureOutcome = { ok: true } | { ok: false; code: string; message: string };
+
+/**
+ * Start the MediaSource capture in the owning frame and wait until it has finished (or failed). The page controller
+ * shows the banner, plays the video through and streams what the player receives to the offscreen document.
+ */
+export async function runCapture(
+  tabId: number,
+  frameId: number,
+  jobId: string,
+  handle: string,
+  speed: 'fast' | 'realtime',
+  labels: CaptureLabels,
+): Promise<CaptureOutcome> {
+  try {
+    const [res] = await chrome.scripting.executeScript({
+      target: { tabId, frameIds: [frameId] },
+      func: (j: string, h: string, s: 'fast' | 'realtime', l: CaptureLabels) => {
+        const api = (
+          globalThis as unknown as {
+            __vdh?: { startCapture?: (...a: unknown[]) => Promise<unknown> };
+          }
+        ).__vdh;
+        return api?.startCapture
+          ? api.startCapture(j, h, s, l)
+          : { ok: false, code: 'no-source', message: 'The page scanner is not available' };
+      },
+      args: [jobId, handle, speed, labels],
+    });
+    const r = res?.result as { ok?: boolean; code?: string; message?: string } | undefined;
+    return r?.ok
+      ? { ok: true }
+      : { ok: false, code: r?.code ?? 'failed', message: r?.message ?? 'The capture could not be completed' };
+  } catch {
+    return { ok: false, code: 'no-source', message: 'The page is no longer available' };
+  }
+}
+
+/** Ask a running capture to stop (the job was cancelled). Best effort. */
+export async function stopCapture(tabId: number, frameId: number, jobId: string): Promise<void> {
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId, frameIds: [frameId] },
+      func: (j: string) => {
+        const api = (globalThis as unknown as { __vdh?: { stopCapture?: (a: string) => unknown } }).__vdh;
+        api?.stopCapture?.(j);
+      },
+      args: [jobId],
+    });
+  } catch {
+    // the page is gone: so is the capture
+  }
+}

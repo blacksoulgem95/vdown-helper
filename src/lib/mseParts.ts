@@ -1,4 +1,11 @@
-import { parseFragment, parseInit, type Container, type InitInfo, type TrackInfo } from './mse';
+import {
+  mediaStartInInit,
+  parseFragment,
+  parseInit,
+  type Container,
+  type InitInfo,
+  type TrackInfo,
+} from './mse';
 
 /** What is known about one chunk a player appended to a SourceBuffer. The bytes themselves live on disk. */
 export interface ChunkMeta {
@@ -39,6 +46,19 @@ export function chunkSignature(b: Uint8Array): string {
 /** Classifies chunks as they arrive, remembering each SourceBuffer's latest initialisation segment. */
 export class ChunkClassifier {
   private inits = new Map<string, InitInfo>();
+
+  /**
+   * Classify one append. A player that appends the initialisation segment together with the first media segment gets
+   * two entries (the bytes stay contiguous on disk, so offsets and lengths simply divide the chunk).
+   */
+  classifyAll(track: string, seq: number, bytes: Uint8Array, offset: number): ChunkMeta[] {
+    const cut = mediaStartInInit(bytes);
+    if (cut === undefined) return [this.classify(track, seq, bytes, offset)];
+    return [
+      this.classify(track, seq, bytes.subarray(0, cut), offset),
+      this.classify(track, seq, bytes.subarray(cut), offset + cut),
+    ];
+  }
 
   classify(track: string, seq: number, bytes: Uint8Array, offset: number): ChunkMeta {
     const base = { track, seq, offset, length: bytes.length, sig: chunkSignature(bytes) };

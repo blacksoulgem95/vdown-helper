@@ -6,12 +6,13 @@ import type { OffscreenEvent, OffscreenPlan } from '@/types/messages';
 import { CancelledError, PipelineError, asPipelineError } from './errors';
 import { runFfmpeg } from './ffmpeg';
 import { stageDashRepresentation } from './dash';
-import { expectIngest } from './ingest';
+import { expectCapture, expectIngest } from './ingest';
 import { stageDirectFile, stageHlsPlaylist, type StageOptions } from './hls';
 import { removeJobDir } from './opfs';
 import { storageReady } from './startup';
 import { buildSubtitle } from './subtitle';
 import { buildZip } from './zip';
+import { assembleCapture } from './capture';
 
 interface Running {
   abort: AbortController;
@@ -88,22 +89,77 @@ async function execute(
   const credentialedOrigins = req.credentialedOrigins ?? [];
   stage(jobId, 'downloading');
 
+  // A capture registers like the held bytes below: the page connects the moment the background starts it.
+  const captured =
+    plan.pipeline === 'capture' && req.held
+      ? expectCapture({
+          jobId,
+          tabId: req.tabId,
+          frameId: req.held.frameId ?? 0,
+          maxBytes: plan.maxMemoryMb * MB,
+          signal,
+          onProgress: (bytes, frac) =>
+            send({ bytesDone: bytes, ...(frac !== undefined ? { fraction: frac * 0.8 } : {}) }),
+        })
+      : undefined;
+  captured?.catch(() => undefined);
+
   // The page may connect with its bytes at any moment, so the expectation is registered before anything is awaited.
-  const heldBytes = req.held
-    ? expectIngest({
-        jobId,
-        tabId: req.tabId,
-        frameId: req.held.frameId ?? 0,
-        fileName: `source.${req.sourceFormat === 'unknown' ? 'bin' : req.sourceFormat}`,
-        maxBytes:
-          maxBytes === undefined ? heldLimit(req.held.kind) : Math.min(maxBytes, heldLimit(req.held.kind)),
-        signal,
-        onProgress: (bytes, total) =>
-          send({ bytesDone: bytes, bytesTotal: total, fraction: total ? bytes / total : 1 }),
-      })
-    : undefined;
+  const heldBytes =
+    req.held && !req.capture
+      ? expectIngest({
+          jobId,
+          tabId: req.tabId,
+          frameId: req.held.frameId ?? 0,
+          fileName: `source.${req.sourceFormat === 'unknown' ? 'bin' : req.sourceFormat}`,
+          maxBytes:
+            maxBytes === undefined ? heldLimit(req.held.kind) : Math.min(maxBytes, heldLimit(req.held.kind)),
+          signal,
+          onProgress: (bytes, total) =>
+            send({ bytesDone: bytes, bytesTotal: total, fraction: total ? bytes / total : 1 }),
+        })
+      : undefined;
   heldBytes?.catch(() => undefined); // reported where it is awaited
   await storageReady;
+
+  // Capture of a MediaSource player: what the page recorded is assembled into one file per quality it played.
+  if (captured) {
+    const ingest = await captured;
+    stage(jobId, 'merging');
+    const parts = await assembleCapture({
+      jobId,
+      ingest,
+      signal,
+      maxBytes: plan.maxMemoryMb * MB,
+      onProgress: (p) =>
+        send({ ...p, ...(p.fraction !== undefined ? { fraction: 0.8 + p.fraction * 0.2 } : {}) }),
+    });
+    if (signal.aborted) throw new CancelledError();
+    const urls = parts.map((p) =>
+      URL.createObjectURL(
+        new Blob([p.data as Uint8Array<ArrayBuffer>], {
+          type: MIME_BY_EXTENSION[p.extension] ?? 'application/octet-stream',
+        }),
+      ),
+    );
+    entry.blobUrl = urls[0];
+    // further parts are jobs of their own: they need an entry so their blob URL is revoked when they are released
+    const extraParts = parts.slice(1).map((p, i) => {
+      const id = crypto.randomUUID();
+      running.set(id, { abort: new AbortController(), blobUrl: urls[i + 1] as string });
+      return { jobId: id, blobUrl: urls[i + 1] as string, bytes: p.data.byteLength, extension: p.extension };
+    });
+    emit({
+      channel: 'vdown-offscreen-event',
+      type: 'ready',
+      jobId,
+      blobUrl: urls[0] as string,
+      bytes: parts[0]?.data.byteLength ?? 0,
+      extension: parts[0]?.extension ?? 'mp4',
+      ...(extraParts.length > 0 ? { extraParts } : {}),
+    });
+    return;
+  }
 
   // ZIP of plain files: fetched one by one, written straight to disk.
   if (plan.pipeline === 'zip') {

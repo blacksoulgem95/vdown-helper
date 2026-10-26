@@ -43,6 +43,7 @@ export interface ResourceTabsProps {
   onDownload: (r: MediaResource) => void;
   onConfigure: (r: MediaResource) => void;
   onGrantAccess: (r: MediaResource) => void;
+  onCapture: (r: MediaResource, speed: 'fast' | 'realtime') => void;
   /** Queue several resources; resolves with how many were queued and how many could not be. */
   onBulk: (list: MediaResource[]) => Promise<{ queued: number; failed: number }>;
   /** Pack several files into one ZIP. */
@@ -221,6 +222,7 @@ export function ResourceTabs(props: ResourceTabsProps) {
                             onDownload={props.onDownload}
                             onConfigure={props.onConfigure}
                             onGrantAccess={props.onGrantAccess}
+                            onCapture={props.onCapture}
                           />
                         ))}
                       </ul>

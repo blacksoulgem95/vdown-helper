@@ -27,5 +27,5 @@ Popup tabs by type (Video, Audio, Subtitles, Images, Files, Assets) with counts;
 - Large lists: scans are capped per kind (VDH-037), the popup renders 40 rows at a time with "Show N more", and the stored tab state stays small
   (320 images: 152 KB, scan + render about 1 s in the E2E).
 - The headline count and the toolbar badge count video, audio and subtitles only; images and files have their own tab counts.
-- **Capture / Record / Stop controls are not part of this task yet**: they belong to VDH-038 (capture) and VDH-040 (live recording) and will be added with them;
-  this task stays `in-progress` until they are, or is closed with that stated.
+- Capture (fast) and Record (real time) buttons exist on MediaSource cards (VDH-038, verified in the E2E). The **Stop** control for live recording belongs to
+  VDH-040; this task stays `in-progress` until it is added.

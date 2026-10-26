@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mseVideos } from '@/content/capture';
 import { heldBlobs, heldData, scan, scanAsync } from '@/content/scanner';
 
 function setBody(html: string) {
@@ -258,7 +259,7 @@ describe('blob: sources (scanAsync)', () => {
     expect(r.notes.blobSources).toBe(0); // an image blob was never counted as an unreadable media source
   });
 
-  it('leaves out what cannot be read: MediaSource urls, revoked urls, hung reads, unknown content', async () => {
+  it('lists a media element whose blob cannot be read as a MediaSource video; leaves out unknown content', async () => {
     vi.useFakeTimers();
     respond({
       'blob:https://example.com/mse': new Error('not fetchable'),
@@ -266,14 +267,27 @@ describe('blob: sources (scanAsync)', () => {
       'blob:https://example.com/text': new Blob(['something else'], { type: 'application/x-unknown' }),
     });
     setBody(
-      '<video src="blob:https://example.com/mse"></video><video src="blob:https://example.com/hang"></video>' +
-        '<video src="blob:https://example.com/text"></video><video src="blob:https://example.com/gone"></video>',
+      '<video src="blob:https://example.com/mse" title="Player"></video><video src="blob:https://example.com/hang"></video>' +
+        '<video src="blob:https://example.com/text"></video><video src="blob:https://example.com/gone"></video>' +
+        '<img src="blob:https://example.com/img-gone">',
     );
     const p = scanAsync();
     await vi.advanceTimersByTimeAsync(3000);
     const r = await p;
-    expect(r.candidates).toHaveLength(0);
-    expect(r.notes.blobSources).toBe(4);
+    // three videos fed by something unreadable (MediaSource, hung read, revoked URL): listed for capture, without a URL
+    const mse = r.candidates.filter((c) => c.held?.kind === 'mse');
+    expect(mse).toHaveLength(3);
+    expect(mse[0]).toMatchObject({
+      method: 'dom-element',
+      title: 'Player',
+      mediaType: 'video',
+      held: { kind: 'mse', bytes: 0 },
+    });
+    expect(mse[0]!.url).toMatch(/^data:application\/x-vdh-mse;vdh=[0-9a-f]{8}$/);
+    expect(r.candidates.some((c) => c.fileKind === 'image')).toBe(false); // an unreadable image blob is not a player
+    expect(r.notes.blobSources).toBe(1); // the readable but unrecognised one
+    expect(mseVideos.size).toBe(3);
+    for (const id of mse.map((c) => c.held!.id)) expect(mseVideos.get(id)).toBeInstanceOf(HTMLVideoElement);
   });
 
   it('still lists a real text file as a document', async () => {

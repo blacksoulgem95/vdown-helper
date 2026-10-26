@@ -37,7 +37,9 @@ export type Pipeline =
   /** A subtitle fetched, stitched and/or converted in the offscreen document (lib/subtitles). */
   | 'subtitle'
   /** Plain files fetched one by one and packed into a ZIP written to disk (lib/zip). */
-  | 'zip';
+  | 'zip'
+  /** A MediaSource player recorded in the page, assembled into one or more files by copying streams (no re-encode). */
+  | 'capture';
 
 export type StreamHandling = 'copy' | 'transcode';
 

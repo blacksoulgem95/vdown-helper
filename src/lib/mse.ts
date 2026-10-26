@@ -44,6 +44,8 @@ const fourcc = (b: Uint8Array, o: number): string =>
 
 interface Box {
   type: string;
+  /** Offset of the box header. */
+  start: number;
   /** Offset of the box body (after the header) and its end, clamped to the buffer. */
   body: number;
   end: number;
@@ -64,7 +66,7 @@ function boxes(b: Uint8Array, from: number, to: number): Box[] {
       size = to - pos;
     }
     if (size < header || !Number.isFinite(size)) break;
-    out.push({ type, body: pos + header, end: Math.min(pos + size, to) });
+    out.push({ type, start: pos, body: pos + header, end: Math.min(pos + size, to) });
     pos += size;
   }
   return out;
@@ -254,4 +256,40 @@ export function parseInit(data: Uint8Array): InitInfo | undefined {
 /** Media segment (where it starts), or undefined if this chunk is not one. */
 export function parseFragment(data: Uint8Array): FragmentInfo | undefined {
   return parseMp4Fragment(data) ?? parseWebmFragment(data);
+}
+
+/**
+ * A player may append an initialisation segment and the first media segment in one call. Where the media starts inside
+ * such a chunk (the first `moof` box, or the first WebM Cluster), or undefined when the chunk is not a mixture.
+ */
+export function mediaStartInInit(data: Uint8Array): number | undefined {
+  const bs = boxes(data, 0, data.length);
+  if (bs.some((x) => x.type === 'moov')) {
+    const i = bs.findIndex((x) => x.type === 'moof');
+    if (i < 0) return undefined;
+    // a styp/sidx right before the moof belongs to the media segment
+    let first = i;
+    while (first > 0 && ['styp', 'sidx'].includes(bs[first - 1]?.type ?? '')) first--;
+    const start = bs[first]?.start ?? 0;
+    return start > 0 ? start : undefined;
+  }
+  if (data.length >= 4 && data[0] === 0x1a && data[1] === 0x45 && data[2] === 0xdf && data[3] === 0xa3) {
+    const segment = ebmlChildren(data, 0, data.length).find((e) => e.id === ID.segment);
+    return segment ? firstClusterStart(data, segment.body) : undefined;
+  }
+  return undefined;
+}
+
+function firstClusterStart(b: Uint8Array, from: number): number | undefined {
+  let pos = from;
+  for (let n = 0; n < MAX_BOXES && pos < b.length; n++) {
+    const id = vint(b, pos, true);
+    if (!id) return undefined;
+    const size = vint(b, pos + id.length, false);
+    if (!size) return undefined;
+    if (id.value === ID.cluster) return pos;
+    if (size.unknown) return undefined;
+    pos += id.length + size.length + size.value;
+  }
+  return undefined;
 }

@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { parseFragment, parseInit } from '@/lib/mse';
+import { mediaStartInInit, parseFragment, parseInit } from '@/lib/mse';
 
 // ---- tiny writers for the formats under test
 const cat = (...p: Uint8Array[]): Uint8Array => {
   const out = new Uint8Array(p.reduce((n, x) => n + x.length, 0));
   let o = 0;
-  for (const x of p) (out.set(x, o), (o += x.length));
+  for (const x of p) {
+    out.set(x, o);
+    o += x.length;
+  }
   return out;
 };
 const be = (n: number, len: number): Uint8Array => {
@@ -177,5 +180,28 @@ describe('WebM', () => {
         Uint8Array.from([0x1f, 0x43, 0xb6, 0x75, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]),
       ),
     ).toBeUndefined();
+  });
+});
+
+describe('init and media appended together', () => {
+  it('finds where the media starts inside an MP4 chunk, including a styp before the moof', () => {
+    const init = mp4Init(mp4Track(1, 'vide', 1000, 'avc1', 64, 64));
+    const frag = mp4Fragment(1, 0); // styp + moof + mdat
+    expect(mediaStartInInit(cat(init, frag))).toBe(init.length);
+    expect(mediaStartInInit(init)).toBeUndefined();
+    expect(mediaStartInInit(frag)).toBeUndefined();
+    const sidx = box('sidx', zeros(12));
+    expect(mediaStartInInit(cat(init, sidx, box('moof', box('mfhd', zeros(8)))))).toBe(init.length);
+  });
+  it('finds the first Cluster after a WebM header', () => {
+    const init = webmInit();
+    const both = cat(init, webmCluster(0), webmCluster(2000));
+    expect(mediaStartInInit(both)).toBe(init.length);
+    expect(mediaStartInInit(init)).toBeUndefined();
+    expect(mediaStartInInit(webmCluster(5))).toBeUndefined();
+  });
+  it('never throws on garbage', () => {
+    for (const n of [0, 1, 3, 9, 40])
+      expect(() => mediaStartInInit(new Uint8Array(n).fill(0xff))).not.toThrow();
   });
 });

@@ -10,7 +10,14 @@ import { useActiveTabId, useTabMedia } from '@/hooks/useTabMedia';
 import { t } from '@/lib/i18n';
 import { send } from '@/lib/messaging';
 import { tabOf } from '@/lib/tabs';
-import { openDownloadedFile, originOf, quickDownload, requestAccess, startZip } from '@/lib/uiActions';
+import {
+  openDownloadedFile,
+  originOf,
+  quickDownload,
+  requestAccess,
+  startCapture,
+  startZip,
+} from '@/lib/uiActions';
 import type { MediaResource } from '@/types/media';
 import { ResourceTabs } from './ResourceTabs';
 
@@ -80,6 +87,20 @@ export function PopupApp() {
     async (list: MediaResource[]) => {
       const out = await startZip(list, settings);
       return out.ok ? ({ ok: true } as const) : ({ ok: false, error: out.error } as const);
+    },
+    [settings],
+  );
+
+  const onCapture = useCallback(
+    async (r: MediaResource, speed: 'fast' | 'realtime') => {
+      setBusy(r.id);
+      setFb(r.id, undefined);
+      try {
+        const out = await startCapture(r, settings, speed);
+        setFb(r.id, out.ok ? { tone: 'acid', text: t('queuedOk') } : { tone: 'danger', text: out.error });
+      } finally {
+        setBusy(undefined);
+      }
     },
     [settings],
   );
@@ -254,6 +275,7 @@ export function PopupApp() {
             onDownload={(x) => void onDownload(x)}
             onConfigure={(x) => void onConfigure(x)}
             onGrantAccess={(x) => void onGrantAccess(x)}
+            onCapture={(x, speed) => void onCapture(x, speed)}
             onBulk={onBulk}
             onZip={onZip}
             onMinImage={(px) => void update({ imageMinPx: px })}

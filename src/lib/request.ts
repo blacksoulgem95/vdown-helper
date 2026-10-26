@@ -362,6 +362,7 @@ export function planFromRequest(
   if (req.subtitle) return planSubtitle(req);
   if (req.file) return planPlainFile(req);
   if (req.zip) return planZipJob(req, limits);
+  if (req.capture) return planCapture();
   const segmented = req.isHls || req.isDash === true;
   const input: PlanInput = {
     isHls: segmented, // the planner's "isHls" means: a segmented stream (HLS or DASH)
@@ -382,6 +383,60 @@ export function planFromRequest(
   if (req.durationSec !== undefined) input.durationSec = req.durationSec;
   if (req.live !== undefined) input.live = req.live;
   return planOutput(input);
+}
+
+/** A MediaSource capture: recorded in the page, assembled by copying streams. The container is decided from the codecs. */
+function planCapture(): Plan {
+  return {
+    valid: true,
+    issues: [],
+    pipeline: 'capture',
+    requiresFfmpeg: true,
+    video: 'copy',
+    audio: 'copy',
+    extension: 'mp4',
+    usesBitrate: false,
+  };
+}
+
+/** A capture request for a MediaSource player the scan found (`held.kind === 'mse'`). */
+export function buildCaptureRequest(
+  resource: MediaResource,
+  settings: Settings,
+  speed: 'fast' | 'realtime',
+): DownloadRequest {
+  const base = renderNameTemplate(settings.namingTemplate, {
+    title: resource.title,
+    host: resource.host,
+    resolution: resolutionLabel(resource.height),
+    date: new Date().toISOString().slice(0, 10),
+    format: 'mp4',
+    id: resource.id,
+  });
+  const req: DownloadRequest = {
+    resourceId: resource.id,
+    sourceUrl: resource.url,
+    tabId: resource.tabId,
+    pageUrl: resource.pageUrl,
+    host: resource.host,
+    mode: 'original',
+    container: 'original',
+    audioFormat: settings.defaultAudioFormat,
+    audioBitrate: settings.defaultAudioBitrate,
+    // the extension is decided from the codecs once the capture is done
+    filename: withExtension(base, 'mp4'),
+    subfolder: sanitizeSubfolder(settings.subfolder),
+    saveAs: settings.askWhereToSave,
+    qualityLabel: speed === 'fast' ? 'CAPTURE' : 'RECORD',
+    sourceFormat: 'unknown',
+    isHls: false,
+    hasMuxedAudio: true,
+    hasVideo: true,
+    capture: { speed },
+  };
+  if (resource.held) req.held = resource.held;
+  if (resource.durationSec) req.durationSec = resource.durationSec;
+  return req;
 }
 
 /** ZIP archives are classic ZIP (not ZIP64): never above 4 GB, and never above the user's memory/size limit. */
@@ -474,6 +529,10 @@ export function sanitizeRequest(req: DownloadRequest): DownloadRequest | undefin
     // Only the background may decide which frame's headers a job replays, and what the page holds.
     replay: undefined,
     held: undefined,
+    capture:
+      req.capture && (req.capture.speed === 'fast' || req.capture.speed === 'realtime')
+        ? { speed: req.capture.speed }
+        : undefined,
     // The names and URLs inside a ZIP are the background's to decide.
     zip: sanitizeZip(req.zip),
     ...(req.file && isFileKind(req.file.kind) ? { file: { kind: req.file.kind } } : { file: undefined }),

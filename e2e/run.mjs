@@ -77,6 +77,8 @@ const ctx = await chromium.launchPersistentContext(profile, {
     `--load-extension=${extDir}`,
     '--no-sandbox',
     '--disable-dev-shm-usage',
+    // E2E_CHROME_LOG=1 (with DEBUG=pw:browser) prints every console message of every context, offscreen included
+    ...(process.env.E2E_CHROME_LOG ? ['--enable-logging=stderr', '--v=0'] : []),
   ],
 });
 
@@ -1919,8 +1921,11 @@ await step(
     );
     const big = blobRes((r) => r.kind === 'archive');
     assert(big?.sizeBytes === 9 * 1024 * 1024 && big.ext === 'zip', `big ${JSON.stringify(big)}`);
-    // the MediaSource and the revoked URL cannot be read: counted, not listed
-    assert(blobsState.notes.blobSources === 2, `unreadable blob sources: ${blobsState.notes.blobSources}`);
+    // the MediaSource and the revoked URL cannot be read as files: they are listed as players to capture (or explained),
+    // not hidden behind a count
+    const players = blobsState.resources.filter((r) => r.held?.kind === 'mse');
+    assert(players.length === 2, `players listed: ${players.length}`);
+    assert(blobsState.notes.blobSources === 0, `unreadable blob sources: ${blobsState.notes.blobSources}`);
     assert(
       !JSON.stringify(blobsState).includes('blob:http'),
       'no blob: URL may be kept in the extension state',
@@ -2377,6 +2382,379 @@ await step(
   },
 );
 
+// ---- MSE capture (VDH-038): a player that feeds the video piece by piece through MediaSource
+async function enableHook(on) {
+  await ext((v) => chrome.storage.local.set({ settings: { schemaVersion: 1, pageHook: v } }), on);
+  await until(
+    async () =>
+      (await ext(() => chrome.scripting.getRegisteredContentScripts())).some((x) => x.id === 'vdh-hook') ===
+      on,
+    `hook ${on ? 'registered' : 'removed'}`,
+    10000,
+  );
+}
+async function openMse(query = '') {
+  const pg = await ctx.newPage();
+  pg.on('console', (m) => {
+    if (/vdown|error/i.test(m.text())) console.log(`        [mse page] ${m.text().slice(0, 400)}`);
+  });
+  await pg.goto(`${A}/pages/mse.html${query}`);
+  await pg.waitForFunction(() => window.ready === true, null, { timeout: 15000 });
+  // let the player buffer what it wants (it ends the stream when everything is in)
+  await pg.waitForFunction(() => document.getElementById('v').buffered.length > 0, null, { timeout: 15000 });
+  const id = await ext(
+    async (u) => (await chrome.tabs.query({})).filter((t) => t.url?.startsWith(u)).at(-1)?.id,
+    `${A}/pages/mse.html`,
+  );
+  return { pg, id };
+}
+const mseResource = async (id) => {
+  const pop = await openPopup(id);
+  await pop.getByRole('status').filter({ hasText: 'READY' }).waitFor({ timeout: 45000 });
+  const st = (await ext((i) => chrome.storage.session.get(`tab:${i}`), id))[`tab:${id}`];
+  return { pop, st, r: st.resources.find((x) => x.held?.kind === 'mse') };
+};
+const videoState = (pg) =>
+  pg.evaluate(() => {
+    const v = document.getElementById('v');
+    return {
+      paused: v.paused,
+      muted: v.muted,
+      rate: v.playbackRate,
+      time: v.currentTime,
+      banner: !!document.querySelector('[data-vdown-banner]'),
+    };
+  });
+
+await step(
+  'capture: a MediaSource player with no stream address is listed as capturable (with the hook), not as a dead end',
+  async () => {
+    await enableHook(true);
+    const { pg, id } = await openMse();
+    const { pop, st, r } = await mseResource(id);
+    assert(
+      r,
+      `no MediaSource resource; saw ${JSON.stringify(st.resources.map((x) => [x.kind, x.url.slice(0, 40)]))}`,
+    );
+    assert(r.kind === 'blob' && r.title === 'MSE clip', `kind/title ${r.kind}/${r.title}`);
+    assert(
+      r.downloadability.status === 'downloadable' && r.downloadability.detail === 'mse-capturable',
+      JSON.stringify(r.downloadability),
+    );
+    assert(!JSON.stringify(st).includes('blob:http'), 'no blob: URL may be kept in the extension state');
+    const card = pop.locator(`[data-resource-id="${r.id}"]`);
+    await card.getByRole('button', { name: 'CAPTURE (FAST)' }).waitFor();
+    await card.getByRole('button', { name: 'RECORD (REAL TIME)' }).waitFor();
+    await shot(pop, 'popup-capture');
+    await pop.close();
+    await pg.close();
+  },
+);
+
+await step('capture: without the page hook the player is explained, never guessed at', async () => {
+  await enableHook(false);
+  const { pg, id } = await openMse();
+  const { pop, r } = await mseResource(id);
+  assert(
+    r?.downloadability.status === 'unsupported' && r.downloadability.reason === 'mse-needs-hook',
+    JSON.stringify(r?.downloadability),
+  );
+  const card = pop.locator(`[data-resource-id="${r.id}"]`);
+  assert((await card.innerText()).includes('Look inside players'), 'the card must say what to turn on');
+  assert(
+    (await card.getByRole('button', { name: 'CAPTURE (FAST)' }).count()) === 0,
+    'no capture button without the hook',
+  );
+  // and the background refuses a forged request
+  const res = await ext(
+    (req) =>
+      chrome.runtime.sendMessage({ channel: 'vdown', type: 'start-download', payload: { request: req } }),
+    {
+      resourceId: r.id,
+      sourceUrl: r.url,
+      tabId: id,
+      pageUrl: r.pageUrl,
+      host: r.host,
+      mode: 'original',
+      container: 'original',
+      audioFormat: 'mp3',
+      audioBitrate: 192,
+      filename: 'x.mp4',
+      subfolder: '',
+      qualityLabel: 'x',
+      sourceFormat: 'unknown',
+      isHls: false,
+      hasMuxedAudio: true,
+      hasVideo: true,
+      capture: { speed: 'fast' },
+    },
+  );
+  assert(res.ok === false, `accepted a capture the scan did not offer: ${JSON.stringify(res)}`);
+  await pop.close();
+  await pg.close();
+  await enableHook(true);
+});
+
+await step(
+  'capture: fast capture records what the player receives into a valid, decodable file; the page is put back',
+  async () => {
+    const { pg, id } = await openMse();
+    const before = await videoState(pg);
+    const { pop, r } = await mseResource(id);
+    await pop.locator(`[data-resource-id="${r.id}"]`).getByRole('button', { name: 'CAPTURE (FAST)' }).click();
+    // the page shows a banner while it is being played through
+    await until(async () => (await videoState(pg)).banner, 'the capture banner', 10000, 50);
+    const job = await jobFinished((j) => j.request.capture && j.createdAt > Date.now() - 90000, 120000);
+    assert(job.stage === 'completed', `stage ${job.stage}: ${JSON.stringify(job.error)}`);
+    assert(job.viaOffscreen === true && /\.mp4$/.test(job.request.filename), `name ${job.request.filename}`);
+    const stages = await stagesOf(job.id);
+    assert(stages.includes('merging') && !stages.includes('encoding'), `stages ${stages}`);
+    const file = fileOf(job);
+    const p = probe(file);
+    assert(
+      p.codecs.includes('vp9') && p.codecs.includes('opus') && /mp4/.test(p.format),
+      `${p.codecs} ${p.format}`,
+    );
+    assert(Math.abs(p.duration - 6) < 0.8, `duration ${p.duration}`);
+    assert(p.width === 640, `width ${p.width}`);
+    assert(decodeErrors(file) === '', 'decode errors');
+    // banner gone, video back as it was
+    await until(async () => !(await videoState(pg)).banner, 'banner removal', 10000);
+    const after = await videoState(pg);
+    assert(
+      after.muted === before.muted && after.rate === before.rate && after.paused === before.paused,
+      `before ${JSON.stringify(before)} after ${JSON.stringify(after)}`,
+    );
+    await pop.close();
+    await pg.close();
+  },
+);
+
+await step(
+  'capture: a quality switch during the capture yields one file per quality (parts), never a re-encode',
+  async () => {
+    const { pg, id } = await openMse('?plan=low,low,high');
+    const { pop, r } = await mseResource(id);
+    const before = (await jobs()).length;
+    await pop.locator(`[data-resource-id="${r.id}"]`).getByRole('button', { name: 'CAPTURE (FAST)' }).click();
+    await until(
+      async () =>
+        (await jobs()).slice(before).filter((j) => j.request.capture || j.request.filename.includes('(part'))
+          .length >= 2,
+      'both parts queued',
+      120000,
+    );
+    await until(
+      async () =>
+        (await jobs()).slice(before).every((j) => ['completed', 'failed', 'cancelled'].includes(j.stage)),
+      'parts finished',
+      120000,
+    );
+    const parts = (await jobs()).slice(before);
+    assert(
+      parts.every((j) => j.stage === 'completed'),
+      `stages ${parts.map((j) => j.stage)} ${JSON.stringify(parts.map((j) => j.error))}`,
+    );
+    assert(parts.length === 2, `expected 2 parts, got ${parts.length}`);
+    const names = parts.map((j) => j.request.filename).sort();
+    assert(/\(part 1\)\.mp4$/.test(names[0]) && /\(part 2\)\.mp4$/.test(names[1]), `names ${names}`);
+    const byWidth = parts.map((j) => ({ j, p: probe(fileOf(j)) })).sort((a, b) => a.p.width - b.p.width);
+    assert(
+      byWidth[0].p.width === 320 && byWidth[1].p.width === 640,
+      `widths ${byWidth.map((x) => x.p.width)}`,
+    );
+    assert(
+      byWidth.every((x) => x.p.codecs.includes('vp9') && x.p.codecs.includes('opus')),
+      'streams are copied: vp9 + opus in both',
+    );
+    const total = byWidth.reduce((n, x) => n + x.p.duration, 0);
+    assert(Math.abs(total - 6) < 1.5, `parts add up to ${total} s`);
+    for (const x of byWidth) assert(decodeErrors(fileOf(x.j)) === '', 'decode errors');
+    await pop.close();
+    await pg.close();
+  },
+);
+
+await step(
+  'capture: real-time capture can be cancelled from the queue; nothing is saved and the video is restored',
+  async () => {
+    const { pg, id } = await openMse();
+    const { pop, r } = await mseResource(id);
+    const before = (await jobs()).length;
+    await pop
+      .locator(`[data-resource-id="${r.id}"]`)
+      .getByRole('button', { name: 'RECORD (REAL TIME)' })
+      .click();
+    await until(async () => (await videoState(pg)).banner, 'the capture banner', 10000, 50);
+    const live = await videoState(pg);
+    assert(live.muted === true, 'the video is muted while capturing');
+    // cancel from the queue
+    const job = await until(
+      async () => (await jobs()).slice(before).find((j) => j.request.capture),
+      'job',
+      10000,
+    );
+    await ext(
+      (i) =>
+        chrome.runtime.sendMessage({
+          channel: 'vdown',
+          type: 'job-action',
+          payload: { jobId: i, action: 'cancel' },
+        }),
+      job.id,
+    );
+    const done = await jobFinished((j) => j.id === job.id, 30000);
+    assert(done.stage === 'cancelled', `stage ${done.stage}`);
+    await until(async () => !(await videoState(pg)).banner, 'banner removal after cancel', 10000);
+    assert((await videoState(pg)).muted === false, 'muted state restored');
+    await pop.close();
+    await pg.close();
+  },
+);
+
+await step(
+  'capture: real-time capture records the whole clip at normal speed into a valid, decodable file',
+  async () => {
+    const { pg, id } = await openMse();
+    const before = await videoState(pg);
+    const { pop, r } = await mseResource(id);
+    const known = new Set((await jobs()).map((j) => j.id));
+    const started = Date.now();
+    await pop
+      .locator(`[data-resource-id="${r.id}"]`)
+      .getByRole('button', { name: 'RECORD (REAL TIME)' })
+      .click();
+    await until(async () => (await videoState(pg)).banner, 'the capture banner', 10000, 50);
+    assert((await videoState(pg)).rate === 1, 'real-time capture keeps the normal speed');
+    const job = await jobFinished((j) => j.request.capture && !known.has(j.id), 120000);
+    assert(job.stage === 'completed', `stage ${job.stage}: ${JSON.stringify(job.error)}`);
+    assert(
+      Date.now() - started > 4500,
+      `a real-time capture of a 6 s clip took only ${Date.now() - started} ms`,
+    );
+    const file = fileOf(job);
+    const p = probe(file);
+    assert(p.codecs.includes('vp9') && p.codecs.includes('opus'), `${p.codecs}`);
+    assert(Math.abs(p.duration - 6) < 0.8, `duration ${p.duration}`);
+    assert(decodeErrors(file) === '', 'decode errors');
+    await until(async () => !(await videoState(pg)).banner, 'banner removal', 10000);
+    const after = await videoState(pg);
+    assert(
+      after.muted === before.muted && after.rate === before.rate && after.paused === before.paused,
+      `before ${JSON.stringify(before)} after ${JSON.stringify(after)}`,
+    );
+    await pop.close();
+    await pg.close();
+  },
+);
+
+await step(
+  "capture: the banner's own Cancel button stops the capture, nothing is saved and the video is restored",
+  async () => {
+    const { pg, id } = await openMse();
+    const { pop, r } = await mseResource(id);
+    const before = (await jobs()).length;
+    await pop
+      .locator(`[data-resource-id="${r.id}"]`)
+      .getByRole('button', { name: 'RECORD (REAL TIME)' })
+      .click();
+    await until(async () => (await videoState(pg)).banner, 'the capture banner', 10000, 50);
+    // the banner lives in a closed shadow root: click where its (right-most) button is
+    const box = await pg.locator('[data-vdown-banner]').boundingBox();
+    assert(box, 'banner has a box');
+    await pg.mouse.click(box.x + box.width - 30, box.y + box.height / 2);
+    const job = (await jobs()).slice(before).find((j) => j.request.capture);
+    assert(job, 'capture job exists');
+    const done = await jobFinished((j) => j.id === job.id, 30000);
+    assert(done.stage === 'cancelled', `stage ${done.stage}`);
+    await until(async () => !(await videoState(pg)).banner, 'banner removal after cancel', 10000);
+    const after = await videoState(pg);
+    assert(after.muted === false && after.rate === 1, `restored ${JSON.stringify(after)}`);
+    await pop.close();
+    await pg.close();
+  },
+);
+
+await step('capture: EME-protected playback is never captured', async () => {
+  const { pg, id } = await openMse('?eme=1');
+  await pg.waitForFunction(() => document.getElementById('v').mediaKeys !== null, null, { timeout: 10000 });
+  const { pop, r } = await mseResource(id);
+  assert(
+    r && r.downloadability.status !== 'downloadable',
+    `an EME video must not be capturable: ${JSON.stringify(r?.downloadability)}`,
+  );
+  assert(
+    (await pop
+      .locator(`[data-resource-id="${r.id}"]`)
+      .getByRole('button', { name: 'CAPTURE (FAST)' })
+      .count()) === 0,
+    'no capture button',
+  );
+  await pop.close();
+  await pg.close();
+});
+
+for (const kind of ['hls', 'dash']) {
+  await step(
+    `real ${kind === 'hls' ? 'hls.js' : 'dash.js'} player in a cross-origin frame: the stream address is found through the hook and downloads; the MSE video is listed too`,
+    async () => {
+      await enableHook(true);
+      const pg = await ctx.newPage();
+      await pg.goto(`${A}/pages/player-top.html?c=${encodeURIComponent(C)}&kind=${kind}`);
+      const frame = await until(
+        async () => pg.frames().find((f) => f.url().startsWith(`${C}/pages/player.html`)),
+        'player frame',
+        10000,
+      );
+      await frame.waitForFunction(
+        () => window.player?.state === 'manifest' || window.player?.state === 'metadata',
+        null,
+        {
+          timeout: 30000,
+        },
+      );
+      await frame.waitForFunction(() => document.getElementById('v').buffered.length > 0, null, {
+        timeout: 30000,
+      });
+      const id = await tabOf(`${A}/pages/player-top.html`);
+      const pop = await openPopup(id);
+      await pop.getByRole('status').filter({ hasText: 'READY' }).waitFor({ timeout: 45000 });
+      const st = (await ext((i) => chrome.storage.session.get(`tab:${i}`), id))[`tab:${id}`];
+      const wantKind = kind === 'hls' ? 'hls-master' : 'dash';
+      const manifest = st.resources.find(
+        (r) => r.kind === wantKind && r.frameUrl?.startsWith(`${C}/pages/player.html`),
+      );
+      assert(
+        manifest,
+        `manifest not found; saw ${JSON.stringify(st.resources.map((r) => [r.kind, r.frameId, r.url.slice(0, 60)]))}`,
+      );
+      assert(manifest.frameId > 0, `frame ${manifest.frameId}`);
+      assert(manifest.downloadability.status === 'downloadable', JSON.stringify(manifest.downloadability));
+      const mse = st.resources.find((r) => r.held?.kind === 'mse');
+      assert(
+        mse && mse.downloadability.status === 'downloadable',
+        `the MSE video must be listed as capturable: ${JSON.stringify(mse?.downloadability)}`,
+      );
+      assert(!JSON.stringify(st).includes('blob:http'), 'no blob: URL may be kept in the extension state');
+      const before = (await jobs()).length;
+      await pop
+        .locator(`[data-resource-id="${manifest.id}"]`)
+        .getByRole('button', { name: 'DOWNLOAD' })
+        .click();
+      const job = await jobFinished((j) => j.request.resourceId === manifest.id, 120000);
+      assert(job.stage === 'completed', `stage ${job.stage}: ${JSON.stringify(job.error)}`);
+      assert((await jobs()).length > before, 'a job was queued');
+      const file = fileOf(job);
+      const p = probe(file);
+      assert(p.codecs.includes('vp9') && p.codecs.includes('opus'), `${p.codecs}`);
+      assert(Math.abs(p.duration - 6) < 1, `duration ${p.duration}`);
+      assert(decodeErrors(file) === '', 'decode errors');
+      await pop.close();
+      await pg.close();
+    },
+  );
+}
+
 await step('frames the extension cannot enter are listed by origin, with an "allow" button', async () => {
   const bp = await ctx.newPage();
   await bp.goto(`${A}/pages/frames-blocked.html?b=${encodeURIComponent(B)}`);
@@ -2514,5 +2892,11 @@ const skipped = results.filter((r) => r.skipped).length;
 console.log(`\n${results.length - failed.length - skipped}/${results.length} passed, ${skipped} skipped`);
 if (failed.length) {
   console.log('failed:\n - ' + failed.map((f) => f.name).join('\n - '));
+  // what the extension itself logged (warnings and errors), to see why
+  const noisy = consoleLog.filter((m) => m.type === 'error' || m.type === 'warning').slice(-12);
+  if (noisy.length)
+    console.log(
+      'extension console:\n' + noisy.map((m) => `  [${m.type}] ${m.text.slice(0, 300)}`).join('\n'),
+    );
   process.exit(1);
 }

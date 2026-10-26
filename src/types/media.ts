@@ -80,7 +80,11 @@ export type ReasonCode =
   | 'no-segments'
   | 'dash-clearkey'
   | 'subtitle-unsupported'
-  | 'too-large';
+  | 'too-large'
+  /** A MediaSource player: capturing needs the page hook ("Look inside players"). */
+  | 'mse-needs-hook'
+  /** A MediaSource player whose appended data cannot be recorded (the hook never saw it). */
+  | 'mse-unrecordable';
 
 export type DownloadabilityStatus = 'downloadable' | 'protected' | 'inaccessible' | 'unsupported' | 'unknown';
 
@@ -108,7 +112,7 @@ export interface PlaylistSummary {
  * a small handle instead of the data.
  */
 export interface PageHeld {
-  kind: 'data' | 'blob';
+  kind: 'data' | 'blob' | 'mse';
   /** Handle inside the owning frame's scanner (a hash of the data), not a URL. */
   id: string;
   /** Decoded size in bytes. */
