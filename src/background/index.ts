@@ -36,7 +36,9 @@ registerHandlers({
 chrome.runtime.onMessage.addListener((raw: unknown, sender) => {
   const ev = raw as Partial<OffscreenEvent> | null;
   if (!ev || ev.channel !== 'vdown-offscreen-event' || sender.id !== chrome.runtime.id) return false;
-  void handleOffscreenEvent(ev as OffscreenEvent).catch((e: unknown) => log.error('offscreen event failed:', e));
+  void handleOffscreenEvent(ev as OffscreenEvent).catch((e: unknown) =>
+    log.error('offscreen event failed:', e),
+  );
   return false;
 });
 

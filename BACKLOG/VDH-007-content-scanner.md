@@ -1,7 +1,7 @@
 ---
 id: VDH-007
 title: Content-script DOM and performance scanner
-status: in-progress
+status: done
 priority: P0
 area: content
 depends_on: [VDH-003, VDH-006]
@@ -15,11 +15,11 @@ Injected on demand via `chrome.scripting`. Collects `video`/`audio`, `currentSrc
 
 ## Acceptance criteria
 
-- [ ] Idempotent re-injection
-- [ ] Handles shadow DOM open roots and same-origin iframes where accessible
-- [ ] No page data beyond media URLs/metadata leaves the scanner
-- [ ] Unit tests with jsdom fixtures
+- [x] Idempotent re-injection
+- [x] Handles shadow DOM open roots and same-origin iframes where accessible
+- [x] No page data beyond media URLs/metadata leaves the scanner
+- [x] Unit tests with jsdom fixtures
 
 ## Notes
 
-Implemented in `src/content/scanner.ts`; jsdom tests in `tests/scanner.test.ts` pass. Not yet verified in real Chromium (VDH-018).
+jsdom tests in `tests/scanner.test.ts`; exercised repeatedly in real Chromium by the E2E suite (rescans, iframes not present in fixtures; same-origin iframes are covered by the jsdom test only).

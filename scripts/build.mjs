@@ -4,6 +4,13 @@ import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node
 import { resolve } from 'node:path';
 import { build } from 'vite';
 
+// vite.shared.ts is loaded through Node's built-in TypeScript support (unflagged since 22.18).
+const [major = 0, minor = 0] = process.versions.node.split('.').map(Number);
+if (major < 22 || (major === 22 && minor < 18)) {
+  console.error(`Node ${process.versions.node} is too old: this build needs Node 22.18 or newer.`);
+  process.exit(1);
+}
+
 const root = resolve(import.meta.dirname, '..');
 const { pagesConfig, backgroundConfig, contentConfig, DIST } = await import(resolve(root, 'vite.shared.ts'));
 

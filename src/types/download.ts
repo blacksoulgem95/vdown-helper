@@ -6,14 +6,7 @@ export type VideoContainer = 'mp4' | 'mkv' | 'ts' | 'original';
 export type AudioBitrate = 128 | 192 | 256 | 320;
 
 export type JobStage =
-  | 'detected'
-  | 'preparing'
-  | 'downloading'
-  | 'merging'
-  | 'encoding'
-  | 'completed'
-  | 'failed'
-  | 'cancelled';
+  'detected' | 'preparing' | 'downloading' | 'merging' | 'encoding' | 'completed' | 'failed' | 'cancelled';
 
 export type JobErrorCode =
   | 'cors'
@@ -53,6 +46,13 @@ export interface DownloadRequest {
   /** Final filename without directory, sanitised, with extension. */
   filename: string;
   subfolder: string;
+  /** Show Chrome's "Save as" dialog for this download. */
+  saveAs?: boolean;
+  /**
+   * Origins the user granted access to. Only these are fetched with cookies; every other origin is fetched
+   * without credentials, which is what wildcard-CORS CDNs require.
+   */
+  credentialedOrigins?: string[];
   /** Source description for the queue display. */
   qualityLabel: string;
   sourceFormat: MediaFormat;

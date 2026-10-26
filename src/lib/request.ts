@@ -1,4 +1,10 @@
-import type { AudioBitrate, AudioFormat, DownloadRequest, OutputMode, VideoContainer } from '@/types/download';
+import type {
+  AudioBitrate,
+  AudioFormat,
+  DownloadRequest,
+  OutputMode,
+  VideoContainer,
+} from '@/types/download';
 import type { HlsRendition, HlsVariant } from '@/types/hls';
 import type { VariantInspection } from '@/types/messages';
 import type { MediaResource } from '@/types/media';
@@ -6,7 +12,13 @@ import type { Settings } from '@/types/settings';
 import { planOutput, type Plan, type PlanInput } from './compat';
 import { describeCodecs, estimateBytes, resolutionLabel, type AudioFamily, type VideoFamily } from './media';
 import { pickVariantIndex } from './settings';
-import { isSafeFetchUrl, renderNameTemplate, sanitizeFilename, sanitizeSubfolder, withExtension } from './security';
+import {
+  isSafeFetchUrl,
+  renderNameTemplate,
+  sanitizeFilename,
+  sanitizeSubfolder,
+  withExtension,
+} from './security';
 
 export interface Choices {
   mode: OutputMode;
@@ -19,6 +31,8 @@ export interface Choices {
   audioIndex: number;
   /** User-typed base name (no extension); empty = use the naming template. */
   filename: string;
+  /** Override of the global "ask where to save" setting. */
+  saveAs?: boolean;
 }
 
 /** Audio renditions that belong to the chosen variant's audio group (or all, for audio-only masters). */
@@ -29,7 +43,10 @@ export function audioOptions(resource: MediaResource, variant: HlsVariant | unde
 }
 
 export function defaultChoices(resource: MediaResource, settings: Settings): Choices {
-  const variantIndex = pickVariantIndex(resource.variants.map((v) => v.height), settings.preferredQuality);
+  const variantIndex = pickVariantIndex(
+    resource.variants.map((v) => v.height),
+    settings.preferredQuality,
+  );
   const variant = resource.variants[variantIndex];
   const opts = audioOptions(resource, variant);
   const def = opts.findIndex((a) => a.isDefault);
@@ -101,13 +118,16 @@ export function buildRequest(
   const separateAudio = audioUrl !== undefined;
   const hasVideo = !audioOnlyMaster && resource.mediaType !== 'audio';
   const audioCodecKnownMissing = codecs !== undefined && fam.audio === undefined && fam.video !== undefined;
-  const audioFromRendition = choices.mode === 'audio-only' && sourceUrl !== resource.url && !!audioTrack?.uri && sourceUrl === audioTrack.uri;
-  const hasMuxedAudio = audioOnlyMaster || audioFromRendition ? true : separateAudio ? false : !audioCodecKnownMissing;
+  const audioFromRendition =
+    choices.mode === 'audio-only' &&
+    sourceUrl !== resource.url &&
+    !!audioTrack?.uri &&
+    sourceUrl === audioTrack.uri;
+  const hasMuxedAudio =
+    audioOnlyMaster || audioFromRendition ? true : separateAudio ? false : !audioCodecKnownMissing;
 
   const duration = inspection?.durationSec ?? resource.durationSec;
-  const estimated = isHls
-    ? estimateBytes(bandwidth, duration)
-    : resource.sizeBytes;
+  const estimated = isHls ? estimateBytes(bandwidth, duration) : resource.sizeBytes;
 
   const req: DownloadRequest = {
     resourceId: resource.id,
@@ -121,6 +141,7 @@ export function buildRequest(
     audioBitrate: choices.audioBitrate,
     filename: '',
     subfolder: sanitizeSubfolder(settings.subfolder),
+    saveAs: choices.saveAs ?? settings.askWhereToSave,
     qualityLabel: '',
     sourceFormat: isHls ? 'hls' : resource.format,
     isHls,
@@ -141,7 +162,10 @@ export function buildRequest(
   if (duration) req.durationSec = duration;
   if (estimated !== undefined) req.estimatedBytes = estimated;
 
-  const plan = planFromRequest(req, { maxMemoryMb: settings.maxMemoryMb, maxEncodeDurationSec: settings.maxEncodeDurationSec });
+  const plan = planFromRequest(req, {
+    maxMemoryMb: settings.maxMemoryMb,
+    maxEncodeDurationSec: settings.maxEncodeDurationSec,
+  });
   const ext = plan.extension || (isHls ? 'ts' : resource.format === 'unknown' ? 'mp4' : resource.format);
   const base = choices.filename.trim()
     ? sanitizeFilename(choices.filename)
@@ -158,14 +182,20 @@ export function buildRequest(
   return req;
 }
 
-export function qualityLabelFor(req: Pick<DownloadRequest, 'mode' | 'audioFormat' | 'audioBitrate' | 'sourceFormat'>, height: number | undefined): string {
+export function qualityLabelFor(
+  req: Pick<DownloadRequest, 'mode' | 'audioFormat' | 'audioBitrate' | 'sourceFormat'>,
+  height: number | undefined,
+): string {
   if (req.mode === 'audio-only') return `${req.audioFormat.toUpperCase()}`;
   const res = resolutionLabel(height);
   return res || req.sourceFormat.toUpperCase();
 }
 
 /** Single source of truth for "what will happen and is it allowed", used by both the UI and the background. */
-export function planFromRequest(req: DownloadRequest, limits: { maxMemoryMb: number; maxEncodeDurationSec: number }): Plan {
+export function planFromRequest(
+  req: DownloadRequest,
+  limits: { maxMemoryMb: number; maxEncodeDurationSec: number },
+): Plan {
   const input: PlanInput = {
     isHls: req.isHls,
     sourceFormat: req.sourceFormat,
@@ -195,7 +225,22 @@ export function sanitizeRequest(req: DownloadRequest): DownloadRequest | undefin
   if (!isSafeFetchUrl(req.sourceUrl)) return undefined;
   if (req.audioUrl !== undefined && !isSafeFetchUrl(req.audioUrl)) return undefined;
   const dot = req.filename.lastIndexOf('.');
-  const ext = dot > 0 ? req.filename.slice(dot + 1).replace(/[^a-z0-9]/gi, '').slice(0, 5).toLowerCase() : '';
+  const ext =
+    dot > 0
+      ? req.filename
+          .slice(dot + 1)
+          .replace(/[^a-z0-9]/gi, '')
+          .slice(0, 5)
+          .toLowerCase()
+      : '';
   const base = sanitizeFilename(dot > 0 ? req.filename.slice(0, dot) : req.filename);
-  return { ...req, filename: ext ? `${base}.${ext}` : base, subfolder: sanitizeSubfolder(req.subfolder) };
+  const origins = (req.credentialedOrigins ?? [])
+    .filter((o) => typeof o === 'string' && /^https?:\/\/[^/]+$/.test(o))
+    .slice(0, 24);
+  return {
+    ...req,
+    filename: ext ? `${base}.${ext}` : base,
+    subfolder: sanitizeSubfolder(req.subfolder),
+    credentialedOrigins: origins,
+  };
 }

@@ -1,7 +1,7 @@
 ---
 id: VDH-013
 title: Design system and theme
-status: todo
+status: done
 priority: P1
 area: ui
 depends_on: [VDH-001]
@@ -15,10 +15,10 @@ Tailwind theme tokens from the spec palette (#080A12, #101522, #00F5FF, #FF2BD6,
 
 ## Acceptance criteria
 
-- [ ] Contrast >= WCAG AA for text on surfaces
-- [ ] No external font/CDN requests
-- [ ] Components keyboard accessible
+- [x] Contrast >= WCAG AA for text on surfaces
+- [x] No external font/CDN requests
+- [x] Components keyboard accessible
 
 ## Notes
 
-_None yet._
+Contrast is asserted from the real tokens in `tests/contrast.test.ts` (all text colours ≥ 4.5:1 on all three surfaces). Disabled-control styling is exempt from contrast rules.

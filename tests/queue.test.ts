@@ -47,17 +47,20 @@ const plan = (over: Partial<Plan> = {}): Plan => ({
 });
 
 describe('stagesFor: only the stages a job really passes through', () => {
-  it('native', () => expect(stagesFor(plan())).toEqual(['detected', 'preparing', 'downloading', 'completed']));
+  it('native', () =>
+    expect(stagesFor(plan())).toEqual(['detected', 'preparing', 'downloading', 'completed']));
   it('copy-merge', () =>
-    expect(stagesFor(plan({ requiresFfmpeg: true, pipeline: 'hls-ffmpeg-copy' }))).toEqual(['detected', 'preparing', 'downloading', 'merging', 'completed']));
-  it('transcode', () =>
-    expect(stagesFor(plan({ requiresFfmpeg: true, pipeline: 'ffmpeg-transcode', audio: 'transcode' }))).toEqual([
+    expect(stagesFor(plan({ requiresFfmpeg: true, pipeline: 'hls-ffmpeg-copy' }))).toEqual([
       'detected',
       'preparing',
       'downloading',
-      'encoding',
+      'merging',
       'completed',
     ]));
+  it('transcode', () =>
+    expect(
+      stagesFor(plan({ requiresFfmpeg: true, pipeline: 'ffmpeg-transcode', audio: 'transcode' })),
+    ).toEqual(['detected', 'preparing', 'downloading', 'encoding', 'completed']));
 });
 
 describe('transitions', () => {

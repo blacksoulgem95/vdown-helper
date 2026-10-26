@@ -1,5 +1,11 @@
 import type { HlsMasterPlaylist, HlsMediaPlaylist, HlsVariant } from '@/types/hls';
-import type { Downloadability, MediaFormat, MediaResource, PlaylistSummary, RawCandidate } from '@/types/media';
+import type {
+  Downloadability,
+  MediaFormat,
+  MediaResource,
+  PlaylistSummary,
+  RawCandidate,
+} from '@/types/media';
 import { classifyPlaylist, parseHls } from './hls/parser';
 import { estimateBytes, formatFromMime, formatFromUrl, inferTitle, mediaTypeOf } from './media';
 import type { ProbeResult } from './netprobe';
@@ -28,7 +34,10 @@ export interface AnalyzeOptions {
 interface Entry {
   url: string;
   methods: RawCandidate['method'][];
-  hints: Pick<RawCandidate, 'title' | 'mimeType' | 'mediaType' | 'durationSec' | 'width' | 'height' | 'poster'>;
+  hints: Pick<
+    RawCandidate,
+    'title' | 'mimeType' | 'mediaType' | 'durationSec' | 'width' | 'height' | 'poster'
+  >;
 }
 
 const PLAYLIST_FORMATS: ReadonlySet<MediaFormat> = new Set(['hls', 'm3u', 'dash']);
@@ -72,8 +81,11 @@ export async function mapPool<T, R>(items: T[], limit: number, fn: (item: T) => 
   return out;
 }
 
-const verdict = (status: Downloadability['status'], reason: Downloadability['reason'], detail?: string): Downloadability =>
-  detail === undefined ? { status, reason } : { status, reason, detail };
+const verdict = (
+  status: Downloadability['status'],
+  reason: Downloadability['reason'],
+  detail?: string,
+): Downloadability => (detail === undefined ? { status, reason } : { status, reason, detail });
 
 function failureVerdict(r: Extract<ProbeResult, { ok: false }>): Downloadability {
   if (r.kind === 'http') return verdict('inaccessible', 'http-error', `HTTP ${r.status ?? '?'}`);
@@ -83,7 +95,10 @@ function failureVerdict(r: Extract<ProbeResult, { ok: false }>): Downloadability
 
 function skeleton(e: Entry, ctx: AnalyzeContext, format: MediaFormat): MediaResource {
   const pageHost = parseUrl(ctx.pageUrl)?.hostname ?? parseUrl(e.url)?.hostname ?? '';
-  const titleOpts: { url: string; elementTitle?: string; pageTitle?: string } = { url: e.url, pageTitle: ctx.pageTitle };
+  const titleOpts: { url: string; elementTitle?: string; pageTitle?: string } = {
+    url: e.url,
+    pageTitle: ctx.pageTitle,
+  };
   if (e.hints.title) titleOpts.elementTitle = e.hints.title;
   const r: MediaResource = {
     id: resourceId(e.url),
@@ -189,7 +204,11 @@ async function analyzePlaylist(r: MediaResource, fetcher: Fetcher): Promise<Medi
   return finishMaster(r, pl, fetcher);
 }
 
-async function finishMaster(r: MediaResource, pl: HlsMasterPlaylist, fetcher: Fetcher): Promise<MediaResource> {
+async function finishMaster(
+  r: MediaResource,
+  pl: HlsMasterPlaylist,
+  fetcher: Fetcher,
+): Promise<MediaResource> {
   r.kind = 'hls-master';
   r.variants = pl.variants.slice(0, MAX_VARIANTS);
   r.audioTracks = pl.renditions.filter((x) => x.type === 'AUDIO' && x.uri);
@@ -254,8 +273,18 @@ async function analyzeFile(r: MediaResource, e: Entry, fetcher: Fetcher): Promis
     r.format = fromMime;
     r.mediaType = e.hints.mediaType ?? mediaTypeOf(fromMime);
   }
-  const looksMedia = mime.startsWith('video/') || mime.startsWith('audio/') || mime === 'application/octet-stream' || mime === '' || mime === 'binary/octet-stream';
-  if (r.format === 'unknown' && !looksMedia && !e.methods.includes('dom-element') && !e.methods.includes('dom-source')) {
+  const looksMedia =
+    mime.startsWith('video/') ||
+    mime.startsWith('audio/') ||
+    mime === 'application/octet-stream' ||
+    mime === '' ||
+    mime === 'binary/octet-stream';
+  if (
+    r.format === 'unknown' &&
+    !looksMedia &&
+    !e.methods.includes('dom-element') &&
+    !e.methods.includes('dom-source')
+  ) {
     r.downloadability = verdict('unsupported', 'unsupported-format', mime);
     return r;
   }
@@ -294,6 +323,8 @@ export async function analyzeCandidates(
 /** A resource as shown before probing completes: facts from the page only. */
 export function provisionalResources(candidates: RawCandidate[], ctx: AnalyzeContext): MediaResource[] {
   return dedupeResources(
-    collectEntries(candidates).map((e) => skeleton(e, ctx, formatFromMime(e.hints.mimeType) ?? formatFromUrl(e.url) ?? 'unknown')),
+    collectEntries(candidates).map((e) =>
+      skeleton(e, ctx, formatFromMime(e.hints.mimeType) ?? formatFromUrl(e.url) ?? 'unknown'),
+    ),
   );
 }

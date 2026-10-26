@@ -29,10 +29,19 @@ function failure(e: unknown): ProbeResult {
 }
 
 /** HEAD, falling back to a one-byte ranged GET when HEAD is refused. Only headers are read. */
-export async function probeHeaders(url: string, f: FetchLike = fetch, credentials: RequestCredentials = 'same-origin'): Promise<ProbeResult> {
+export async function probeHeaders(
+  url: string,
+  f: FetchLike = fetch,
+  credentials: RequestCredentials = 'same-origin',
+): Promise<ProbeResult> {
   const attempt = async (init: RequestInit): Promise<ProbeResult> => {
     try {
-      const res = await f(url, { ...init, credentials, cache: 'no-store', signal: AbortSignal.timeout(TIMEOUT_MS) });
+      const res = await f(url, {
+        ...init,
+        credentials,
+        cache: 'no-store',
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
       void res.body?.cancel().catch(() => undefined);
       if (!res.ok && res.status !== 206) return { ok: false, kind: 'http', status: res.status };
       const total = res.headers.get('content-range')?.split('/')[1] ?? res.headers.get('content-length');
@@ -41,7 +50,8 @@ export async function probeHeaders(url: string, f: FetchLike = fetch, credential
         ok: true,
         status: res.status,
         contentType: res.headers.get('content-type') ?? '',
-        acceptRanges: (res.headers.get('accept-ranges') ?? '').toLowerCase() === 'bytes' || res.status === 206,
+        acceptRanges:
+          (res.headers.get('accept-ranges') ?? '').toLowerCase() === 'bytes' || res.status === 206,
         finalUrl: res.url || url,
       };
       if (Number.isFinite(n) && n > 0) out.contentLength = n;
@@ -56,7 +66,11 @@ export async function probeHeaders(url: string, f: FetchLike = fetch, credential
 }
 
 /** GET a text resource such as a playlist, capped at MAX_TEXT_BYTES. */
-export async function fetchText(url: string, f: FetchLike = fetch, credentials: RequestCredentials = 'same-origin'): Promise<ProbeResult> {
+export async function fetchText(
+  url: string,
+  f: FetchLike = fetch,
+  credentials: RequestCredentials = 'same-origin',
+): Promise<ProbeResult> {
   try {
     const res = await f(url, { credentials, cache: 'no-store', signal: AbortSignal.timeout(TIMEOUT_MS) });
     if (!res.ok) return { ok: false, kind: 'http', status: res.status };

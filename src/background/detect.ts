@@ -62,11 +62,22 @@ async function runScan(tabId: number): Promise<TabState> {
     const report = await pageScan(tabId);
     const observed = await getObserved(tabId);
     const candidates: RawCandidate[] = [...report.candidates, ...observed];
-    const ctx: AnalyzeContext = { tabId, pageUrl: report.pageUrl, pageTitle: report.pageTitle, now: Date.now() };
+    const ctx: AnalyzeContext = {
+      tabId,
+      pageUrl: report.pageUrl,
+      pageTitle: report.pageTitle,
+      now: Date.now(),
+    };
 
     // Publish what the page itself reveals straight away; probing fills in the details afterwards.
     const provisional = sortResources(provisionalResources(candidates, ctx));
-    await setTabState({ ...base, pageUrl: report.pageUrl, pageTitle: report.pageTitle, notes: report.notes, resources: provisional });
+    await setTabState({
+      ...base,
+      pageUrl: report.pageUrl,
+      pageTitle: report.pageTitle,
+      notes: report.notes,
+      resources: provisional,
+    });
 
     const resources = sortResources(await analyzeCandidates(candidates, ctx, combinedFetcher(tabId)));
     const done: TabState = {
@@ -86,7 +97,13 @@ async function runScan(tabId: number): Promise<TabState> {
     const message = e instanceof Error ? e.message : 'scan-failed';
     log.warn('scan failed:', message);
     // Without activeTab/host access Chrome refuses the injection with a "Cannot access" message.
-    const code = /cannot access|extensions gallery|permission|missing host/i.test(message) ? 'no-access' : 'scan-failed';
+    const code = /chrome:\/\/|chrome-extension:\/\/|extensions gallery|chrome web store|webstore/i.test(
+      message,
+    )
+      ? 'unsupported-page'
+      : /cannot access|permission|missing host/i.test(message)
+        ? 'no-access'
+        : 'scan-failed';
     const s: TabState = { ...base, status: 'error', error: code };
     await setTabState(s);
     return s;

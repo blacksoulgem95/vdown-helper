@@ -83,7 +83,10 @@ const DRM_KEYFORMATS_ALLOWED = new Set(['identity', '']);
 function parseKey(attrs: Record<string, string>, base: string): HlsKey | undefined {
   const rawMethod = (attrs['METHOD'] ?? '').toUpperCase();
   const method: KeyMethod =
-    rawMethod === 'NONE' || rawMethod === 'AES-128' || rawMethod === 'SAMPLE-AES' || rawMethod === 'SAMPLE-AES-CTR'
+    rawMethod === 'NONE' ||
+    rawMethod === 'AES-128' ||
+    rawMethod === 'SAMPLE-AES' ||
+    rawMethod === 'SAMPLE-AES-CTR'
       ? rawMethod
       : 'UNKNOWN';
   if (method === 'NONE') return undefined;
@@ -172,7 +175,14 @@ function parseMaster(lines: string[], url: string): HlsParseResult {
   }
   // Highest resolution first, then bandwidth.
   variants.sort((a, b) => (b.height ?? 0) - (a.height ?? 0) || b.bandwidth - a.bandwidth);
-  const playlist: HlsMasterPlaylist = { kind: 'hls-master', url, variants, renditions, iFrameStreams, sessionKeys };
+  const playlist: HlsMasterPlaylist = {
+    kind: 'hls-master',
+    url,
+    variants,
+    renditions,
+    iFrameStreams,
+    sessionKeys,
+  };
   if (version !== undefined) playlist.version = version;
   return { ok: true, playlist };
 }

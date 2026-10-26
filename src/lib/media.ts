@@ -116,7 +116,14 @@ export function formatFromUrl(url: string): MediaFormat | undefined {
   return EXT_TO_FORMAT[extensionOf(url)];
 }
 
-export const AUDIO_ONLY_FORMATS: ReadonlySet<MediaFormat> = new Set(['mp3', 'm4a', 'aac', 'wav', 'ogg', 'flac']);
+export const AUDIO_ONLY_FORMATS: ReadonlySet<MediaFormat> = new Set([
+  'mp3',
+  'm4a',
+  'aac',
+  'wav',
+  'ogg',
+  'flac',
+]);
 
 export function mediaTypeOf(format: MediaFormat): 'video' | 'audio' | 'unknown' {
   if (AUDIO_ONLY_FORMATS.has(format)) return 'audio';
@@ -184,7 +191,10 @@ export function describeCodecs(codecs: string | undefined): CodecInfo {
 }
 
 /** bits/s x seconds -> bytes. Callers must label the result as an estimate. */
-export function estimateBytes(bitsPerSecond: number | undefined, durationSec: number | undefined): number | undefined {
+export function estimateBytes(
+  bitsPerSecond: number | undefined,
+  durationSec: number | undefined,
+): number | undefined {
   if (!bitsPerSecond || !durationSec || bitsPerSecond <= 0 || durationSec <= 0) return undefined;
   return Math.round((bitsPerSecond * durationSec) / 8);
 }

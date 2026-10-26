@@ -13,7 +13,8 @@ function master(text: string): HlsMasterPlaylist {
 }
 function media(text: string, base = 'https://media.example.com/video/index.m3u8'): HlsMediaPlaylist {
   const r = parseHls(text, base);
-  if (!r.ok || r.playlist.kind !== 'hls-media') throw new Error(`expected media: ${r.ok ? '' : r.error.message}`);
+  if (!r.ok || r.playlist.kind !== 'hls-media')
+    throw new Error(`expected media: ${r.ok ? '' : r.error.message}`);
   return r.playlist;
 }
 
@@ -87,7 +88,10 @@ describe('master playlist', () => {
     expect(r).toMatchObject({ ok: false, error: { code: 'malformed', line: 2 } });
   });
   it('rejects master playlists with no variants', () => {
-    const r = parseHls('#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-I-FRAME-STREAM-INF:BANDWIDTH=1,URI="i.m3u8"\n', BASE);
+    const r = parseHls(
+      '#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-I-FRAME-STREAM-INF:BANDWIDTH=1,URI="i.m3u8"\n',
+      BASE,
+    );
     expect(r.ok).toBe(false);
   });
   it('rejects variant URIs with dangerous schemes', () => {
@@ -119,7 +123,10 @@ describe('media playlist', () => {
   it('parses EXT-X-MAP and byte ranges, continuing ranges of the same resource', () => {
     const p = media(FMP4);
     expect(p.fragmented).toBe(true);
-    expect(p.segments[0]?.map).toEqual({ uri: 'https://media.example.com/video/init.mp4', byteRange: { length: 720, offset: 0 } });
+    expect(p.segments[0]?.map).toEqual({
+      uri: 'https://media.example.com/video/init.mp4',
+      byteRange: { length: 720, offset: 0 },
+    });
     expect(p.segments[0]?.byteRange).toEqual({ length: 1000, offset: 720 });
     expect(p.segments[1]?.byteRange).toEqual({ length: 1500, offset: 1720 });
   });
@@ -147,7 +154,10 @@ describe('media playlist', () => {
     expect(r).toMatchObject({ ok: false, error: { code: 'malformed', line: 3 } });
   });
   it('rejects segments with non-http(s) schemes', () => {
-    const r = parseHls('#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\nfile:///etc/passwd\n#EXT-X-ENDLIST\n', BASE);
+    const r = parseHls(
+      '#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\nfile:///etc/passwd\n#EXT-X-ENDLIST\n',
+      BASE,
+    );
     expect(r).toMatchObject({ ok: false, error: { code: 'unsafe-url' } });
   });
 });
@@ -164,7 +174,11 @@ describe('invalid and unsupported input', () => {
     expect(parseHls(text, BASE)).toMatchObject({ ok: false, error: { code } });
   });
   it('never throws on garbage', () => {
-    for (const junk of ['#EXTM3U\n#EXT-X-STREAM-INF:\n', '#EXTM3U\n#EXT-X-KEY:\n#EXTINF:1,\nx', '#EXTM3U\n\0\0\n']) {
+    for (const junk of [
+      '#EXTM3U\n#EXT-X-STREAM-INF:\n',
+      '#EXTM3U\n#EXT-X-KEY:\n#EXTINF:1,\nx',
+      '#EXTM3U\n\0\0\n',
+    ]) {
       expect(() => parseHls(junk, BASE)).not.toThrow();
     }
   });

@@ -10,7 +10,7 @@ export type MessageKey = keyof Catalog;
  */
 export function t(key: MessageKey, ...subs: Array<string | number>): string {
   const values = subs.map(String);
-  let fromChrome = '';
+  let fromChrome: string;
   try {
     fromChrome = globalThis.chrome?.i18n?.getMessage(key, values) ?? '';
   } catch {

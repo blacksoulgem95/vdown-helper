@@ -39,7 +39,19 @@ export function mergeResource(existing: MediaResource, incoming: MediaResource):
         ? existing.downloadability
         : incoming.downloadability,
   };
-  const optional = ['mimeType', 'sizeBytes', 'sizeIsEstimate', 'durationSec', 'width', 'height', 'bitrate', 'frameRate', 'codecs', 'poster', 'playlist'] as const;
+  const optional = [
+    'mimeType',
+    'sizeBytes',
+    'sizeIsEstimate',
+    'durationSec',
+    'width',
+    'height',
+    'bitrate',
+    'frameRate',
+    'codecs',
+    'poster',
+    'playlist',
+  ] as const;
   for (const k of optional) {
     const v = pick(existing[k], incoming[k]);
     if (v !== undefined) (merged as unknown as Record<string, unknown>)[k] = v;

@@ -1,7 +1,7 @@
 ---
 id: VDH-015
 title: Studio configure screen (side panel)
-status: todo
+status: done
 priority: P0
 area: ui
 depends_on: [VDH-012, VDH-014]
@@ -15,11 +15,11 @@ Side panel page for CONFIGURE: preview/thumbnail when available, source URL, pla
 
 ## Acceptance criteria
 
-- [ ] Only real variants/options displayed
-- [ ] Incompatible combos block Start with a reason
-- [ ] Never auto-starts a download
-- [ ] Screenshot reviewed in real Chromium
+- [x] Only real variants/options displayed
+- [x] Incompatible combos block Start with a reason
+- [x] Never auto-starts a download
+- [x] Screenshot reviewed in real Chromium
 
 ## Notes
 
-_None yet._
+Studio opened as a tab by automation (the real side panel is VDH-028). Options are derived from the planner; blocked combinations are disabled with reasons; Start is never automatic.

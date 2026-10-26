@@ -30,8 +30,14 @@ export const pageScan = (tabId: number) => callPage<ScanReport>(tabId, 'scan');
 /** Fetches made from the page's own origin and cookies: sees exactly what the page's player can see. */
 export function pageFetcher(tabId: number): Fetcher {
   return {
-    head: (url) => callPage<ProbeResult>(tabId, 'probeHeaders', url).catch(() => ({ ok: false, kind: 'blocked' }) as ProbeResult),
-    text: (url) => callPage<ProbeResult>(tabId, 'fetchText', url).catch(() => ({ ok: false, kind: 'blocked' }) as ProbeResult),
+    head: (url) =>
+      callPage<ProbeResult>(tabId, 'probeHeaders', url).catch(
+        () => ({ ok: false, kind: 'blocked' }) as ProbeResult,
+      ),
+    text: (url) =>
+      callPage<ProbeResult>(tabId, 'fetchText', url).catch(
+        () => ({ ok: false, kind: 'blocked' }) as ProbeResult,
+      ),
   };
 }
 

@@ -13,7 +13,7 @@ import {
   transition,
   withProgress,
 } from '@/lib/queue';
-import { log } from '@/lib/security';
+import { asciiFileName, log } from '@/lib/security';
 import type { Plan } from '@/lib/compat';
 import type { DownloadJob, DownloadRequest, JobErrorCode } from '@/types/download';
 import type { OffscreenEvent, OffscreenPlan, Result } from '@/types/messages';
@@ -34,8 +34,31 @@ let polling = false;
 const ok = (): Result<object> => ({ ok: true });
 const fail = (error: string): { ok: false; error: string } => ({ ok: false, error });
 
-function chromePath(req: DownloadRequest): string {
-  return req.subfolder ? `${req.subfolder}/${req.filename}` : req.filename;
+function chromePath(req: DownloadRequest, ascii = false): string {
+  const path = req.subfolder ? `${req.subfolder}/${req.filename}` : req.filename;
+  return ascii ? asciiFileName(path) : path;
+}
+
+/** chrome.downloads.download, retrying once with an ASCII-only name if Chrome rejects the file name. */
+export async function startChromeDownload(url: string, req: DownloadRequest): Promise<number> {
+  const options = (filename: string): chrome.downloads.DownloadOptions => ({
+    url,
+    filename,
+    conflictAction: 'uniquify',
+    saveAs: req.saveAs === true,
+  });
+  try {
+    return await chrome.downloads.download(options(chromePath(req)));
+  } catch (e) {
+    if (
+      e instanceof Error &&
+      /invalid filename/i.test(e.message) &&
+      chromePath(req) !== chromePath(req, true)
+    ) {
+      return chrome.downloads.download(options(chromePath(req, true)));
+    }
+    throw e;
+  }
 }
 
 function limitsOf(s: { maxMemoryMb: number; maxEncodeDurationSec: number }) {
@@ -77,7 +100,10 @@ export async function pump(): Promise<void> {
   const startIds = await mutateJobs((jobs) => {
     const all = Object.values(jobs);
     const free = settings.maxConcurrentDownloads - all.filter(isActive).length;
-    const queued = all.filter(isQueued).sort((a, b) => a.createdAt - b.createdAt).slice(0, Math.max(0, free));
+    const queued = all
+      .filter(isQueued)
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .slice(0, Math.max(0, free));
     for (const j of queued) jobs[j.id] = transition(j, 'preparing', now);
     return queued.map((j) => j.id);
   });
@@ -131,24 +157,30 @@ async function runJob(id: string): Promise<void> {
 async function runNative(job: DownloadJob): Promise<void> {
   let downloadId: number;
   try {
-    downloadId = await chrome.downloads.download({
-      url: job.request.sourceUrl,
-      filename: chromePath(job.request),
-      conflictAction: 'uniquify',
-      saveAs: false,
-    });
+    downloadId = await startChromeDownload(job.request.sourceUrl, job.request);
   } catch (e) {
-    return void (await settle(job.id, 'chrome-download', e instanceof Error ? e.message : 'Chrome refused the download'));
+    return void (await settle(
+      job.id,
+      'chrome-download',
+      e instanceof Error ? e.message : 'Chrome refused the download',
+    ));
   }
   const updated = await updateJob(job.id, (j) =>
-    canTransition(j.stage, 'downloading') ? { ...transition(j, 'downloading', Date.now()), chromeDownloadId: downloadId } : j,
+    canTransition(j.stage, 'downloading')
+      ? { ...transition(j, 'downloading', Date.now()), chromeDownloadId: downloadId }
+      : j,
   );
   // Cancelled while Chrome was starting the download.
   if (!updated || isTerminal(updated)) await chrome.downloads.cancel(downloadId).catch(() => undefined);
   startPolling();
 }
 
-async function runInOffscreenDoc(job: DownloadJob, plan: Plan, maxMemoryMb: number, concurrency: number): Promise<void> {
+async function runInOffscreenDoc(
+  job: DownloadJob,
+  plan: Plan,
+  maxMemoryMb: number,
+  concurrency: number,
+): Promise<void> {
   await runInOffscreen(job.id, job.request, offscreenPlan(plan, maxMemoryMb, concurrency));
 }
 
@@ -180,12 +212,7 @@ export async function handleOffscreenEvent(ev: OffscreenEvent): Promise<void> {
       const job = await getJob(ev.jobId);
       if (!job || isTerminal(job)) return void (await releaseInOffscreen(ev.jobId));
       try {
-        const downloadId = await chrome.downloads.download({
-          url: ev.blobUrl,
-          filename: chromePath(job.request),
-          conflictAction: 'uniquify',
-          saveAs: false,
-        });
+        const downloadId = await startChromeDownload(ev.blobUrl, job.request);
         await updateJob(ev.jobId, (j) => ({
           ...withProgress(j, { fraction: 1, bytesDone: ev.bytes, bytesTotal: ev.bytes }, now),
           chromeDownloadId: downloadId,
@@ -202,7 +229,9 @@ export async function handleOffscreenEvent(ev: OffscreenEvent): Promise<void> {
       return;
     }
     case 'cancelled': {
-      await updateJob(ev.jobId, (j) => (canTransition(j.stage, 'cancelled') ? transition(j, 'cancelled', now) : j));
+      await updateJob(ev.jobId, (j) =>
+        canTransition(j.stage, 'cancelled') ? transition(j, 'cancelled', now) : j,
+      );
       await afterJobEnds(ev.jobId);
       return;
     }
@@ -244,7 +273,9 @@ async function syncFromChrome(job: DownloadJob): Promise<void> {
   }
   if (item.state === 'complete') {
     const done = await updateJob(job.id, (j) =>
-      canTransition(j.stage, 'completed') ? { ...transition(j, 'completed', now), filePath: item.filename } : j,
+      canTransition(j.stage, 'completed')
+        ? { ...transition(j, 'completed', now), filePath: item.filename }
+        : j,
     );
     if (done?.stage === 'completed') await notifyJob(done);
     await afterJobEnds(job.id);
@@ -252,7 +283,9 @@ async function syncFromChrome(job: DownloadJob): Promise<void> {
   }
   if (item.state === 'interrupted') {
     if (item.error === 'USER_CANCELED') {
-      await updateJob(job.id, (j) => (canTransition(j.stage, 'cancelled') ? transition(j, 'cancelled', now) : j));
+      await updateJob(job.id, (j) =>
+        canTransition(j.stage, 'cancelled') ? transition(j, 'cancelled', now) : j,
+      );
       await afterJobEnds(job.id);
     } else {
       await settle(job.id, 'chrome-download', item.error ?? 'Interrupted');
@@ -285,7 +318,7 @@ async function syncFromChrome(job: DownloadJob): Promise<void> {
 
 export async function jobAction(
   jobId: string,
-  action: 'cancel' | 'retry' | 'pause' | 'resume' | 'open' | 'show' | 'remove',
+  action: 'cancel' | 'retry' | 'pause' | 'resume' | 'remove',
 ): Promise<Result<object>> {
   const job = await getJob(jobId);
   if (!job) return fail('not-found');
@@ -293,9 +326,12 @@ export async function jobAction(
   switch (action) {
     case 'cancel': {
       if (isTerminal(job)) return ok();
-      if (job.chromeDownloadId !== undefined) await chrome.downloads.cancel(job.chromeDownloadId).catch(() => undefined);
+      if (job.chromeDownloadId !== undefined)
+        await chrome.downloads.cancel(job.chromeDownloadId).catch(() => undefined);
       if (job.viaOffscreen) await cancelInOffscreen(jobId);
-      await updateJob(jobId, (j) => (canTransition(j.stage, 'cancelled') ? transition(j, 'cancelled', now) : j));
+      await updateJob(jobId, (j) =>
+        canTransition(j.stage, 'cancelled') ? transition(j, 'cancelled', now) : j,
+      );
       await afterJobEnds(jobId);
       return ok();
     }
@@ -316,19 +352,6 @@ export async function jobAction(
       }
       await updateJob(jobId, (j) => ({ ...j, paused: action === 'pause' }));
       startPolling();
-      return ok();
-    }
-    case 'open':
-    case 'show': {
-      if (job.chromeDownloadId === undefined || job.stage !== 'completed') return fail('not-available');
-      const [item] = await chrome.downloads.search({ id: job.chromeDownloadId });
-      if (!item || !item.exists) return fail('file-missing');
-      try {
-        if (action === 'open') await chrome.downloads.open(job.chromeDownloadId);
-        else chrome.downloads.show(job.chromeDownloadId);
-      } catch (e) {
-        return fail(e instanceof Error ? e.message : 'failed');
-      }
       return ok();
     }
     case 'remove': {

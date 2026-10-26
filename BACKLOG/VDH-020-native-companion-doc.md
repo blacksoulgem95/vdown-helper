@@ -1,7 +1,7 @@
 ---
 id: VDH-020
 title: Native companion architecture doc
-status: todo
+status: done
 priority: P3
 area: docs
 depends_on: [VDH-019]
@@ -15,8 +15,8 @@ Document (not implement) a native messaging companion for very large files and u
 
 ## Acceptance criteria
 
-- [ ] `docs/native-companion.md` written
-- [ ] Referenced from size-guard error messages and README
+- [x] `docs/native-companion.md` written
+- [x] Referenced from size-guard error messages and README
 
 ## Notes
 

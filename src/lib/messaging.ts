@@ -17,11 +17,12 @@ export async function send<K extends RequestType>(
   }
 }
 
-const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+const isObj = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v);
 const isStr = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length < 8192;
 const isInt = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0;
 
-const ACTIONS = ['cancel', 'retry', 'pause', 'resume', 'open', 'show', 'remove'];
+const ACTIONS = ['cancel', 'retry', 'pause', 'resume', 'remove'];
 const MODES = ['video-audio', 'audio-only', 'video-only', 'original'];
 const CONTAINERS = ['mp4', 'mkv', 'ts', 'original'];
 const AUDIO = ['mp3', 'm4a', 'aac', 'wav'];
@@ -31,7 +32,8 @@ const BITRATES = [128, 192, 256, 320];
 const validators: { [K in RequestType]: (p: unknown) => p is RequestMap[K]['req'] } = {
   scan: (p): p is RequestMap['scan']['req'] => isObj(p) && isInt(p['tabId']),
   'get-state': (p): p is RequestMap['get-state']['req'] => isObj(p) && isInt(p['tabId']),
-  'inspect-variant': (p): p is RequestMap['inspect-variant']['req'] => isObj(p) && isInt(p['tabId']) && isStr(p['url']),
+  'inspect-variant': (p): p is RequestMap['inspect-variant']['req'] =>
+    isObj(p) && isInt(p['tabId']) && isStr(p['url']),
   'start-download': (p): p is RequestMap['start-download']['req'] => {
     if (!isObj(p) || !isObj(p['request'])) return false;
     const r = p['request'];
@@ -53,7 +55,8 @@ const validators: { [K in RequestType]: (p: unknown) => p is RequestMap[K]['req'
     isObj(p) && isStr(p['jobId']) && ACTIONS.includes(p['action'] as string),
   'clear-history': (p): p is RequestMap['clear-history']['req'] => isObj(p),
   'get-jobs': (p): p is RequestMap['get-jobs']['req'] => isObj(p),
-  'set-observer': (p): p is RequestMap['set-observer']['req'] => isObj(p) && typeof p['enabled'] === 'boolean',
+  'set-observer': (p): p is RequestMap['set-observer']['req'] =>
+    isObj(p) && typeof p['enabled'] === 'boolean',
 };
 
 export function parseEnvelope(raw: unknown): Envelope | undefined {
@@ -80,7 +83,10 @@ export function registerHandlers(handlers: Handlers): void {
     if (!envelope) return false;
     const handler = handlers[envelope.type] as Handler<RequestType>;
     handler(envelope.payload, sender).then(sendResponse, (e: unknown) =>
-      sendResponse({ ok: false, error: e instanceof Error ? e.message : 'Internal error' } satisfies Result<never>),
+      sendResponse({
+        ok: false,
+        error: e instanceof Error ? e.message : 'Internal error',
+      } satisfies Result<never>),
     );
     return true; // async response
   });

@@ -51,7 +51,13 @@ function add(c: Collector, candidate: RawCandidate): void {
   c.candidates.push(candidate);
 }
 
-function addUrl(c: Collector, raw: string | null | undefined, base: string, method: DetectionMethod, extra: Partial<RawCandidate> = {}): void {
+function addUrl(
+  c: Collector,
+  raw: string | null | undefined,
+  base: string,
+  method: DetectionMethod,
+  extra: Partial<RawCandidate> = {},
+): void {
   const url = abs(raw, base);
   if (!url) return;
   if (url.startsWith('blob:')) {
@@ -89,13 +95,20 @@ function scanElements(c: Collector, doc: Document): void {
     // Standalone <source> not inside media elements (e.g. inside <picture> is irrelevant; keep only media-looking ones).
     for (const a of root.querySelectorAll<HTMLAnchorElement>('a[href]')) {
       const href = a.getAttribute('href');
-      if (href && MEDIA_EXT.test(href)) addUrl(c, href, base, 'dom-link', a.textContent?.trim() ? { title: a.textContent.trim().slice(0, 200) } : {});
+      if (href && MEDIA_EXT.test(href))
+        addUrl(
+          c,
+          href,
+          base,
+          'dom-link',
+          a.textContent?.trim() ? { title: a.textContent.trim().slice(0, 200) } : {},
+        );
     }
   }
 }
 
 function scanPerformance(c: Collector, base: string): void {
-  let entries: PerformanceEntry[] = [];
+  let entries: PerformanceEntry[];
   try {
     entries = performance.getEntriesByType('resource');
   } catch {

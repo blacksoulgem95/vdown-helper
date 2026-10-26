@@ -1,7 +1,7 @@
 ---
 id: VDH-019
 title: README and documentation
-status: todo
+status: done
 priority: P1
 area: docs
 depends_on: [VDH-018]
@@ -15,10 +15,10 @@ Setup, build, install (load unpacked), permissions table, limitations (CORS, aut
 
 ## Acceptance criteria
 
-- [ ] Implemented vs unsupported table is accurate to what was verified
-- [ ] Manual test procedure covers the six scenarios
-- [ ] Legal/DRM statement present
+- [x] Implemented vs unsupported table is accurate to what was verified
+- [x] Manual test procedure covers the six scenarios
+- [x] Legal/DRM statement present
 
 ## Notes
 
-_None yet._
+README written after the behaviour was verified; the implemented/unsupported table and the verification limits were checked against the E2E results.

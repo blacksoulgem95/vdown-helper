@@ -15,7 +15,10 @@ export class FakeEvent<A extends unknown[]> {
 export class FakeStorageArea {
   data: Record<string, unknown> = {};
   onChanged: FakeEvent<[Record<string, chrome.storage.StorageChange>]> | undefined;
-  constructor(private readonly changed?: FakeEvent<[Record<string, chrome.storage.StorageChange>, string]>, private readonly area = 'local') {}
+  constructor(
+    private readonly changed?: FakeEvent<[Record<string, chrome.storage.StorageChange>, string]>,
+    private readonly area = 'local',
+  ) {}
   async get(keys?: string | string[] | Record<string, unknown> | null) {
     if (keys == null) return structuredClone(this.data);
     const list = typeof keys === 'string' ? [keys] : Array.isArray(keys) ? keys : Object.keys(keys);

@@ -12,7 +12,10 @@ for (const size of [16, 32, 48, 128]) {
   await page.setContent(
     `<style>html,body{margin:0;background:transparent}svg{width:${size}px;height:${size}px;display:block}</style>${svg}`,
   );
-  const png = await page.screenshot({ omitBackground: true, clip: { x: 0, y: 0, width: size, height: size } });
+  const png = await page.screenshot({
+    omitBackground: true,
+    clip: { x: 0, y: 0, width: size, height: size },
+  });
   writeFileSync(resolve(root, `public/icons/icon-${size}.png`), png);
   await page.close();
 }

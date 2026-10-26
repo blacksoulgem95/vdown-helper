@@ -32,7 +32,8 @@ async function execute(run: FfmpegRun): Promise<Uint8Array> {
   });
   ffmpeg.on('progress', ({ time }) => {
     // `time` is microseconds of output produced. It is only meaningful when the input duration is known.
-    if (run.durationSec && run.durationSec > 0 && time > 0) run.onProgress(Math.min(1, time / (run.durationSec * 1e6)));
+    if (run.durationSec && run.durationSec > 0 && time > 0)
+      run.onProgress(Math.min(1, time / (run.durationSec * 1e6)));
     else run.onProgress(undefined);
   });
   const onAbort = () => ffmpeg.terminate();
@@ -48,7 +49,10 @@ async function execute(run: FfmpegRun): Promise<Uint8Array> {
     const code = await ffmpeg.exec(run.args(run.inputs.map((f) => `/in/${f.name}`)));
     if (run.signal.aborted) throw new CancelledError();
     if (code !== 0) {
-      throw new PipelineError('ffmpeg', `FFmpeg exited with code ${code}: ${logTail.slice(-3).join(' | ').slice(0, 300)}`);
+      throw new PipelineError(
+        'ffmpeg',
+        `FFmpeg exited with code ${code}: ${logTail.slice(-3).join(' | ').slice(0, 300)}`,
+      );
     }
     const data = await ffmpeg.readFile(run.output);
     if (typeof data === 'string') throw new PipelineError('ffmpeg', 'FFmpeg produced no binary output');

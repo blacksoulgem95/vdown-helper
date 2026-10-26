@@ -11,9 +11,9 @@ Work on this project is tracked as Markdown tasks in `BACKLOG/`. This rule alway
   ---
   id: VDH-005
   title: HLS playlist parser
-  status: todo          # todo | in-progress | blocked | done | wontfix
-  priority: P1          # P0 critical, P1 high, P2 normal, P3 low
-  area: lib             # lib | background | content | ui | build | docs | test | security
+  status: todo # todo | in-progress | blocked | done | wontfix
+  priority: P1 # P0 critical, P1 high, P2 normal, P3 low
+  area: lib # lib | background | content | ui | build | docs | test | security
   depends_on: [VDH-004]
   ---
   ```
@@ -23,13 +23,13 @@ Work on this project is tracked as Markdown tasks in `BACKLOG/`. This rule alway
 
 ## Statuses
 
-| Status | Meaning |
-|---|---|
-| `todo` | Not started |
+| Status        | Meaning                                            |
+| ------------- | -------------------------------------------------- |
+| `todo`        | Not started                                        |
 | `in-progress` | Being worked on right now (keep this to a minimum) |
-| `blocked` | Cannot proceed; say why and on what in `## Notes` |
-| `done` | All acceptance criteria met **and verified** |
-| `wontfix` | Deliberately dropped; say why in `## Notes` |
+| `blocked`     | Cannot proceed; say why and on what in `## Notes`  |
+| `done`        | All acceptance criteria met **and verified**       |
+| `wontfix`     | Deliberately dropped; say why in `## Notes`        |
 
 ## Rules
 

@@ -1,7 +1,7 @@
 ---
 id: VDH-021
 title: Internationalisation (en, it)
-status: in-progress
+status: done
 priority: P1
 area: ui
 depends_on: [VDH-003]
@@ -15,10 +15,10 @@ Use `_locales/en` and `_locales/it` with `chrome.i18n`, a typed `t()` helper, an
 
 ## Acceptance criteria
 
-- [ ] No hard-coded UI strings in components
-- [ ] Catalog parity test passes
-- [ ] Italian reviewed for terminology consistency
+- [x] No hard-coded UI strings in components
+- [x] Catalog parity test passes
+- [x] Italian reviewed for terminology consistency
 
 ## Notes
 
-`t()` helper, catalog parity test in place; catalogs are filled as UI lands.
+Catalog parity and placeholder parity are tested; the Italian UI is verified in a real browser started with an Italian UI language (strings and `$n` substitutions). Terminology reviewed by the author only; a native-speaker review would still be welcome.

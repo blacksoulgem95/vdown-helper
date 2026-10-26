@@ -29,6 +29,8 @@ describe('parseEnvelope', () => {
     [env('scan', { tabId: '1' })],
     [env('scan', { tabId: -1 })],
     [env('job-action', { jobId: 'j', action: 'format-disk' })],
+    // open/show need a user gesture, so they are handled in the page and never accepted over messaging
+    [env('job-action', { jobId: 'j', action: 'open' })],
     [env('inspect-variant', { tabId: 1, url: '' })],
     [env('start-download', { request: { ...validRequest, mode: 'x' } })],
     [env('start-download', { request: { ...validRequest, audioBitrate: 1 } })],

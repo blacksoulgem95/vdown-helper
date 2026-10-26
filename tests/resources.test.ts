@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { dedupeResources, groupResources, hideCoveredVariants, mergeResource, resourceId } from '@/lib/resources';
+import {
+  dedupeResources,
+  groupResources,
+  hideCoveredVariants,
+  mergeResource,
+  resourceId,
+} from '@/lib/resources';
 import { makeResource } from './helpers';
 
 describe('resourceId', () => {
@@ -22,10 +28,14 @@ describe('dedupeResources', () => {
     expect(out[0]?.sizeBytes).toBe(1000);
   });
   it('keeps resources that differ in URL', () => {
-    expect(dedupeResources([makeResource('https://a.com/1.mp4'), makeResource('https://a.com/2.mp4')])).toHaveLength(2);
+    expect(
+      dedupeResources([makeResource('https://a.com/1.mp4'), makeResource('https://a.com/2.mp4')]),
+    ).toHaveLength(2);
   });
   it('does not replace a resolved verdict with "not probed"', () => {
-    const probed = makeResource('https://a.com/v.mp4', { downloadability: { status: 'downloadable', reason: 'ok' } });
+    const probed = makeResource('https://a.com/v.mp4', {
+      downloadability: { status: 'downloadable', reason: 'ok' },
+    });
     const raw = makeResource('https://a.com/v.mp4');
     expect(mergeResource(probed, raw).downloadability.status).toBe('downloadable');
   });

@@ -30,7 +30,10 @@ export async function getJob(id: string): Promise<DownloadJob | undefined> {
 }
 
 /** Apply `fn` to one job. Returns the new job, or undefined if the job is gone or `fn` returns undefined. */
-export function updateJob(id: string, fn: (job: DownloadJob) => DownloadJob | undefined): Promise<DownloadJob | undefined> {
+export function updateJob(
+  id: string,
+  fn: (job: DownloadJob) => DownloadJob | undefined,
+): Promise<DownloadJob | undefined> {
   return mutateJobs((jobs) => {
     const cur = jobs[id];
     if (!cur) return undefined;

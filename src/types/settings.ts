@@ -12,6 +12,8 @@ export interface Settings {
   namingTemplate: string;
   /** Relative sub-folder inside the Chrome Downloads folder; empty = none. */
   subfolder: string;
+  /** Show Chrome's "Save as" dialog for every download. */
+  askWhereToSave: boolean;
   /** Scan automatically when a tab finishes loading (needs the optional host permission). */
   autoScan: boolean;
   /** Observe media requests via webRequest (needs the optional permission). */

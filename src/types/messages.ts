@@ -37,6 +37,8 @@ export interface VariantInspection {
   keyUris: string[];
   /** Origins that will be contacted for this job (playlist, segments, keys), used for access checks. */
   origins: string[];
+  /** One representative URL per origin, used to test whether the extension can already reach it. */
+  originSamples: Record<string, string>;
   firstSegmentExt: string;
 }
 
@@ -50,7 +52,7 @@ export interface RequestMap {
   };
   'start-download': { req: { request: DownloadRequest }; res: Result<{ jobId: string }> };
   'job-action': {
-    req: { jobId: string; action: 'cancel' | 'retry' | 'pause' | 'resume' | 'open' | 'show' | 'remove' };
+    req: { jobId: string; action: 'cancel' | 'retry' | 'pause' | 'resume' | 'remove' };
     res: Result<object>;
   };
   'clear-history': { req: Record<string, never>; res: Result<object> };
@@ -68,7 +70,13 @@ export interface Envelope<K extends RequestType = RequestType> {
 
 /** Background -> offscreen document commands. */
 export type OffscreenCommand =
-  | { channel: 'vdown-offscreen'; type: 'run-job'; jobId: string; request: DownloadRequest; plan: OffscreenPlan }
+  | {
+      channel: 'vdown-offscreen';
+      type: 'run-job';
+      jobId: string;
+      request: DownloadRequest;
+      plan: OffscreenPlan;
+    }
   | { channel: 'vdown-offscreen'; type: 'cancel-job'; jobId: string }
   | { channel: 'vdown-offscreen'; type: 'release-job'; jobId: string };
 

@@ -1,7 +1,7 @@
 ---
 id: VDH-002
 title: MV3 manifest, permissions model, CSP
-status: todo
+status: done
 priority: P0
 area: build
 depends_on: [VDH-001]
@@ -15,10 +15,10 @@ Author `manifest.json`: `activeTab, scripting, downloads, storage, offscreen, no
 
 ## Acceptance criteria
 
-- [ ] Manifest validated by a script (required keys, referenced files exist in `dist/`)
-- [ ] No broad host permission is granted at install time
-- [ ] Each permission is justified in README (VDH-019)
+- [x] Manifest validated by a script (required keys, referenced files exist in `dist/`)
+- [x] No broad host permission is granted at install time
+- [x] Each permission is justified in README (VDH-019)
 
 ## Notes
 
-_None yet._
+`scripts/check-dist.mjs` validates the built manifest, assets, locales, CSP and absence of remote code / install-time host access. Permissions are justified in README.

@@ -1,7 +1,7 @@
 ---
 id: VDH-011
 title: HLS segment downloader (offscreen document)
-status: in-progress
+status: done
 priority: P0
 area: background
 depends_on: [VDH-005, VDH-009]
@@ -15,12 +15,12 @@ Offscreen document fetches playlist segments with bounded concurrency, retries w
 
 ## Acceptance criteria
 
-- [ ] Segment-count progress is real
-- [ ] Cancel aborts in-flight fetches and frees memory
-- [ ] Over-limit jobs refused with a message referencing VDH-020
-- [ ] Encrypted streams: AES-128 decrypted when key accessible; DRM/SAMPLE-AES blocked with explanation
-- [ ] Verified against local fixture HLS in real Chromium
+- [x] Segment-count progress is real
+- [x] Cancel aborts in-flight fetches and frees memory
+- [x] Over-limit jobs refused with a message referencing VDH-020
+- [x] Encrypted streams: AES-128 decrypted when key accessible; DRM/SAMPLE-AES blocked with explanation
+- [x] Verified against local fixture HLS in real Chromium
 
 ## Notes
 
-Implemented in `src/offscreen/hls.ts` + `jobs.ts` (OPFS staging, ordered writes, AES-128 via WebCrypto, DRM refusal, retries, cancel). Needs E2E verification against fixture HLS.
+E2E: ordered segment join (fully decodable), AES-128 (IV from sequence), cancel (no file), failure then retry, CORS-open CDN with wildcard ACAO, a 140 MB TS passthrough with a 128 MB limit (allowed, disk-backed) and the same stream as MP4 stopped by the memory guard.

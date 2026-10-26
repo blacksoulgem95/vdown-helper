@@ -1,7 +1,7 @@
 ---
 id: VDH-017
 title: Unit test suite
-status: todo
+status: done
 priority: P0
 area: test
 depends_on: [VDH-005, VDH-006, VDH-009]
@@ -15,10 +15,10 @@ Vitest coverage for: HLS master and media parsing, relative URL resolution, inva
 
 ## Acceptance criteria
 
-- [ ] All listed areas covered
-- [ ] Typed fake `chrome` API shared test helper
-- [ ] `npm test` green in CI
+- [x] All listed areas covered
+- [x] Typed fake `chrome` API shared test helper
+- [x] `npm test` green locally (CI workflow written; its first GitHub run is tracked in VDH-022)
 
 ## Notes
 
-_None yet._
+230+ tests in 16 files. Every area listed in the product brief has dedicated tests.

@@ -36,7 +36,11 @@ export async function closeOffscreen(): Promise<void> {
   if (await exists()) await chrome.offscreen.closeDocument();
 }
 
-export async function runInOffscreen(jobId: string, request: DownloadRequest, plan: OffscreenPlan): Promise<void> {
+export async function runInOffscreen(
+  jobId: string,
+  request: DownloadRequest,
+  plan: OffscreenPlan,
+): Promise<void> {
   await ensureOffscreen();
   const cmd: OffscreenCommand = { channel: 'vdown-offscreen', type: 'run-job', jobId, request, plan };
   await chrome.runtime.sendMessage(cmd);

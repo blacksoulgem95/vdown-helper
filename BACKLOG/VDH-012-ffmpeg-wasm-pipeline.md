@@ -1,7 +1,7 @@
 ---
 id: VDH-012
 title: FFmpeg.wasm processing pipeline
-status: in-progress
+status: done
 priority: P1
 area: background
 depends_on: [VDH-011]
@@ -15,12 +15,12 @@ Bundle `@ffmpeg/ffmpeg` + `@ffmpeg/core` locally (no remote fetch). Operations: 
 
 ## Acceptance criteria
 
-- [ ] UI labels copy vs transcode accurately
-- [ ] Unsupported combinations rejected before job start
-- [ ] MERGING/ENCODING progress derived from ffmpeg progress events
-- [ ] Output verified playable (ffprobe or Chromium) for TS->MP4, merge, MP3/WAV
-- [ ] Single-thread core used (no SharedArrayBuffer/COOP requirement), documented
+- [x] UI labels copy vs transcode accurately
+- [x] Unsupported combinations rejected before job start
+- [x] MERGING/ENCODING progress derived from ffmpeg progress events
+- [x] Output verified playable (ffprobe or Chromium) for TS->MP4, merge, MP3/WAV
+- [x] Single-thread core used (no SharedArrayBuffer/COOP requirement), documented
 
 ## Notes
 
-Implemented: `src/offscreen/ffmpeg.ts` (WORKERFS mounts, single-flight), `src/lib/ffmpegArgs.ts` (tested). Core bundled from node_modules by `scripts/build.mjs`. Needs E2E verification of the wasm load, MP3/WAV/M4A outputs and CSP.
+E2E with the real bundled core: MP4 remux (copy), merge of separate audio/video, MP3 transcode (bitrate verified ~128 kbps), WAV (pcm_s16le), AAC to M4A copy, and monotonic progress events (0.14 → 1.00) on a 5-minute encode. Core is single-threaded; no SharedArrayBuffer needed. See THIRD_PARTY_NOTICES.md for the GPL question.

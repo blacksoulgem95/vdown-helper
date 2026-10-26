@@ -76,14 +76,20 @@ const TS_VIDEO: ReadonlySet<VideoFamily> = new Set(['h264', 'hevc', 'mpeg4']);
 const TS_AUDIO: ReadonlySet<AudioFamily> = new Set(['aac', 'mp3', 'ac3', 'eac3']);
 
 /** Whether a video stream can be placed in `container` without re-encoding. Unknown codec = assume yes. */
-export function videoFitsContainer(family: VideoFamily | undefined, container: Exclude<VideoContainer, 'original'>): boolean {
+export function videoFitsContainer(
+  family: VideoFamily | undefined,
+  container: Exclude<VideoContainer, 'original'>,
+): boolean {
   if (!family || family === 'unknown') return true;
   if (container === 'mkv') return true;
   if (container === 'mp4') return MP4_VIDEO.has(family);
   return TS_VIDEO.has(family);
 }
 
-export function audioFitsContainer(family: AudioFamily | undefined, container: Exclude<VideoContainer, 'original'>): boolean {
+export function audioFitsContainer(
+  family: AudioFamily | undefined,
+  container: Exclude<VideoContainer, 'original'>,
+): boolean {
   if (!family || family === 'unknown') return true;
   if (container === 'mkv') return true;
   if (container === 'mp4') return MP4_AUDIO.has(family);
@@ -113,7 +119,8 @@ export function planOutput(i: PlanInput): Plan {
   };
   if (i.protectedStream) issues.push('protected');
   if (i.isHls && i.live) issues.push('live-stream');
-  if (i.sourceFormat === 'dash' || i.sourceFormat === 'm3u' || i.sourceFormat === 'blob') issues.push('unsupported-source');
+  if (i.sourceFormat === 'dash' || i.sourceFormat === 'm3u' || i.sourceFormat === 'blob')
+    issues.push('unsupported-source');
   if (issues.length) return base;
 
   const sourceIsAudioFile = !i.isHls && AUDIO_ONLY_FORMATS.has(i.sourceFormat);
@@ -123,14 +130,19 @@ export function planOutput(i: PlanInput): Plan {
   if (i.mode === 'audio-only') {
     if (!hasAudioTrack) issues.push('no-audio-source');
     if (issues.length) return base;
-    const copyable =
-      i.audioFamily === 'aac' && (i.audioFormat === 'm4a' || i.audioFormat === 'aac');
+    const copyable = i.audioFamily === 'aac' && (i.audioFormat === 'm4a' || i.audioFormat === 'aac');
     const alreadyThatFile = sourceIsAudioFile && i.sourceFormat === i.audioFormat;
     const transcode = !copyable;
     const plan: Plan = {
       ...base,
       requiresFfmpeg: !alreadyThatFile,
-      pipeline: alreadyThatFile ? 'native' : transcode ? 'ffmpeg-transcode' : i.isHls ? 'hls-ffmpeg-copy' : 'file-ffmpeg-copy',
+      pipeline: alreadyThatFile
+        ? 'native'
+        : transcode
+          ? 'ffmpeg-transcode'
+          : i.isHls
+            ? 'hls-ffmpeg-copy'
+            : 'file-ffmpeg-copy',
       audio: alreadyThatFile || copyable ? 'copy' : 'transcode',
       extension: audioExtension(i.audioFormat),
       usesBitrate: !alreadyThatFile && transcode && i.audioFormat !== 'wav',
@@ -157,7 +169,8 @@ export function planOutput(i: PlanInput): Plan {
       {
         ...base,
         requiresFfmpeg: needsRemux || mustStripAudio,
-        pipeline: needsRemux || mustStripAudio ? (hlsCopy ? 'hls-ffmpeg-copy' : 'file-ffmpeg-copy') : 'native',
+        pipeline:
+          needsRemux || mustStripAudio ? (hlsCopy ? 'hls-ffmpeg-copy' : 'file-ffmpeg-copy') : 'native',
         video: 'copy',
         audio: 'none',
         extension: ext,
@@ -167,7 +180,8 @@ export function planOutput(i: PlanInput): Plan {
   }
 
   // ---- Original quality / Video + audio
-  const wantsOriginal = i.mode === 'original' || i.container === 'original';
+  // The container choice decides: 'original' keeps the source container, anything else is a stream-copy remux.
+  const wantsOriginal = i.container === 'original';
   const mergeNeeded = (i.mode === 'video-audio' || i.mode === 'original') && i.separateAudio;
 
   if (wantsOriginal && !mergeNeeded) {
@@ -186,10 +200,17 @@ export function planOutput(i: PlanInput): Plan {
     );
   }
 
+  // "Original" with a merge: MP4 when both codecs fit it (widest compatibility), otherwise Matroska.
   const target: Exclude<VideoContainer, 'original'> =
-    i.container === 'original' ? (i.fragmented ? 'mp4' : 'mkv') : i.container;
+    i.container === 'original'
+      ? videoFitsContainer(i.videoFamily, 'mp4') && audioFitsContainer(i.audioFamily, 'mp4')
+        ? 'mp4'
+        : 'mkv'
+      : i.container;
   if (!videoFitsContainer(i.videoFamily, target)) issues.push('video-codec-container');
   const audioOk = audioFitsContainer(i.audioFamily, target);
+  // "Original quality" promises no re-encoding at all, so a mismatching audio codec is refused rather than converted.
+  if (!audioOk && i.mode === 'original') issues.push('audio-codec-container');
   if (issues.length) return base;
   const transcodeAudio = !audioOk && (i.hasMuxedAudio || i.separateAudio || !i.isHls);
 
@@ -199,7 +220,16 @@ export function planOutput(i: PlanInput): Plan {
   }
   const concatOnly = i.isHls && !mergeNeeded && !transcodeAudio && target === 'ts' && !i.fragmented;
   if (concatOnly) {
-    return finalize({ ...base, pipeline: 'hls-concat', video: 'copy', audio: i.hasMuxedAudio ? 'copy' : 'none', extension: 'ts' }, i);
+    return finalize(
+      {
+        ...base,
+        pipeline: 'hls-concat',
+        video: 'copy',
+        audio: i.hasMuxedAudio ? 'copy' : 'none',
+        extension: 'ts',
+      },
+      i,
+    );
   }
   return finalize(
     {
@@ -207,7 +237,8 @@ export function planOutput(i: PlanInput): Plan {
       requiresFfmpeg: true,
       pipeline: transcodeAudio ? 'ffmpeg-transcode' : i.isHls ? 'hls-ffmpeg-copy' : 'file-ffmpeg-copy',
       video: 'copy',
-      audio: i.hasMuxedAudio || i.separateAudio || !i.isHls ? (transcodeAudio ? 'transcode' : 'copy') : 'none',
+      audio:
+        i.hasMuxedAudio || i.separateAudio || !i.isHls ? (transcodeAudio ? 'transcode' : 'copy') : 'none',
       extension: target,
       usesBitrate: transcodeAudio,
     },

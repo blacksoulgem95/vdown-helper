@@ -1,7 +1,7 @@
 ---
 id: VDH-008
 title: Background detection and per-tab store
-status: in-progress
+status: done
 priority: P0
 area: background
 depends_on: [VDH-005, VDH-007]
@@ -15,12 +15,12 @@ Service worker orchestrates scan on popup open / rescan / (optional) auto-scan, 
 
 ## Acceptance criteria
 
-- [ ] Verdicts: downloadable / protected / inaccessible / unsupported / unknown, each with a reason
-- [ ] CORS and network failures degrade gracefully with a retry path
-- [ ] `webRequest` observer only active when permission granted and setting enabled
-- [ ] State survives service-worker restarts
-- [ ] Unit tests with fake chrome API
+- [x] Verdicts: downloadable / protected / inaccessible / unsupported / unknown, each with a reason
+- [x] CORS and network failures degrade gracefully with a retry path
+- [x] `webRequest` observer only active when permission granted and setting enabled
+- [x] State survives service-worker restarts
+- [x] Unit tests (analysis with an injected fetcher) plus E2E in real Chromium
 
 ## Notes
 
-Implemented: `src/lib/analyze.ts` (tested), `src/background/{detect,pageFetch,observer,tabState}.ts`. Browser behaviour (injection, webRequest observer, per-origin fallback) not yet verified in real Chromium (VDH-018).
+Verified in real Chromium: detection, verdicts, per-origin fallback, opt-in observer (finds a request made by a Web Worker), auto-scan + badge, and a forced service-worker shutdown (state and queue survive; scans work afterwards). The observer/auto-scan permissions are pre-granted by the E2E test build because automation cannot answer Chrome's prompt; the prompt flow itself is in VDH-028.

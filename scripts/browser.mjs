@@ -7,7 +7,10 @@ export function chromiumExecutable() {
   if (process.env.CHROMIUM_PATH) return process.env.CHROMIUM_PATH;
   const base = process.env.PLAYWRIGHT_BROWSERS_PATH ?? '/opt/pw-browsers';
   if (existsSync(base)) {
-    const dir = readdirSync(base).filter((d) => /^chromium-\d+$/.test(d)).sort().pop();
+    const dir = readdirSync(base)
+      .filter((d) => /^chromium-\d+$/.test(d))
+      .sort()
+      .pop();
     const exe = dir && join(base, dir, 'chrome-linux64', 'chrome');
     if (exe && existsSync(exe)) return exe;
   }

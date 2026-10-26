@@ -9,7 +9,9 @@ const dir = resolve(import.meta.dirname, '..', 'BACKLOG');
 const STATUSES = ['todo', 'in-progress', 'blocked', 'done', 'wontfix'];
 
 function taskFiles() {
-  return readdirSync(dir).filter((f) => /^VDH-\d+-.*\.md$/.test(f)).sort();
+  return readdirSync(dir)
+    .filter((f) => /^VDH-\d+-.*\.md$/.test(f))
+    .sort();
 }
 function front(text) {
   const m = /^---\n([\s\S]*?)\n---/.exec(text);
@@ -17,7 +19,13 @@ function front(text) {
   return Object.fromEntries(
     m[1].split('\n').map((l) => {
       const i = l.indexOf(':');
-      return [l.slice(0, i).trim(), l.slice(i + 1).replace(/\s+#.*$/, '').trim()];
+      return [
+        l.slice(0, i).trim(),
+        l
+          .slice(i + 1)
+          .replace(/\s+#.*$/, '')
+          .trim(),
+      ];
     }),
   );
 }

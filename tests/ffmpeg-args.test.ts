@@ -34,12 +34,25 @@ describe('buildFfmpegArgs', () => {
     ['m4a', ['-c:a', 'aac', '-b:a', '256k']],
     ['aac', ['-c:a', 'aac', '-b:a', '256k']],
   ])('audio-only transcode to %s', (ext, codec) => {
-    const a = buildFfmpegArgs({ ...base, mode: 'audio-only', extension: ext, audio: 'transcode', audioBitrate: 256, output: `out.${ext}` });
+    const a = buildFfmpegArgs({
+      ...base,
+      mode: 'audio-only',
+      extension: ext,
+      audio: 'transcode',
+      audioBitrate: 256,
+      output: `out.${ext}`,
+    });
     expect(a).toContain('-vn');
     expect(a.join(' ')).toContain((codec as string[]).join(' '));
   });
   it('audio-only copy uses -c:a copy and the separate audio input when present', () => {
-    const a = buildFfmpegArgs({ ...base, mode: 'audio-only', extension: 'm4a', audioPath: '/in/audio.mp4', output: 'out.m4a' });
+    const a = buildFfmpegArgs({
+      ...base,
+      mode: 'audio-only',
+      extension: 'm4a',
+      audioPath: '/in/audio.mp4',
+      output: 'out.m4a',
+    });
     expect(a.join(' ')).toContain('-i /in/audio.mp4 -vn -map 0:a:0 -c:a copy');
   });
   it('re-encodes only the audio when a container requires it', () => {

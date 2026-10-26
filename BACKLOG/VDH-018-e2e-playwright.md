@@ -1,7 +1,7 @@
 ---
 id: VDH-018
 title: Browser E2E in real Chromium
-status: todo
+status: done
 priority: P0
 area: test
 depends_on: [VDH-014, VDH-015, VDH-016]
@@ -15,11 +15,11 @@ Playwright loads the unpacked build (`--load-extension`) against local fixture s
 
 ## Acceptance criteria
 
-- [ ] All scenarios pass locally
-- [ ] No console errors / CSP violations
-- [ ] Screenshots saved and reviewed
-- [ ] Separate CI job
+- [x] All scenarios pass locally
+- [x] No console errors / CSP violations
+- [x] Screenshots saved and reviewed
+- [x] Separate CI job defined in `.github/workflows/ci.yml` (first GitHub run tracked in VDH-022)
 
 ## Notes
 
-_None yet._
+`npm run test:e2e` builds, validates and drives the real build against local fixtures. 41 steps, passing on consecutive runs. Not covered: Chrome's permission prompts, real toolbar popup/activeTab, `sidePanel.open()`, branded Chrome, Windows/macOS (VDH-028).

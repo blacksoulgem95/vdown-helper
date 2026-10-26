@@ -1,7 +1,7 @@
 ---
 id: VDH-010
 title: Direct file downloads via chrome.downloads
-status: in-progress
+status: done
 priority: P0
 area: background
 depends_on: [VDH-009]
@@ -15,11 +15,11 @@ Native downloads for MP4/WebM etc. Map `chrome.downloads` events to bytes/total/
 
 ## Acceptance criteria
 
-- [ ] Real byte progress; unknown totals shown as unknown
-- [ ] Pause/resume only offered when supported
-- [ ] Failed downloads surface Chrome's error reason
-- [ ] Verified in real Chromium (VDH-018)
+- [x] Real byte progress; unknown totals shown as unknown
+- [x] Pause/resume only offered when supported
+- [x] Failed downloads surface Chrome's error reason
+- [x] Verified in real Chromium (VDH-018)
 
 ## Notes
 
-Implemented in `src/background/runner.ts` (runNative, polling, pause/resume/open/show). Needs E2E verification.
+Real Chrome downloads in E2E: completion, byte progress, pause/resume, failure reason (`SERVER_BAD_CONTENT`), unicode-name fallback (unit-tested). Open / Show use the page-side gesture path (VDH-025).

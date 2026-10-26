@@ -1,7 +1,7 @@
 ---
 id: VDH-009
 title: Download queue and state machine
-status: in-progress
+status: done
 priority: P0
 area: background
 depends_on: [VDH-003]
@@ -15,11 +15,11 @@ Persisted queue in `chrome.storage.local`. Stages: DETECTED, PREPARING, DOWNLOAD
 
 ## Acceptance criteria
 
-- [ ] Illegal transitions rejected
-- [ ] Queue rehydrates after worker restart; interrupted jobs marked FAILED with reason
-- [ ] Concurrency limit honoured
-- [ ] Unit tests for transitions, failure, cancel, retry
+- [x] Illegal transitions rejected
+- [x] Queue rehydrates after worker restart; interrupted jobs marked FAILED with reason
+- [x] Concurrency limit honoured
+- [x] Unit tests for transitions, failure, cancel, retry
 
 ## Notes
 
-State machine, SpeedMeter, request planner and job runner implemented (`src/lib/queue.ts`, `src/lib/request.ts`, `src/background/runner.ts`); pure logic tested. Runner behaviour against real chrome.downloads not yet verified (VDH-018).
+Queue scheduling/reconcile are unit-tested against a fake chrome API (`tests/runner-queue.test.ts`) and exercised end-to-end.

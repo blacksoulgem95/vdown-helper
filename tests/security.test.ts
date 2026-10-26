@@ -9,14 +9,23 @@ import {
   sanitizeFilename,
   sanitizeSubfolder,
   withExtension,
+  asciiFileName,
 } from '@/lib/security';
 
 describe('isSafeFetchUrl', () => {
-  it.each(['https://a.com/x.mp4', 'http://a.com/x'])('accepts %s', (u) => expect(isSafeFetchUrl(u)).toBe(true));
-  it.each(['javascript:alert(1)', 'data:text/html,hi', 'file:///etc/passwd', 'chrome://settings', 'ftp://a/b', 'blob:https://a/1', 'not a url', ''])(
-    'rejects %s',
-    (u) => expect(isSafeFetchUrl(u)).toBe(false),
+  it.each(['https://a.com/x.mp4', 'http://a.com/x'])('accepts %s', (u) =>
+    expect(isSafeFetchUrl(u)).toBe(true),
   );
+  it.each([
+    'javascript:alert(1)',
+    'data:text/html,hi',
+    'file:///etc/passwd',
+    'chrome://settings',
+    'ftp://a/b',
+    'blob:https://a/1',
+    'not a url',
+    '',
+  ])('rejects %s', (u) => expect(isSafeFetchUrl(u)).toBe(false));
 });
 
 describe('normalizeUrl', () => {
@@ -34,13 +43,17 @@ describe('redaction', () => {
     expect(redactUrl('nope')).toBe('[invalid-url]');
   });
   it('redacts URLs embedded in text', () => {
-    expect(redactText('failed https://a.com/x.mp4?sig=SECRET twice')).toBe('failed https://a.com/x.mp4?… twice');
+    expect(redactText('failed https://a.com/x.mp4?sig=SECRET twice')).toBe(
+      'failed https://a.com/x.mp4?… twice',
+    );
   });
   describe('log', () => {
     afterEach(() => vi.restoreAllMocks());
     it('never prints query strings', () => {
       const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      log.error('boom', new Error('GET https://a.com/x?token=SECRET failed'), { url: 'https://a.com/y?k=SECRET' });
+      log.error('boom', new Error('GET https://a.com/x?token=SECRET failed'), {
+        url: 'https://a.com/y?k=SECRET',
+      });
       const printed = JSON.stringify(spy.mock.calls);
       expect(printed).not.toContain('SECRET');
     });
@@ -88,7 +101,14 @@ describe('withExtension / renderNameTemplate', () => {
     expect(withExtension('clip', 'mp4')).toBe('clip.mp4');
     expect(withExtension('clip.MP4', '.mp4')).toBe('clip.MP4');
   });
-  const tokens = { title: 'My Clip', host: 'ex.com', resolution: '1080p', date: '2026-10-25', format: 'mp4', id: 'abc' };
+  const tokens = {
+    title: 'My Clip',
+    host: 'ex.com',
+    resolution: '1080p',
+    date: '2026-10-25',
+    format: 'mp4',
+    id: 'abc',
+  };
   it('renders tokens', () => {
     expect(renderNameTemplate('{title} [{resolution}]', tokens)).toBe('My Clip [1080p]');
     expect(renderNameTemplate('{host}_{title}_{date}', tokens)).toBe('ex.com_My Clip_2026-10-25');
@@ -100,5 +120,15 @@ describe('withExtension / renderNameTemplate', () => {
   it('sanitises the result, and falls back to the title when the template is empty', () => {
     expect(renderNameTemplate('{title}/../x', { ...tokens, title: 'a/b' })).toBe('a_b_.._x');
     expect(renderNameTemplate('', tokens)).toBe('My Clip');
+  });
+});
+
+describe('asciiFileName (fallback when Chrome rejects a name)', () => {
+  it('folds accents and replaces other non-ASCII characters', () => {
+    expect(asciiFileName('Città — è già [1080p].mp4')).toBe('Citta _ e gia [1080p].mp4');
+    expect(asciiFileName('日本語.txt')).toBe('_.txt');
+  });
+  it('leaves plain ASCII (and sub-folders) untouched', () => {
+    expect(asciiFileName('vdown/My Clip [720p].mp4')).toBe('vdown/My Clip [720p].mp4');
   });
 });

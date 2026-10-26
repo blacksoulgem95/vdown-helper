@@ -1,7 +1,7 @@
 ---
 id: VDH-016
 title: Options page and settings persistence
-status: todo
+status: in-progress
 priority: P1
 area: ui
 depends_on: [VDH-003, VDH-013]
@@ -15,11 +15,11 @@ Settings: default mode, preferred quality, default audio format, naming template
 
 ## Acceptance criteria
 
-- [ ] Settings round-trip tests
-- [ ] Corrupt stored settings fall back to defaults
+- [x] Settings round-trip tests
+- [x] Corrupt stored settings fall back to defaults
 - [ ] Optional permission grant/revoke reflected in UI
-- [ ] Permission explanations present
+- [x] Permission explanations present
 
 ## Notes
 
-_None yet._
+Round-trip, clamping, corrupt data and queued writes are unit-tested; persistence across reloads is E2E-tested. **Open:** grant/revoke of the optional all-sites / webRequest permissions through Chrome's real prompt cannot be automated (E2E stands in with install-time grants). Tracked in VDH-028.

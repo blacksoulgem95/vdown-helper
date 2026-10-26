@@ -18,8 +18,14 @@ describe('content scanner', () => {
       <a href="/page.html">not media</a>`);
     const r = scan();
     const byUrl = Object.fromEntries(r.candidates.map((c) => [new URL(c.url).pathname, c]));
-    expect(Object.keys(byUrl).sort()).toEqual(['/files/d.mkv', '/media/a.mp4', '/s.mp3', '/b.webm', '/c.m3u8'].sort());
-    expect(byUrl['/media/a.mp4']).toMatchObject({ method: 'dom-element', mediaType: 'video', title: 'My video' });
+    expect(Object.keys(byUrl).sort()).toEqual(
+      ['/files/d.mkv', '/media/a.mp4', '/s.mp3', '/b.webm', '/c.m3u8'].sort(),
+    );
+    expect(byUrl['/media/a.mp4']).toMatchObject({
+      method: 'dom-element',
+      mediaType: 'video',
+      title: 'My video',
+    });
     expect(byUrl['/b.webm']).toMatchObject({ method: 'dom-source', mimeType: 'video/webm' });
     expect(byUrl['/s.mp3']?.mediaType).toBe('audio');
     expect(byUrl['/files/d.mkv']).toMatchObject({ method: 'dom-link', title: 'Download D' });
@@ -44,7 +50,8 @@ describe('content scanner', () => {
   it('reads inside open shadow roots', () => {
     const host = document.createElement('div');
     document.body.append(host);
-    host.attachShadow({ mode: 'open' }).innerHTML = '<video src="https://cdn.example.org/shadow.mp4"></video>';
+    host.attachShadow({ mode: 'open' }).innerHTML =
+      '<video src="https://cdn.example.org/shadow.mp4"></video>';
     expect(scan().candidates.map((c) => c.url)).toContain('https://cdn.example.org/shadow.mp4');
   });
 

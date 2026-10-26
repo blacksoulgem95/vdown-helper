@@ -6,7 +6,11 @@ import { AES, DASH, LIVE, MASTER, MEDIA, PLAIN_M3U, SAMPLE_AES } from './fixture
 
 const ctx = { tabId: 1, pageUrl: 'https://site.example/watch', pageTitle: 'Watch page', now: 1 };
 
-const okText = (text: string, finalUrl: string, contentType = 'application/vnd.apple.mpegurl'): ProbeResult => ({
+const okText = (
+  text: string,
+  finalUrl: string,
+  contentType = 'application/vnd.apple.mpegurl',
+): ProbeResult => ({
   ok: true,
   status: 200,
   contentType,
@@ -32,12 +36,20 @@ function fetcher(map: Record<string, ProbeResult>): Fetcher & { calls: string[] 
   return { calls, head: get, text: get };
 }
 
-const cand = (url: string, extra: Partial<RawCandidate> = {}): RawCandidate => ({ url, method: 'dom-element', ...extra });
+const cand = (url: string, extra: Partial<RawCandidate> = {}): RawCandidate => ({
+  url,
+  method: 'dom-element',
+  ...extra,
+});
 
 describe('direct files', () => {
   it('reports size and type from headers', async () => {
     const f = fetcher({ 'https://cdn.example/a.mp4': okHead('video/mp4', 5_000_000) });
-    const [r] = await analyzeCandidates([cand('https://cdn.example/a.mp4', { durationSec: 90, width: 1280, height: 720 })], ctx, f);
+    const [r] = await analyzeCandidates(
+      [cand('https://cdn.example/a.mp4', { durationSec: 90, width: 1280, height: 720 })],
+      ctx,
+      f,
+    );
     expect(r).toMatchObject({
       kind: 'file',
       format: 'mp4',
@@ -100,7 +112,12 @@ describe('HLS', () => {
     expect(r?.kind).toBe('hls-master');
     expect(r?.variants.map((v) => v.height)).toEqual([1080, 720, 360]);
     expect(r?.audioTracks).toHaveLength(2);
-    expect(r).toMatchObject({ height: 1080, width: 1920, frameRate: 30, downloadability: { status: 'downloadable' } });
+    expect(r).toMatchObject({
+      height: 1080,
+      width: 1920,
+      frameRate: 30,
+      downloadability: { status: 'downloadable' },
+    });
     expect(r?.durationSec).toBeCloseTo(21.021, 2);
     expect(r?.sizeIsEstimate).toBe(true);
     expect(r?.sizeBytes).toBe(Math.round((2_800_000 * 21.021) / 8));
@@ -114,7 +131,11 @@ describe('HLS', () => {
   it('is inaccessible when the first variant playlist cannot be read', async () => {
     const f = fetcher({ [MASTER_URL]: okText(MASTER, MASTER_URL) });
     const [r] = await analyzeCandidates([cand(MASTER_URL)], ctx, f);
-    expect(r?.downloadability).toMatchObject({ status: 'inaccessible', reason: 'http-error', detail: 'variant-playlist' });
+    expect(r?.downloadability).toMatchObject({
+      status: 'inaccessible',
+      reason: 'http-error',
+      detail: 'variant-playlist',
+    });
   });
   it.each([
     ['AES-128 is downloadable', AES, 'downloadable', 'ok'],
@@ -127,12 +148,19 @@ describe('HLS', () => {
   });
   it('separates plain M3U, DASH and malformed playlists from HLS', async () => {
     const out = await analyzeCandidates(
-      [cand('https://cdn.example/list.m3u'), cand('https://cdn.example/m.mpd'), cand('https://cdn.example/bad.m3u8')],
+      [
+        cand('https://cdn.example/list.m3u'),
+        cand('https://cdn.example/m.mpd'),
+        cand('https://cdn.example/bad.m3u8'),
+      ],
       ctx,
       fetcher({
         'https://cdn.example/list.m3u': okText(PLAIN_M3U, 'https://cdn.example/list.m3u', 'audio/x-mpegurl'),
         'https://cdn.example/m.mpd': okText(DASH, 'https://cdn.example/m.mpd', 'application/dash+xml'),
-        'https://cdn.example/bad.m3u8': okText('#EXTM3U\n#EXT-X-STREAM-INF:RESOLUTION=1x1\nx\n', 'https://cdn.example/bad.m3u8'),
+        'https://cdn.example/bad.m3u8': okText(
+          '#EXTM3U\n#EXT-X-STREAM-INF:RESOLUTION=1x1\nx\n',
+          'https://cdn.example/bad.m3u8',
+        ),
       }),
     );
     const by = Object.fromEntries(out.map((r) => [new URL(r.url).pathname, r.downloadability]));

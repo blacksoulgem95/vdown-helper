@@ -73,7 +73,10 @@ describe('describeCodecs', () => {
       audio: { family: 'aac', label: 'AAC' },
     });
     expect(describeCodecs('hvc1.1.6.L93.B0,ec-3').video?.family).toBe('hevc');
-    expect(describeCodecs('vp09.00.10.08,opus')).toMatchObject({ video: { family: 'vp9' }, audio: { family: 'opus' } });
+    expect(describeCodecs('vp09.00.10.08,opus')).toMatchObject({
+      video: { family: 'vp9' },
+      audio: { family: 'opus' },
+    });
     expect(describeCodecs(undefined)).toEqual({});
     expect(describeCodecs('zzz')).toEqual({});
   });

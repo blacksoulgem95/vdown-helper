@@ -12,6 +12,7 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultAudioBitrate: 192,
   namingTemplate: '{title} [{resolution}]',
   subfolder: '',
+  askWhereToSave: false,
   autoScan: false,
   networkObserver: false,
   maxConcurrentDownloads: 2,
@@ -62,9 +63,14 @@ export function sanitizeSettings(raw: unknown): Settings {
     defaultAudioBitrate: oneOf(r['defaultAudioBitrate'], BITRATES, d.defaultAudioBitrate),
     namingTemplate: template,
     subfolder: typeof r['subfolder'] === 'string' ? sanitizeSubfolder(r['subfolder']) : d.subfolder,
+    askWhereToSave: bool(r['askWhereToSave'], d.askWhereToSave),
     autoScan: bool(r['autoScan'], d.autoScan),
     networkObserver: bool(r['networkObserver'], d.networkObserver),
-    maxConcurrentDownloads: int(r['maxConcurrentDownloads'], LIMITS.maxConcurrentDownloads, d.maxConcurrentDownloads),
+    maxConcurrentDownloads: int(
+      r['maxConcurrentDownloads'],
+      LIMITS.maxConcurrentDownloads,
+      d.maxConcurrentDownloads,
+    ),
     segmentConcurrency: int(r['segmentConcurrency'], LIMITS.segmentConcurrency, d.segmentConcurrency),
     maxMemoryMb: int(r['maxMemoryMb'], LIMITS.maxMemoryMb, d.maxMemoryMb),
     maxEncodeDurationSec: int(r['maxEncodeDurationSec'], LIMITS.maxEncodeDurationSec, d.maxEncodeDurationSec),
@@ -82,18 +88,31 @@ export async function loadSettings(): Promise<Settings> {
   }
 }
 
-/** Merge a partial update into the stored settings and persist the validated result. */
-export async function saveSettings(patch: Partial<Settings>): Promise<Settings> {
-  const current = await loadSettings();
-  const next = sanitizeSettings({ ...current, ...patch });
-  await chrome.storage.local.set({ [SETTINGS_KEY]: next });
-  return next;
+let writes: Promise<unknown> = Promise.resolve();
+
+/**
+ * Merge a partial update into the stored settings and persist the validated result. Writes are queued so two
+ * quick updates (e.g. a select, then typing in a field) can never overwrite each other.
+ */
+export function saveSettings(patch: Partial<Settings>): Promise<Settings> {
+  const run = writes.then(async () => {
+    const current = await loadSettings();
+    const next = sanitizeSettings({ ...current, ...patch });
+    await chrome.storage.local.set({ [SETTINGS_KEY]: next });
+    return next;
+  });
+  writes = run.catch(() => undefined);
+  return run;
 }
 
-export async function resetSettings(): Promise<Settings> {
-  const next = { ...DEFAULT_SETTINGS };
-  await chrome.storage.local.set({ [SETTINGS_KEY]: next });
-  return next;
+export function resetSettings(): Promise<Settings> {
+  const run = writes.then(async () => {
+    const next = { ...DEFAULT_SETTINGS };
+    await chrome.storage.local.set({ [SETTINGS_KEY]: next });
+    return next;
+  });
+  writes = run.catch(() => undefined);
+  return run;
 }
 
 /** Picks the variant to preselect for a quality preset: the best at or below the preset, else the lowest. */

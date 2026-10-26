@@ -22,12 +22,7 @@ export type MediaFormat =
 export type StreamKind = 'file' | 'hls-master' | 'hls-media' | 'unsupported-playlist' | 'blob';
 
 export type DetectionMethod =
-  | 'dom-element'
-  | 'dom-source'
-  | 'dom-link'
-  | 'performance'
-  | 'network'
-  | 'manual-rescan';
+  'dom-element' | 'dom-source' | 'dom-link' | 'performance' | 'network' | 'manual-rescan';
 
 /** Machine-readable reason, mapped to a localised string by the UI. */
 export type ReasonCode =

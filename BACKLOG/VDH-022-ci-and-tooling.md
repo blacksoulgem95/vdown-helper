@@ -1,7 +1,7 @@
 ---
 id: VDH-022
 title: CI workflow and lint/format tooling
-status: todo
+status: blocked
 priority: P2
 area: build
 depends_on: [VDH-001]
@@ -15,10 +15,12 @@ GitHub Actions: typecheck, lint, unit tests, build with zipped `dist` artifact; 
 
 ## Acceptance criteria
 
-- [ ] Workflow YAML valid
-- [ ] Jobs reference only npm scripts that exist
-- [ ] `dist` zip uploaded as artifact
+- [x] Workflow YAML valid
+- [x] Jobs reference only npm scripts that exist
+- [x] `dist` zip upload step defined
+
+- [ ] Workflow has run successfully on GitHub (blocked: the branch cannot be pushed, see VDH-027)
 
 ## Notes
 
-_None yet._
+Workflow YAML parses and every `npm run` it uses exists. **Blocked:** it has never executed on GitHub because the branch could not be pushed (VDH-027).

@@ -88,7 +88,14 @@ export function canRetry(job: DownloadJob): boolean {
 /** Reset a failed/cancelled job so the scheduler picks it up again. */
 export function retryJob(job: DownloadJob, now: number): DownloadJob {
   if (!canRetry(job)) throw new IllegalTransitionError(job.stage, 'detected');
-  const next: DownloadJob = { ...job, stage: 'detected', progress: {}, updatedAt: now, attempts: job.attempts + 1, paused: false };
+  const next: DownloadJob = {
+    ...job,
+    stage: 'detected',
+    progress: {},
+    updatedAt: now,
+    attempts: job.attempts + 1,
+    paused: false,
+  };
   delete next.error;
   delete next.finishedAt;
   delete next.chromeDownloadId;
@@ -129,7 +136,8 @@ export class SpeedMeter {
 
   etaSeconds(remainingBytes: number | undefined): number | undefined {
     const r = this.bytesPerSecond;
-    if (r === undefined || r <= 0 || remainingBytes === undefined || remainingBytes < 0 || this.samples < 3) return undefined;
+    if (r === undefined || r <= 0 || remainingBytes === undefined || remainingBytes < 0 || this.samples < 3)
+      return undefined;
     return remainingBytes / r;
   }
 }

@@ -28,7 +28,8 @@ function makeProgressSender(jobId: string) {
   };
 }
 
-const stage = (jobId: string, s: JobStage) => emit({ channel: 'vdown-offscreen-event', type: 'stage', jobId, stage: s });
+const stage = (jobId: string, s: JobStage) =>
+  emit({ channel: 'vdown-offscreen-event', type: 'stage', jobId, stage: s });
 
 export function startJob(jobId: string, request: DownloadRequest, plan: OffscreenPlan): void {
   if (running.has(jobId)) return;
@@ -62,10 +63,16 @@ function ext(fragmented: boolean): string {
   return fragmented ? 'mp4' : 'ts';
 }
 
-async function execute(jobId: string, req: DownloadRequest, plan: OffscreenPlan, entry: Running): Promise<void> {
+async function execute(
+  jobId: string,
+  req: DownloadRequest,
+  plan: OffscreenPlan,
+  entry: Running,
+): Promise<void> {
   const { signal } = entry.abort;
   const send = makeProgressSender(jobId);
   const maxBytes = plan.requiresFfmpeg ? plan.maxMemoryMb * MB : undefined;
+  const credentialedOrigins = req.credentialedOrigins ?? [];
   stage(jobId, 'downloading');
 
   // 1. Stage the source(s) on disk.
@@ -81,9 +88,11 @@ async function execute(jobId: string, req: DownloadRequest, plan: OffscreenPlan,
       playlistUrl: req.sourceUrl,
       fileName: (frag) => `video.${ext(frag)}`,
       concurrency: plan.segmentConcurrency,
+      credentialedOrigins,
       signal,
       ...(maxBytes !== undefined ? { maxBytes } : {}),
-      onProgress: (p) => send({ ...p, ...(p.fraction !== undefined ? { fraction: p.fraction * weight } : {}) }),
+      onProgress: (p) =>
+        send({ ...p, ...(p.fraction !== undefined ? { fraction: p.fraction * weight } : {}) }),
     });
     videoFile = video.file;
     durationSec = durationSec ?? video.durationSec;
@@ -93,9 +102,11 @@ async function execute(jobId: string, req: DownloadRequest, plan: OffscreenPlan,
         playlistUrl: req.audioUrl,
         fileName: (frag) => `audio.${frag ? 'mp4' : 'ts'}`,
         concurrency: plan.segmentConcurrency,
+        credentialedOrigins,
         signal,
         ...(maxBytes !== undefined ? { maxBytes: Math.max(0, maxBytes - video.bytes) } : {}),
-        onProgress: (p) => send({ ...p, ...(p.fraction !== undefined ? { fraction: 0.5 + p.fraction * 0.5 } : {}) }),
+        onProgress: (p) =>
+          send({ ...p, ...(p.fraction !== undefined ? { fraction: 0.5 + p.fraction * 0.5 } : {}) }),
       });
       audioFile = audio.file;
     }
@@ -104,6 +115,7 @@ async function execute(jobId: string, req: DownloadRequest, plan: OffscreenPlan,
       jobId,
       url: req.sourceUrl,
       fileName: `source.${req.sourceFormat === 'unknown' ? 'bin' : req.sourceFormat}`,
+      credentialedOrigins,
       signal,
       ...(maxBytes !== undefined ? { maxBytes } : {}),
       onProgress: send,
@@ -115,7 +127,13 @@ async function execute(jobId: string, req: DownloadRequest, plan: OffscreenPlan,
   // 2. Concatenation needs no processing: hand the disk-backed file straight to Chrome.
   if (!plan.requiresFfmpeg) {
     entry.blobUrl = URL.createObjectURL(videoFile);
-    emit({ channel: 'vdown-offscreen-event', type: 'ready', jobId, blobUrl: entry.blobUrl, bytes: videoFile.size });
+    emit({
+      channel: 'vdown-offscreen-event',
+      type: 'ready',
+      jobId,
+      blobUrl: entry.blobUrl,
+      bytes: videoFile.size,
+    });
     return;
   }
 
@@ -146,7 +164,9 @@ async function execute(jobId: string, req: DownloadRequest, plan: OffscreenPlan,
   if (signal.aborted) throw new CancelledError();
   if (data.byteLength === 0) throw new PipelineError('ffmpeg', 'FFmpeg produced an empty file');
   // The staged inputs are no longer needed; the result lives in memory until Chrome has saved it.
-  const blob = new Blob([data as Uint8Array<ArrayBuffer>], { type: MIME_BY_EXTENSION[plan.extension] ?? 'application/octet-stream' });
+  const blob = new Blob([data as Uint8Array<ArrayBuffer>], {
+    type: MIME_BY_EXTENSION[plan.extension] ?? 'application/octet-stream',
+  });
   entry.blobUrl = URL.createObjectURL(blob);
   emit({ channel: 'vdown-offscreen-event', type: 'ready', jobId, blobUrl: entry.blobUrl, bytes: blob.size });
 }

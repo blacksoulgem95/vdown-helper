@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fixture page — test media</title>
+  </head>
+  <body>
+    <h1>Fixture page</h1>
+    <video id="v" src="/media/sample.mp4" controls muted width="320" title="Sample clip"></video>
+    <p><a href="/media/sample.mp4">Download sample</a></p>
+    <script>
+      // Players fetch manifests via XHR/fetch: these leave Performance entries the extension can see.
+      const CDN = new URLSearchParams(location.search).get('cdn') || '';
+      const urls = [
+        '/hls/master.m3u8',
+        '/hls-sep/master.m3u8',
+        '/hls-aes/index.m3u8',
+        '/hls-long/master.m3u8',
+        '/hls-live/index.m3u8',
+        '/hls-drm/index.m3u8',
+        '/lists/playlist.m3u',
+        '/dash/manifest.mpd',
+        '/flaky/index.m3u8',
+        CDN + '/open/hls/master.m3u8',
+        CDN + '/closed/hls/master.m3u8',
+      ];
+      for (const u of urls)
+        fetch(u)
+          .then((r) => r.text())
+          .catch(() => {});
+    </script>
+  </body>
+</html>

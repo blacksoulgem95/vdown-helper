@@ -4,7 +4,17 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
 
 export default tseslint.config(
-  { ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'test-results/**', 'public/**'] },
+  {
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      'coverage/**',
+      'test-results/**',
+      'public/**',
+      'e2e/.tmp/**',
+      'docs/**',
+    ],
+  },
   js.configs.recommended,
   { languageOptions: { globals: { ...globals.browser, ...globals.node, chrome: 'readonly' } } },
   ...tseslint.configs.recommended,
@@ -18,7 +28,10 @@ export default tseslint.config(
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       'no-restricted-syntax': [
         'error',
-        { selector: "JSXAttribute[name.name='dangerouslySetInnerHTML']", message: 'Unsafe HTML injection is not allowed.' },
+        {
+          selector: "JSXAttribute[name.name='dangerouslySetInnerHTML']",
+          message: 'Unsafe HTML injection is not allowed.',
+        },
       ],
       'no-eval': 'error',
       'no-implied-eval': 'error',

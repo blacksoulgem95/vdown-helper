@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS, SETTINGS_KEY, loadSettings, pickVariantIndex, resetSettings, sanitizeSettings, saveSettings } from '@/lib/settings';
+import {
+  DEFAULT_SETTINGS,
+  SETTINGS_KEY,
+  loadSettings,
+  pickVariantIndex,
+  resetSettings,
+  sanitizeSettings,
+  saveSettings,
+} from '@/lib/settings';
 import { installFakeChrome, type FakeChrome } from './helpers/fake-chrome';
 
 let fake: FakeChrome;
@@ -14,15 +22,30 @@ describe('sanitizeSettings', () => {
     expect(sanitizeSettings([1, 2])).toEqual(DEFAULT_SETTINGS);
   });
   it('rejects invalid enum values and wrong types per field', () => {
-    const s = sanitizeSettings({ defaultMode: 'nope', preferredQuality: 5, autoScan: 'yes', defaultAudioBitrate: 999 });
+    const s = sanitizeSettings({
+      defaultMode: 'nope',
+      preferredQuality: 5,
+      autoScan: 'yes',
+      defaultAudioBitrate: 999,
+    });
     expect(s.defaultMode).toBe(DEFAULT_SETTINGS.defaultMode);
     expect(s.preferredQuality).toBe(DEFAULT_SETTINGS.preferredQuality);
     expect(s.autoScan).toBe(false);
     expect(s.defaultAudioBitrate).toBe(192);
   });
   it('clamps numeric limits', () => {
-    const s = sanitizeSettings({ maxConcurrentDownloads: 99, segmentConcurrency: 0, maxMemoryMb: 1, maxEncodeDurationSec: -5 });
-    expect(s).toMatchObject({ maxConcurrentDownloads: 5, segmentConcurrency: 1, maxMemoryMb: 128, maxEncodeDurationSec: 0 });
+    const s = sanitizeSettings({
+      maxConcurrentDownloads: 99,
+      segmentConcurrency: 0,
+      maxMemoryMb: 1,
+      maxEncodeDurationSec: -5,
+    });
+    expect(s).toMatchObject({
+      maxConcurrentDownloads: 5,
+      segmentConcurrency: 1,
+      maxMemoryMb: 128,
+      maxEncodeDurationSec: 0,
+    });
   });
   it('sanitises the sub-folder and bounds the template', () => {
     expect(sanitizeSettings({ subfolder: '../../evil/x' }).subfolder).toBe('evil/x');
@@ -39,10 +62,16 @@ describe('persistence through chrome.storage.local', () => {
     expect(await loadSettings()).toEqual(DEFAULT_SETTINGS);
   });
   it('round-trips a saved patch', async () => {
-    const saved = await saveSettings({ defaultMode: 'audio-only', maxConcurrentDownloads: 4, notifyOnComplete: false });
+    const saved = await saveSettings({
+      defaultMode: 'audio-only',
+      maxConcurrentDownloads: 4,
+      notifyOnComplete: false,
+    });
     expect(saved.defaultMode).toBe('audio-only');
     expect(await loadSettings()).toEqual(saved);
-    expect((fake.storage.local.data[SETTINGS_KEY] as { maxConcurrentDownloads: number }).maxConcurrentDownloads).toBe(4);
+    expect(
+      (fake.storage.local.data[SETTINGS_KEY] as { maxConcurrentDownloads: number }).maxConcurrentDownloads,
+    ).toBe(4);
   });
   it('merges successive patches', async () => {
     await saveSettings({ autoScan: true });
@@ -56,6 +85,18 @@ describe('persistence through chrome.storage.local', () => {
   it('validates values on save too', async () => {
     const s = await saveSettings({ maxMemoryMb: 10_000_000 });
     expect(s.maxMemoryMb).toBe(8192);
+  });
+  it('quick successive updates never overwrite each other', async () => {
+    await Promise.all([
+      saveSettings({ defaultMode: 'audio-only' }),
+      saveSettings({ namingTemplate: '{host}' }),
+      saveSettings({ subfolder: 'a' }),
+    ]);
+    expect(await loadSettings()).toMatchObject({
+      defaultMode: 'audio-only',
+      namingTemplate: '{host}',
+      subfolder: 'a',
+    });
   });
   it('reset restores defaults', async () => {
     await saveSettings({ autoScan: true });

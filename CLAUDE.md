@@ -24,5 +24,29 @@ Chrome Manifest V3 extension (TypeScript, React, Vite, Tailwind) that detects vi
 
 ## Commands
 
-Filled in as the scaffold lands (see `BACKLOG/VDH-001-project-scaffold.md`): `npm run build`,
-`npm test`, `npm run typecheck`, `npm run lint`, `npm run test:e2e`.
+```bash
+npm run build          # production build into dist/ (also copies the FFmpeg.wasm core)
+npm run check:dist     # manifest / assets / locales / CSP / no-remote-code checks on dist/
+npm run typecheck      # strict tsc
+npm run lint           # eslint (no any, no dangerouslySetInnerHTML, no eval)
+npm run format:check   # prettier
+npm test               # vitest (unit)
+npm run test:e2e       # real Chromium + fixtures; needs ffmpeg/ffprobe on PATH
+npm run serve:fixtures # the E2E sites, for manual testing
+node scripts/backlog.mjs set VDH-0xx done   # update a task status + the BACKLOG index
+```
+
+## Layout
+
+`src/background` (service worker) · `src/content` (read-only scanner) · `src/offscreen` (segments + FFmpeg.wasm) ·
+`src/popup` / `src/options` / `src/sidepanel` (React UIs) · `src/lib` (pure logic, the unit-tested core) ·
+`e2e/` (Playwright) · `docs/` · `BACKLOG/`. See README for the architecture and the verification limits.
+
+## Things that are easy to get wrong
+
+- `chrome.downloads.open()` needs a user gesture: call it from the page that got the click, never from the service worker.
+- Never sniff or log full URLs (`log` in `lib/security.ts` redacts them); never render page-derived text as HTML.
+- Video is never re-encoded. Audio may be. `lib/compat.ts` is the single source of truth for what is allowed; the UI
+  and the background both use it, and the background re-validates every request.
+- Cookies go only to origins the user granted (`credentialedOrigins`); everything else is fetched with `credentials: 'omit'`.
+- Do not mark a backlog task `done` for something that was only unit-tested if it also needs a real browser.

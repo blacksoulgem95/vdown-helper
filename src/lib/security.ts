@@ -105,6 +105,18 @@ export function sanitizeSubfolder(path: string): string {
     .join('/');
 }
 
+/**
+ * ASCII-only form of a file name, used when Chrome rejects the original ("Invalid filename" can happen on systems
+ * whose locale cannot represent the characters). Accents are folded; anything else becomes "_".
+ */
+export function asciiFileName(name: string): string {
+  return name
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\x20-\x7e]/g, '_')
+    .replace(/_{2,}/g, '_');
+}
+
 /** Ensure the final name ends with the given extension (case-insensitive), without doubling it. */
 export function withExtension(base: string, ext: string): string {
   const e = ext.replace(/^\./, '').toLowerCase();
@@ -120,7 +132,14 @@ export interface NameTokens {
   id: string;
 }
 
-export const NAME_TOKENS: ReadonlyArray<keyof NameTokens> = ['title', 'host', 'resolution', 'date', 'format', 'id'];
+export const NAME_TOKENS: ReadonlyArray<keyof NameTokens> = [
+  'title',
+  'host',
+  'resolution',
+  'date',
+  'format',
+  'id',
+];
 
 /** Render a naming template. Unknown tokens are removed; empty `[]`/`()` leftovers are cleaned up. */
 export function renderNameTemplate(template: string, tokens: NameTokens): string {

@@ -1,7 +1,7 @@
 ---
 id: VDH-024
 title: License and third-party notices
-status: todo
+status: done
 priority: P2
 area: docs
 depends_on: [VDH-012]
@@ -15,9 +15,9 @@ MIT `LICENSE` for project code, `THIRD_PARTY_NOTICES.md` listing FFmpeg core (GP
 
 ## Acceptance criteria
 
-- [ ] LICENSE and notices present
-- [ ] FFmpeg core licence stated accurately after checking the installed package
+- [x] LICENSE and notices present
+- [x] FFmpeg core licence stated accurately after checking the installed package
 
 ## Notes
 
-_None yet._
+`package.json` of `@ffmpeg/core` declares GPL-2.0-or-later. Whether the combined package is acceptable for store distribution is explicitly left to the project owner in THIRD_PARTY_NOTICES.md.

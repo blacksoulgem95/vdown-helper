@@ -14,6 +14,16 @@ export function originsOf(urls: Iterable<string>, max = 24): string[] {
   return [...set];
 }
 
+export function sampleByOrigin(urls: Iterable<string>, max = 24): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const u of urls) {
+    const o = parseUrl(u);
+    if (o && (o.protocol === 'https:' || o.protocol === 'http:') && !(o.origin in out)) out[o.origin] = u;
+    if (Object.keys(out).length >= max) break;
+  }
+  return out;
+}
+
 export function inspectMediaPlaylist(p: HlsMediaPlaylist): VariantInspection {
   const urls = new Set<string>([p.url]);
   const keyUris = new Set<string>();
@@ -35,6 +45,7 @@ export function inspectMediaPlaylist(p: HlsMediaPlaylist): VariantInspection {
     protectedByDrm: p.hasDrm,
     keyUris: [...keyUris],
     origins: originsOf(urls),
+    originSamples: sampleByOrigin(urls),
     firstSegmentExt: extensionOf(p.segments[0]?.uri ?? '') || (p.fragmented ? 'm4s' : 'ts'),
   };
   if (p.targetDuration !== undefined) out.targetDuration = p.targetDuration;

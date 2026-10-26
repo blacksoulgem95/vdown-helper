@@ -12,6 +12,7 @@ export interface StageOptions {
   /** File name in staging; may depend on whether the segments are fMP4. */
   fileName: string | ((fragmented: boolean) => string);
   concurrency: number;
+  credentialedOrigins?: string[];
   signal: AbortSignal;
   /** Abort when staged bytes exceed this (used when FFmpeg must later hold the result in memory). */
   maxBytes?: number;
@@ -26,6 +27,21 @@ export interface StagedMedia {
 }
 
 const RETRIES = 3;
+/**
+ * Cookies are only sent to origins the user granted access to (DownloadRequest.credentialedOrigins). Everything
+ * else is fetched without credentials, which is also what wildcard-CORS CDNs require.
+ */
+type Creds = (url: string) => RequestCredentials;
+export function credentialsFor(origins: string[] | undefined): Creds {
+  const granted = new Set(origins ?? []);
+  return (url) => {
+    try {
+      return granted.has(new URL(url).origin) ? 'include' : 'omit';
+    } catch {
+      return 'omit';
+    }
+  };
+}
 
 function check(signal: AbortSignal): void {
   if (signal.aborted) throw new CancelledError();
@@ -41,7 +57,12 @@ const sleep = (ms: number, signal: AbortSignal) =>
  * fetch() that classifies failures. A rejected fetch to another origin means CORS refusal or a network error;
  * the browser does not distinguish them, so the message says both and the UI explains how to grant access.
  */
-async function request(url: string, signal: AbortSignal, range?: { offset: number; length: number }): Promise<Response> {
+async function request(
+  url: string,
+  signal: AbortSignal,
+  creds: Creds,
+  range?: { offset: number; length: number },
+): Promise<Response> {
   const headers: Record<string, string> = {};
   if (range) headers['Range'] = `bytes=${range.offset}-${range.offset + range.length - 1}`;
   let lastErr: PipelineError = new PipelineError('network', 'Request failed');
@@ -49,10 +70,13 @@ async function request(url: string, signal: AbortSignal, range?: { offset: numbe
     check(signal);
     let res: Response | undefined;
     try {
-      res = await fetch(url, { credentials: 'include', cache: 'no-store', headers, signal });
+      res = await fetch(url, { cache: 'no-store', headers, signal, credentials: creds(url) });
     } catch {
       if (signal.aborted) throw new CancelledError();
-      lastErr = new PipelineError('cors', 'The request was blocked: the site refused cross-origin access or the network failed');
+      lastErr = new PipelineError(
+        'cors',
+        'The request was blocked: the site refused cross-origin access or the network failed',
+      );
     }
     if (res) {
       if (res.ok || res.status === 206) return res;
@@ -65,22 +89,38 @@ async function request(url: string, signal: AbortSignal, range?: { offset: numbe
   throw lastErr;
 }
 
-async function getBytes(url: string, signal: AbortSignal, range?: { offset: number; length: number }): Promise<Uint8Array> {
-  const res = await request(url, signal, range);
+async function getBytes(
+  url: string,
+  signal: AbortSignal,
+  creds: Creds,
+  range?: { offset: number; length: number },
+): Promise<Uint8Array> {
+  const res = await request(url, signal, creds, range);
   return new Uint8Array(await res.arrayBuffer());
 }
 
-export async function loadMediaPlaylist(url: string, signal: AbortSignal): Promise<HlsMediaPlaylist> {
+export async function loadMediaPlaylist(
+  url: string,
+  signal: AbortSignal,
+  creds: Creds,
+): Promise<HlsMediaPlaylist> {
   check(signal);
-  const res = await fetchText(url, fetch, 'include');
+  const res = await fetchText(url, fetch, creds(url));
   if (!res.ok) {
-    throw new PipelineError(res.kind === 'http' ? 'http-error' : 'cors', res.kind === 'http' ? `HTTP ${res.status ?? 0}` : 'The playlist request was blocked');
+    throw new PipelineError(
+      res.kind === 'http' ? 'http-error' : 'cors',
+      res.kind === 'http' ? `HTTP ${res.status ?? 0}` : 'The playlist request was blocked',
+    );
   }
   const parsed = parseHls(res.text ?? '', res.finalUrl || url);
   if (!parsed.ok) throw new PipelineError('invalid', `Playlist error: ${parsed.error.code}`);
   if (parsed.playlist.kind !== 'hls-media') throw new PipelineError('invalid', 'Expected a media playlist');
   const p = parsed.playlist;
-  if (p.hasDrm) throw new PipelineError('protected', 'This stream uses DRM or SAMPLE-AES encryption, which is not supported');
+  if (p.hasDrm)
+    throw new PipelineError(
+      'protected',
+      'This stream uses DRM or SAMPLE-AES encryption, which is not supported',
+    );
   if (!p.endList) throw new PipelineError('invalid', 'Live streams cannot be downloaded');
   return p;
 }
@@ -99,7 +139,8 @@ function ivFor(key: HlsKey, sequence: number): Uint8Array {
 /** Download a media playlist's segments (decrypting AES-128) in order into a file on disk. */
 export async function stageHlsPlaylist(opts: StageOptions): Promise<StagedMedia> {
   const { signal } = opts;
-  const playlist = await loadMediaPlaylist(opts.playlistUrl, signal);
+  const creds = credentialsFor(opts.credentialedOrigins);
+  const playlist = await loadMediaPlaylist(opts.playlistUrl, signal, creds);
   const segs = playlist.segments;
 
   const free = await freeBytes();
@@ -114,8 +155,9 @@ export async function stageHlsPlaylist(opts: StageOptions): Promise<StagedMedia>
     let p = keys.get(uri);
     if (!p) {
       p = (async () => {
-        const raw = await getBytes(uri, signal);
-        if (raw.byteLength !== 16) throw new PipelineError('decrypt', 'The decryption key has an unexpected size');
+        const raw = await getBytes(uri, signal, creds);
+        if (raw.byteLength !== 16)
+          throw new PipelineError('decrypt', 'The decryption key has an unexpected size');
         return crypto.subtle.importKey('raw', raw as Uint8Array<ArrayBuffer>, 'AES-CBC', false, ['decrypt']);
       })();
       keys.set(uri, p);
@@ -123,7 +165,10 @@ export async function stageHlsPlaylist(opts: StageOptions): Promise<StagedMedia>
     return p;
   };
 
-  const out = await createStageFile(opts.jobId, typeof opts.fileName === 'function' ? opts.fileName(playlist.fragmented) : opts.fileName);
+  const out = await createStageFile(
+    opts.jobId,
+    typeof opts.fileName === 'function' ? opts.fileName(playlist.fragmented) : opts.fileName,
+  );
   const meter = new SpeedMeter();
   const started = Date.now();
   let downloadedBytes = 0;
@@ -152,13 +197,17 @@ export async function stageHlsPlaylist(opts: StageOptions): Promise<StagedMedia>
   };
 
   const fetchSegment = async (seg: HlsSegment): Promise<Uint8Array> => {
-    let data = await getBytes(seg.uri, signal, seg.byteRange);
+    let data = await getBytes(seg.uri, signal, creds, seg.byteRange);
     downloadedBytes += data.byteLength;
     const key = seg.key;
     if (key && key.method === 'AES-128') {
       try {
         const ck = await keyFor(key);
-        const clear = await crypto.subtle.decrypt({ name: 'AES-CBC', iv: ivFor(key, seg.sequence) as Uint8Array<ArrayBuffer> }, ck, data as Uint8Array<ArrayBuffer>);
+        const clear = await crypto.subtle.decrypt(
+          { name: 'AES-CBC', iv: ivFor(key, seg.sequence) as Uint8Array<ArrayBuffer> },
+          ck,
+          data as Uint8Array<ArrayBuffer>,
+        );
         data = new Uint8Array(clear);
       } catch (e) {
         if (e instanceof PipelineError || e instanceof CancelledError) throw e;
@@ -178,7 +227,7 @@ export async function stageHlsPlaylist(opts: StageOptions): Promise<StagedMedia>
         if (seg.map) {
           const mapKey = `${seg.map.uri}|${seg.map.byteRange?.offset ?? ''}`;
           if (mapKey !== lastMapKey) {
-            await out.write(await getBytes(seg.map.uri, signal, seg.map.byteRange));
+            await out.write(await getBytes(seg.map.uri, signal, creds, seg.map.byteRange));
             lastMapKey = mapKey;
           }
         }
@@ -225,9 +274,11 @@ export async function stageHlsPlaylist(opts: StageOptions): Promise<StagedMedia>
 }
 
 /** Stream one direct file into staging with byte-accurate progress. */
-export async function stageDirectFile(opts: Omit<StageOptions, 'playlistUrl' | 'concurrency' | 'fileName'> & { url: string; fileName: string }): Promise<{ file: File; bytes: number }> {
+export async function stageDirectFile(
+  opts: Omit<StageOptions, 'playlistUrl' | 'concurrency' | 'fileName'> & { url: string; fileName: string },
+): Promise<{ file: File; bytes: number }> {
   const { signal } = opts;
-  const res = await request(opts.url, signal);
+  const res = await request(opts.url, signal, credentialsFor(opts.credentialedOrigins));
   const total = Number(res.headers.get('content-length')) || undefined;
   if (opts.maxBytes !== undefined && total !== undefined && total > opts.maxBytes) {
     throw new PipelineError('too-large', 'The file exceeds the configured memory limit');

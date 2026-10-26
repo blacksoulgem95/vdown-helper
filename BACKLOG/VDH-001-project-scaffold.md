@@ -1,7 +1,7 @@
 ---
 id: VDH-001
 title: Project scaffold
-status: in-progress
+status: done
 priority: P0
 area: build
 depends_on: []
@@ -15,11 +15,11 @@ Set up Vite multi-entry build (pages as ES modules, service worker, content scri
 
 ## Acceptance criteria
 
-- [ ] `npm run build` produces a loadable `dist/`
-- [ ] `npm run typecheck`, `lint`, `test` all run (even if few tests yet)
-- [ ] Strict TS flags enabled (`strict`, `noUncheckedIndexedAccess`)
-- [ ] `CLAUDE.md` Commands section updated
+- [x] `npm run build` produces a loadable `dist/`
+- [x] `npm run typecheck`, `lint`, `test` all run (even if few tests yet)
+- [x] Strict TS flags enabled (`strict`, `noUncheckedIndexedAccess`)
+- [x] `CLAUDE.md` Commands section updated
 
 ## Notes
 
-_None yet._
+`npm run build|typecheck|lint|test|test:e2e|check:dist|serve:fixtures` all exist and pass locally (typecheck, eslint, prettier, 230+ unit tests, 41 E2E steps).

@@ -1,7 +1,7 @@
 ---
 id: VDH-014
 title: Popup UI
-status: todo
+status: done
 priority: P0
 area: ui
 depends_on: [VDH-008, VDH-009, VDH-013]
@@ -15,11 +15,11 @@ About 420px popup: header (logo, SCANNING/READY indicator, settings, version), c
 
 ## Acceptance criteria
 
-- [ ] Every control works
-- [ ] Loading, success, failure states
-- [ ] Keyboard navigable
-- [ ] Screenshot reviewed in real Chromium
+- [x] Every control works
+- [x] Loading, success, failure states
+- [x] Keyboard navigable
+- [x] Screenshot reviewed in real Chromium
 
 ## Notes
 
-_None yet._
+E2E exercises: scan state, cards/details, DOWNLOAD, CONFIGURE (selection hand-off; `sidePanel.open()` itself needs a real toolbar click, see VDH-028), RESCAN, Settings gear, Copy URL, pause/resume/cancel/retry/remove/clear, Open/Show clicks, empty and restricted-page states, keyboard focus order and rings.
