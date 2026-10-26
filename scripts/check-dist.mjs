@@ -106,6 +106,14 @@ for (const file of walk(dist).filter((f) => f.endsWith('.js') && !f.includes(`${
     fail(`${rel}: remote import`);
 }
 
+// Test-only players and tools (devDependencies) must never be part of the extension.
+for (const file of walk(dist).filter((f) => f.endsWith('.js') && !f.includes(`${join(dist, 'vendor')}`))) {
+  const code = readFileSync(file, 'utf8');
+  const rel = file.slice(dist.length + 1);
+  if (/\bdashjs\b|dash\.all\.min|\bHls\.Events\b|hls\.min\.js|@playwright|\bplaywright\b/.test(code))
+    fail(`${rel}: contains test-only tooling (hls.js, dash.js or Playwright)`);
+}
+
 const wasm = statSync(join(dist, 'vendor/ffmpeg/ffmpeg-core.wasm')).size;
 console.log(
   `dist OK check: ${walk(dist).length} files, FFmpeg wasm ${(wasm / 1048576).toFixed(1)} MB, version ${manifest.version}`,
