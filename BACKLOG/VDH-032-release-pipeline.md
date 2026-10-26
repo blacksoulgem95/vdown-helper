@@ -15,13 +15,15 @@ A GitHub Actions workflow that runs on `main`: verifies the project, builds the 
 
 ## Acceptance criteria
 
-- [ ] `npm run package` builds a zip with `manifest.json` at its root and the right version in the file name
-- [ ] The zip contains the bundled FFmpeg core and loads unpacked in Chromium without manifest/CSP errors
-- [ ] Workflow verifies (typecheck, lint, format, unit tests, build, dist check) before packaging
+- [x] `npm run package` builds a zip with `manifest.json` at its root and the right version in the file name
+- [x] The zip contains the bundled FFmpeg core and loads unpacked in Chromium without manifest/CSP errors
+- [x] Workflow verifies (typecheck, lint, format, unit tests, build, dist check) before packaging
 - [ ] A release is created only once per version (tag `v<version>`), re-runs on the same version do not fail or overwrite it
 - [ ] A new `package.json` version produces a new tag + release (verified on GitHub)
-- [ ] Workflow YAML valid; every `npm run` it uses exists
+- [x] Workflow YAML valid; every `npm run` it uses exists
 
 ## Notes
 
-_None yet._
+Verified locally: `npm run package` in a clean clone after `npm ci` (same SHA-256 as the working copy: reproducible), zip integrity and checksum, and the unzipped package loaded in Chromium (popup, options, side panel, FFmpeg core reachable, no console errors). The once-per-version tag check was exercised in a shell with and without a tag.
+
+**Not verified:** the workflow itself has not run on GitHub, so `gh release create`, the `contents: write` permission and the artifact hand-off between the two jobs are untested. It also only runs for pushes to `main`, and `main` does not contain the project yet. Close this task after the first real release appears.
