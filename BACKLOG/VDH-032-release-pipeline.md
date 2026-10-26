@@ -34,4 +34,7 @@ The workflow has run on GitHub: merging PR #2 published `v0.1.0` and merging PR 
 permission and the artifact hand-off work. The jump to `1.0.0` was **not intended**: the VDH-032 commit message described the `#minor/#major` tokens and the
 rule matched them anywhere in the text. VDH-048 restricts the tokens to a line of their own (or a `[minor]`/`[major]` subject tag).
 
+Under the tightened rule, merging PR #4 with `#minor` on a line of its own in the merge message published `v1.1.0` (Release run
+40311412921), as intended.
+
 **Still not observed:** a re-run of the workflow on an already released commit (it should publish nothing). Close this task once that has been seen.

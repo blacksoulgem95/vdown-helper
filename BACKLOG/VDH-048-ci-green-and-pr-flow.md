@@ -1,7 +1,7 @@
 ---
 id: VDH-048
 title: CI green on GitHub, release bump rule, PR-and-merge flow
-status: in-progress
+status: done
 priority: P0
 area: build
 depends_on: [VDH-022, VDH-032, VDH-047]
@@ -21,7 +21,7 @@ was published by accident).
 - [x] The Studio E2E step waits for the scan it depends on and explains itself if it fails
 - [x] `#minor` / `#major` bump the version only on a line of their own; `[minor]` / `[major]` only in a commit subject; tested (`tests/version.test.ts`, incl. the message that caused the accidental 1.0.0)
 - [x] `CLAUDE.md` working agreement: open a PR per completed stage and merge it once CI is green
-- [ ] CI (`check` and `e2e`) green on GitHub on the PR head, PR merged, release published with the expected version
+- [x] CI (`check` and `e2e`) green on GitHub on the PR head, PR merged, release published with the expected version (runs 40309330572 / 40309421272 green, e2e 108/108; PR #4 merged as `70d88c8`; Release run 40311412921 published `v1.1.0`)
 
 ## Notes
 
@@ -30,4 +30,5 @@ was published by accident).
   Now a flush that wrote nothing reports nothing, and a report that completes a stage is never throttled.
 - Studio step: opening a popup rescans the tab; `select()` now waits until that scan is `ready` and lists the resource, and prints what the Studio
   shows if the heading still does not appear.
-- Local: 608 unit tests, full E2E 108/108. CI on GitHub: see the PR.
+- Local: 608 unit tests, full E2E 108/108. On GitHub: `check` and `e2e` green on the head of PR #4, which was merged with `#minor` on a line of
+  its own in the merge message; the Release workflow published `v1.1.0`, the first intended minor release under the tightened rule.
