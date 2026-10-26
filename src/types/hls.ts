@@ -84,6 +84,8 @@ export interface HlsRendition {
   isDefault: boolean;
   autoSelect: boolean;
   channels?: string;
+  /** Codec string when the manifest states it per track (DASH does; HLS lists audio codecs on the variants). */
+  codecs?: string;
 }
 
 export interface HlsMasterPlaylist {

@@ -34,12 +34,20 @@ describe('detectBump', () => {
   it.each([
     [['fix typo'], 'patch'],
     [[], 'patch'],
-    [['add thing #minor'], 'minor'],
+    [['add thing\n\n#minor'], 'minor'],
+    [['add thing\n\n  #Minor  '], 'minor'],
     [['[minor] add thing'], 'minor'],
-    [['rework #major', 'also #minor'], 'major'],
+    [['rework\n#major', 'also\n#minor'], 'major'],
     [['[MAJOR] breaking'], 'major'],
     [['talking about a majority vote'], 'patch'],
     [['#minority'], 'patch'],
+    // mentions are not requests (VDH-048: how 1.0.0 was published by accident)
+    [
+      ['add the release bump\n\n- next version = latest tag + patch (#minor/#major in a commit raise it)'],
+      'patch',
+    ],
+    [['add thing #minor'], 'patch'],
+    [['fix\n\nthe body says [major] in passing'], 'patch'],
   ] as const)('%j -> %s', (messages, bump) => {
     expect(detectBump([...messages])).toBe(bump);
   });
@@ -65,11 +73,11 @@ describe('nextVersion', () => {
     });
   });
   it('minor / major from commit messages, reset lower parts', () => {
-    expect(nextVersion({ ...base, tags: ['v0.1.5'], messages: ['x #minor'] }).version).toBe('0.2.0');
-    expect(nextVersion({ ...base, tags: ['v0.1.5'], messages: ['x #major'] }).version).toBe('1.0.0');
+    expect(nextVersion({ ...base, tags: ['v0.1.5'], messages: ['x\n#minor'] }).version).toBe('0.2.0');
+    expect(nextVersion({ ...base, tags: ['v0.1.5'], messages: ['x\n#major'] }).version).toBe('1.0.0');
   });
   it('an explicit choice (manual run) beats the commit messages', () => {
-    expect(nextVersion({ ...base, tags: ['v0.1.5'], messages: ['x #major'], forced: 'patch' }).version).toBe(
+    expect(nextVersion({ ...base, tags: ['v0.1.5'], messages: ['x\n#major'], forced: 'patch' }).version).toBe(
       '0.1.6',
     );
     expect(nextVersion({ ...base, tags: ['v0.1.5'], forced: 'minor' }).version).toBe('0.2.0');
@@ -125,7 +133,7 @@ describe('scripts/next-version.mjs against a real git repository', () => {
     commit('fix a bug');
     expect(run()).toMatchObject({ version: '0.1.1', reason: 'patch', previous: '0.1.0', tagged: 'false' });
 
-    commit('add a feature #minor');
+    commit('add a feature\n\n#minor');
     commit('another fix');
     expect(run()).toMatchObject({ version: '0.2.0', reason: 'minor' });
     expect(run({ BUMP: 'patch' })).toMatchObject({ version: '0.1.1', reason: 'patch' });
@@ -136,7 +144,7 @@ describe('scripts/next-version.mjs against a real git repository', () => {
     expect(run()).toMatchObject({ version: '0.2.1', previous: '0.2.0' });
 
     // an old #major in already released history must not bump again
-    commit('big change #major');
+    commit('big change\n\n#major');
     git('tag', 'v1.0.0');
     commit('later fix');
     expect(run()).toMatchObject({ version: '1.0.1', reason: 'patch' });

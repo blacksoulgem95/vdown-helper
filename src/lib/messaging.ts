@@ -1,3 +1,4 @@
+import { isExtensionPage } from './security';
 import type { Envelope, RequestMap, RequestType, Result } from '@/types/messages';
 
 /** Typed wrapper over chrome.runtime.sendMessage. Never throws: transport failures become `{ ok: false }`. */
@@ -22,7 +23,7 @@ const isObj = (v: unknown): v is Record<string, unknown> =>
 const isStr = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length < 8192;
 const isInt = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0;
 
-const ACTIONS = ['cancel', 'retry', 'pause', 'resume', 'remove'];
+const ACTIONS = ['cancel', 'retry', 'pause', 'resume', 'remove', 'stop'];
 const MODES = ['video-audio', 'audio-only', 'video-only', 'original'];
 const CONTAINERS = ['mp4', 'mkv', 'ts', 'original'];
 const AUDIO = ['mp3', 'm4a', 'aac', 'wav'];
@@ -33,7 +34,7 @@ const validators: { [K in RequestType]: (p: unknown) => p is RequestMap[K]['req'
   scan: (p): p is RequestMap['scan']['req'] => isObj(p) && isInt(p['tabId']),
   'get-state': (p): p is RequestMap['get-state']['req'] => isObj(p) && isInt(p['tabId']),
   'inspect-variant': (p): p is RequestMap['inspect-variant']['req'] =>
-    isObj(p) && isInt(p['tabId']) && isStr(p['url']),
+    isObj(p) && isInt(p['tabId']) && isStr(p['url']) && (p['frameId'] === undefined || isInt(p['frameId'])),
   'start-download': (p): p is RequestMap['start-download']['req'] => {
     if (!isObj(p) || !isObj(p['request'])) return false;
     const r = p['request'];
@@ -48,7 +49,8 @@ const validators: { [K in RequestType]: (p: unknown) => p is RequestMap[K]['req'
       CONTAINERS.includes(r['container'] as string) &&
       AUDIO.includes(r['audioFormat'] as string) &&
       BITRATES.includes(r['audioBitrate'] as number) &&
-      typeof r['isHls'] === 'boolean'
+      typeof r['isHls'] === 'boolean' &&
+      (r['isDash'] === undefined || typeof r['isDash'] === 'boolean')
     );
   },
   'job-action': (p): p is RequestMap['job-action']['req'] =>
@@ -78,7 +80,7 @@ export type Handlers = { [K in RequestType]: Handler<K> };
 export function registerHandlers(handlers: Handlers): void {
   chrome.runtime.onMessage.addListener((raw, sender, sendResponse) => {
     // Only this extension's own pages may drive it (no externally_connectable is declared).
-    if (sender.id !== chrome.runtime.id) return false;
+    if (!isExtensionPage(sender)) return false;
     const envelope = parseEnvelope(raw);
     if (!envelope) return false;
     const handler = handlers[envelope.type] as Handler<RequestType>;

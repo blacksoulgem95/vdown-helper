@@ -16,8 +16,12 @@ export interface Settings {
   askWhereToSave: boolean;
   /** Scan automatically when a tab finishes loading (needs the optional host permission). */
   autoScan: boolean;
+  /** Run the read-only page hook in every frame of granted sites (needs site access). */
+  pageHook: boolean;
   /** Observe media requests via webRequest (needs the optional permission). */
   networkObserver: boolean;
+  /** Images smaller than this (shorter side, in pixels) are hidden in the Images tab; 0 = show all. */
+  imageMinPx: number;
   maxConcurrentDownloads: number;
   /** Parallel segment fetches per HLS job. */
   segmentConcurrency: number;
@@ -25,6 +29,12 @@ export interface Settings {
   maxMemoryMb: number;
   /** Refuse FFmpeg conversions longer than this (seconds of media), 0 = no limit. */
   maxEncodeDurationSec: number;
+  /** Container of a recorded MediaStream when this Chrome can record it natively; otherwise WebM. */
+  recordContainer: 'webm' | 'mp4';
+  /** A recording (MediaStream, live stream) stops by itself after this many minutes. */
+  recordMaxMinutes: number;
+  /** ... or after this many MB have been recorded. */
+  recordMaxMb: number;
   notifyOnComplete: boolean;
   notifyOnError: boolean;
 }

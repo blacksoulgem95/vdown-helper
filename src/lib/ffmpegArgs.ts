@@ -12,6 +12,11 @@ export interface FfmpegArgsInput {
   audioPath?: string;
   audioFormat: AudioFormat;
   audioBitrate: AudioBitrate;
+  /**
+   * Keep the inputs' own timestamps, shifted together so the earliest starts at zero. Needed when two separately
+   * recorded live tracks are joined: each began at a different moment, and that offset is the real A/V alignment.
+   */
+  keepOffsets?: boolean;
   output: string;
 }
 
@@ -33,7 +38,10 @@ function audioCodecArgs(i: FfmpegArgsInput): string[] {
  * the plan says otherwise. The planner (lib/compat) decides copy vs transcode; this just expresses it.
  */
 export function buildFfmpegArgs(i: FfmpegArgsInput): string[] {
-  const args = ['-hide_banner', '-y'];
+  // +genpts: legacy containers (MPEG program streams, some AVI/ASF) often carry no timestamps for copied packets,
+  // which Matroska/MP4 muxers refuse. Generating them changes nothing for files that already have them.
+  const args = ['-hide_banner', '-y', '-fflags', '+genpts'];
+  if (i.keepOffsets) args.push('-copyts');
   if (i.mode === 'audio-only') {
     args.push('-i', i.audioPath ?? i.videoPath, '-vn', '-map', '0:a:0', ...audioCodecArgs(i));
     args.push(i.output);
@@ -48,6 +56,7 @@ export function buildFfmpegArgs(i: FfmpegArgsInput): string[] {
     args.push('-map', i.audioPath ? '1:a:0' : '0:a:0?', '-c:v', 'copy', ...audioCodecArgs(i));
   }
   if (i.extension === 'mp4' || i.extension === 'm4a') args.push('-movflags', '+faststart');
+  if (i.keepOffsets) args.push('-avoid_negative_ts', 'make_zero');
   args.push(i.output);
   return args;
 }
@@ -59,6 +68,10 @@ export const MIME_BY_EXTENSION: Record<string, string> = {
   webm: 'video/webm',
   mp3: 'audio/mpeg',
   m4a: 'audio/mp4',
+  mka: 'audio/x-matroska',
   aac: 'audio/aac',
   wav: 'audio/wav',
+  srt: 'application/x-subrip',
+  vtt: 'text/vtt',
+  ttml: 'application/ttml+xml',
 };

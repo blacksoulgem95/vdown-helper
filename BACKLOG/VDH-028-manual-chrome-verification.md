@@ -23,6 +23,16 @@ What automation cannot prove. Follow the manual test procedure in the README in 
 - [ ] Unicode file names save correctly
 - [ ] A real multi-GB VOD stays responsive and can be cancelled
 
+- [ ] Options -> "Look inside players" shows Chrome's all-sites prompt and enables the hook; revoking access removes it
+- [ ] "Allow embedded players" in the popup asks for exactly the listed frame origins, then the nested players appear
+- [ ] Recording a MediaStream (a webcam test page, a screen share, a WebRTC call page) with "Recording format" set to MP4: the file plays and has sound; with WebM it still works
+- [ ] MediaStream recording keeps the "recording" banner visible in a real window, Stop in the banner and in the queue both save, and closing the tab keeps what was recorded
+- [ ] Capture (fast and real time) of a real MSE player with H.264/AAC (the test browser has no proprietary codecs): the file plays; a player with EME (Widevine) shows no capture button
+- [ ] Recording a live HLS and a live DASH stream from a real, legitimate source you are allowed to record: Stop saves a playable file; the limits in Settings stop it by themselves
+- [ ] Real PeerTube instance, Wikimedia Commons `File:` page and Internet Archive item list their files and the downloads work (VDH-046)
+- [ ] Page hook: with _Look inside players_ on, a page keeps working normally (no console errors from the page, players behave)
+- [ ] Web Store listing and permission forms filled in from `docs/store-policy.md` (submission itself is out of scope)
+
 ## Notes
 
 Nothing here has been verified yet; all boxes are intentionally unchecked.

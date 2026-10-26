@@ -3,12 +3,13 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createCipheriv, randomBytes } from 'node:crypto';
+import { zipSync } from 'fflate';
 
 const ff = (args) =>
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...args], { stdio: 'inherit' });
 
 export function ensureFixtures(dir) {
-  if (existsSync(join(dir, '.complete4'))) return;
+  if (existsSync(join(dir, '.complete14'))) return;
   mkdirSync(dir, { recursive: true });
   for (const d of [
     'media',
@@ -26,6 +27,21 @@ export function ensureFixtures(dir) {
     'hls-long',
     'hls-aes-fmp4',
     'hls-range',
+    'dash-vod',
+    'dash-drm',
+    'dash-live',
+    'subs',
+    'formats',
+    'files',
+    'mse',
+    'mse/hls',
+    'gen',
+    'hls-subs/sub-en',
+    'dash-vod/t',
+    'live/hls',
+    'live/hlsv',
+    'live/hlsa',
+    'live/dash',
   ]) {
     mkdirSync(join(dir, d), { recursive: true });
   }
@@ -281,6 +297,310 @@ video/index.m3u8
     '#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:2\n#EXTINF:2.0,\n/__stall/seg.ts\n#EXT-X-ENDLIST\n',
   );
 
+  // MPEG-DASH: two video representations (360p copy, 180p re-encoded for the fixture) + AAC audio, timeline template.
+  ff([
+    '-i',
+    sample,
+    '-map',
+    '0:v:0',
+    '-map',
+    '0:v:0',
+    '-map',
+    '0:a:0',
+    '-c:v:0',
+    'copy',
+    '-c:v:1',
+    'libx264',
+    '-preset',
+    'ultrafast',
+    '-filter:v:1',
+    'scale=320:180',
+    '-g',
+    '50',
+    '-keyint_min',
+    '50',
+    '-sc_threshold',
+    '0',
+    '-c:a',
+    'copy',
+    '-f',
+    'dash',
+    '-seg_duration',
+    '2',
+    '-use_template',
+    '1',
+    '-use_timeline',
+    '1',
+    '-adaptation_sets',
+    'id=0,streams=v id=1,streams=a',
+    join(dir, 'dash-vod/manifest.mpd'),
+  ]);
+  const vodMpd = readFileSync(join(dir, 'dash-vod/manifest.mpd'), 'utf8');
+  // The same manifest, declaring Widevine (refused) and as a live stream (not supported yet). Only the manifests exist.
+  writeFileSync(
+    join(dir, 'dash-drm/manifest.mpd'),
+    vodMpd
+      .replace('<AdaptationSet id="0"', '<AdaptationSet id="0"')
+      .replace(
+        /(<AdaptationSet id="0"[^>]*>)/,
+        '$1<ContentProtection schemeIdUri="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"/>',
+      ),
+  );
+  writeFileSync(
+    join(dir, 'dash-live/manifest.mpd'),
+    vodMpd.replace('type="static"', 'type="dynamic" minimumUpdatePeriod="PT2S"'),
+  );
+
+  // ---- Media Source Extensions: VP9 + Opus in fragmented MP4 (what an open-source Chromium can play through MSE),
+  // two qualities (320x180, 640x360) of 3 x 2 s segments plus one Opus track. Split into an init and media segments.
+  ff([
+    '-f',
+    'lavfi',
+    '-i',
+    'testsrc2=size=640x360:rate=25',
+    '-f',
+    'lavfi',
+    '-i',
+    'sine=frequency=440:sample_rate=48000',
+    '-t',
+    '6',
+    '-map',
+    '0:v',
+    '-map',
+    '0:v',
+    '-map',
+    '1:a',
+    '-c:v:0',
+    'libvpx-vp9',
+    '-s:v:0',
+    '320x180',
+    '-b:v:0',
+    '150k',
+    '-c:v:1',
+    'libvpx-vp9',
+    '-s:v:1',
+    '640x360',
+    '-b:v:1',
+    '400k',
+    '-c:a',
+    'libopus',
+    '-b:a',
+    '48k',
+    '-g',
+    '50',
+    '-keyint_min',
+    '50',
+    '-f',
+    'dash',
+    '-dash_segment_type',
+    'mp4',
+    '-seg_duration',
+    '2',
+    '-use_template',
+    '1',
+    '-use_timeline',
+    '1',
+    '-init_seg_name',
+    'init-$RepresentationID$.m4s',
+    '-media_seg_name',
+    'chunk-$RepresentationID$-$Number$.m4s',
+    '-adaptation_sets',
+    'id=0,streams=v id=1,streams=a',
+    join(dir, 'mse/out.mpd'),
+  ]);
+
+  // The same segments as an HLS (fMP4) stream, for hls.js: a master with the 640x360 video and the Opus track.
+  const hlsMedia = (init, chunk, count) =>
+    '#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-PLAYLIST-TYPE:VOD\n' +
+    `#EXT-X-MAP:URI="../${init}"\n` +
+    Array.from({ length: count }, (_, i) => `#EXTINF:2.000,\n../${chunk(i + 1)}\n`).join('') +
+    '#EXT-X-ENDLIST\n';
+  writeFileSync(
+    join(dir, 'mse/hls/video.m3u8'),
+    hlsMedia('init-1.m4s', (i) => `chunk-1-${i}.m4s`, 3),
+  );
+  writeFileSync(
+    join(dir, 'mse/hls/audio.m3u8'),
+    hlsMedia('init-2.m4s', (i) => `chunk-2-${i}.m4s`, 3),
+  );
+  writeFileSync(
+    join(dir, 'mse/hls/master.m3u8'),
+    '#EXTM3U\n#EXT-X-VERSION:7\n' +
+      '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="a",NAME="English",LANGUAGE="en",DEFAULT=YES,AUTOSELECT=YES,URI="audio.m3u8"\n' +
+      '#EXT-X-STREAM-INF:BANDWIDTH=450000,RESOLUTION=640x360,CODECS="vp09.00.21.08,opus",AUDIO="a"\nvideo.m3u8\n',
+  );
+
+  // ---- Other container/audio formats: 2 s clips, each encoded with a codec typical of the format.
+  const clip = (name, args) => ff(['-i', sample, '-t', '2', ...args, join(dir, 'formats', name)]);
+  const v264 = ['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'ultrafast'];
+  clip('clip.flv', [...v264, '-c:a', 'aac', '-f', 'flv']);
+  clip('clip.avi', ['-c:v', 'mpeg4', '-c:a', 'libmp3lame', '-f', 'avi']);
+  clip('clip.wmv', ['-c:v', 'wmv2', '-c:a', 'wmav2', '-f', 'asf']);
+  clip('clip.asf', ['-c:v', 'wmv2', '-c:a', 'wmav2', '-f', 'asf']);
+  clip('clip.3gp', [...v264, '-c:a', 'aac', '-f', '3gp']);
+  clip('clip.mpg', ['-c:v', 'mpeg2video', '-c:a', 'mp2', '-f', 'mpeg']);
+  clip('clip.aiff', ['-vn', '-c:a', 'pcm_s16be', '-f', 'aiff']);
+  clip('clip.wma', ['-vn', '-c:a', 'wmav2', '-f', 'asf']);
+  clip('clip.opus', ['-vn', '-c:a', 'libopus', '-f', 'opus']);
+
+  // ---- data: URLs: a tiny MP4 and MP3 embedded in a page (generated, so the page and the expected bytes agree)
+  const inlineMp4 = join(dir, 'gen/inline.mp4');
+  ff([
+    '-f',
+    'lavfi',
+    '-i',
+    'testsrc2=size=320x180:rate=10',
+    '-f',
+    'lavfi',
+    '-i',
+    'sine=frequency=330:sample_rate=44100',
+    '-t',
+    '1',
+    '-c:v',
+    'libx264',
+    '-pix_fmt',
+    'yuv420p',
+    '-preset',
+    'ultrafast',
+    '-c:a',
+    'aac',
+    '-b:a',
+    '48k',
+    '-movflags',
+    '+faststart',
+    inlineMp4,
+  ]);
+  const inlineMp3 = join(dir, 'gen/inline.mp3');
+  ff([
+    '-f',
+    'lavfi',
+    '-i',
+    'sine=frequency=550:sample_rate=44100',
+    '-t',
+    '1',
+    '-c:a',
+    'libmp3lame',
+    '-b:a',
+    '64k',
+    inlineMp3,
+  ]);
+  const b64 = (f) => readFileSync(f).toString('base64');
+  writeFileSync(
+    join(dir, 'gen/data.html'),
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Inline media page</title></head><body>
+<video id="v" controls muted title="Inline clip" src="data:video/mp4;base64,${b64(inlineMp4)}"></video>
+<audio id="a" controls><source src="data:audio/mpeg;base64,${b64(inlineMp3)}"></audio>
+<audio id="big"></audio>
+<script>
+  // 34.5 MB once decoded: over the 32 MB limit for data: URLs, so it must be reported as too large.
+  document.getElementById('big').setAttribute('src', 'data:audio/wav;base64,' + 'A'.repeat(46000000));
+</script></body></html>`,
+  );
+
+  // ---- Images, documents, an archive and page assets
+  const png = (name, size, filter = 'testsrc2') =>
+    ff(['-f', 'lavfi', '-i', `${filter}=size=${size}:rate=1`, '-frames:v', '1', join(dir, 'files', name)]);
+  png('hero.png', '640x360');
+  png('thumb.png', '48x48');
+  png('css-bg.png', '300x200', 'smptebars');
+  png('leaf.png', '320x240');
+  png('inline.png', '160x160');
+  ff([
+    '-f',
+    'lavfi',
+    '-i',
+    'testsrc2=size=400x300:rate=1',
+    '-frames:v',
+    '1',
+    '-q:v',
+    '5',
+    join(dir, 'files/photo.jpg'),
+  ]);
+  writeFileSync(
+    join(dir, 'files/Quarterly Report.pdf'),
+    '%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n',
+  );
+  writeFileSync(join(dir, 'files/data.csv'), 'a,b\n1,2\n3,4\n');
+  writeFileSync(
+    join(dir, 'files/bundle.zip'),
+    Buffer.from(
+      zipSync({ 'readme.txt': new TextEncoder().encode('hello'), 'dir/x.bin': new Uint8Array(500) }),
+    ),
+  );
+  writeFileSync(join(dir, 'files/site.css'), 'body{background:url(css-bg.png)}\n');
+  writeFileSync(join(dir, 'files/app.js'), 'console.log("fixture");\n');
+  writeFileSync(join(dir, 'files/font.woff2'), randomBytes(300));
+  // Two 70 MB archives: together they are over the smallest memory limit a user can set (128 MB).
+  writeFileSync(join(dir, 'files/large1.iso'), Buffer.alloc(70 * 1024 * 1024));
+  writeFileSync(join(dir, 'files/large2.iso'), Buffer.alloc(70 * 1024 * 1024, 1));
+
+  // ---- Subtitles (all hand-written text; nothing here needs ffmpeg)
+  writeFileSync(
+    join(dir, 'subs/en.vtt'),
+    'WEBVTT\n\nNOTE a comment\n\nintro\n00:00:01.000 --> 00:00:02.500 line:90%\nHello <i>world</i>\n\n00:00:03.000 --> 00:00:04.000\nSecond &amp; last\n',
+  );
+  writeFileSync(
+    join(dir, 'subs/it.srt'),
+    '1\r\n00:00:00,500 --> 00:00:01,500\r\nCiao\r\n\r\n2\r\n00:00:02,000 --> 00:00:03,000\r\nMondo\r\n',
+  );
+  writeFileSync(
+    join(dir, 'subs/en.ttml'),
+    '<?xml version="1.0" encoding="utf-8"?><tt xmlns="http://www.w3.org/ns/ttml" xml:lang="en"><body><div>' +
+      '<p begin="00:00:01.000" end="00:00:02.000">Hello<br/>world</p>' +
+      '<p begin="2.5s" end="4s"><span>Two</span> <span>spans</span></p></div></body></tt>',
+  );
+  // A segmented HLS WebVTT subtitle: two segments placed on the media timeline by X-TIMESTAMP-MAP.
+  writeFileSync(
+    join(dir, 'hls-subs/master.m3u8'),
+    '#EXTM3U\n#EXT-X-VERSION:3\n' +
+      '#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="English",LANGUAGE="en",DEFAULT=YES,URI="sub-en/index.m3u8"\n' +
+      '#EXT-X-STREAM-INF:BANDWIDTH=900000,RESOLUTION=640x360,CODECS="avc1.64001e,mp4a.40.2",SUBTITLES="subs"\n../hls/v360/index.m3u8\n',
+  );
+  writeFileSync(
+    join(dir, 'hls-subs/sub-en/index.m3u8'),
+    '#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:6\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXTINF:6,\nseg0.vtt\n#EXTINF:6,\nseg1.vtt\n#EXT-X-ENDLIST\n',
+  );
+  writeFileSync(
+    join(dir, 'hls-subs/sub-en/seg0.vtt'),
+    'WEBVTT\nX-TIMESTAMP-MAP=MPEGTS:900000,LOCAL:00:00:00.000\n\n00:00:01.000 --> 00:00:03.000\nFirst segment\n',
+  );
+  writeFileSync(
+    join(dir, 'hls-subs/sub-en/seg1.vtt'),
+    'WEBVTT\nX-TIMESTAMP-MAP=MPEGTS:1440000,LOCAL:00:00:00.000\n\n00:00:00.500 --> 00:00:02.000\nSecond segment\n',
+  );
+  // DASH with an IMSC1 (stpp) text track: each segment is an MP4 whose mdat holds one TTML document.
+  const mp4box = (type, payload) => {
+    const head = Buffer.alloc(8);
+    head.writeUInt32BE(8 + payload.length, 0);
+    head.write(type, 4, 'latin1');
+    return Buffer.concat([head, payload]);
+  };
+  const ttmlDoc = (begin, end, text) =>
+    `<?xml version="1.0" encoding="utf-8"?><tt xmlns="http://www.w3.org/ns/ttml"><body><div><p begin="${begin}" end="${end}">${text}</p></div></body></tt>`;
+  writeFileSync(
+    join(dir, 'dash-vod/t/0.m4s'),
+    Buffer.concat([
+      mp4box('moof', Buffer.alloc(8)),
+      mp4box('mdat', Buffer.from(ttmlDoc('00:00:01.000', '00:00:02.000', 'Prima riga'))),
+    ]),
+  );
+  writeFileSync(
+    join(dir, 'dash-vod/t/1.m4s'),
+    Buffer.concat([
+      mp4box('moof', Buffer.alloc(8)),
+      mp4box('mdat', Buffer.from(ttmlDoc('00:00:03.000', '00:00:04.500', 'Seconda riga'))),
+    ]),
+  );
+  writeFileSync(
+    join(dir, 'dash-vod/manifest-subs.mpd'),
+    vodMpd.replace(
+      /<\/Period>/,
+      '<AdaptationSet id="9" contentType="text" mimeType="application/mp4" codecs="stpp" lang="it">' +
+        '<SegmentTemplate timescale="1000" duration="3000" startNumber="0" media="t/$Number$.m4s"/>' +
+        '<Representation id="sub-it" bandwidth="1000"/></AdaptationSet></Period>',
+    ),
+  );
+
   // Two 70 MB "segments" (zeros): the playlist is valid, the data is not media. Used to trip the memory guard.
   const chunk = Buffer.alloc(70 * 1024 * 1024);
   writeFileSync(join(dir, 'big/seg0.ts'), chunk);
@@ -289,5 +609,57 @@ video/index.m3u8
     join(dir, 'big/index.m3u8'),
     '#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:10.0,\nseg0.ts\n#EXTINF:10.0,\nseg1.ts\n#EXT-X-ENDLIST\n',
   );
-  writeFileSync(join(dir, '.complete4'), 'ok');
+  // ---- Live streams: 70 s of media cut into 2 s segments. The server (server.mjs, /__live/) shows them one after the
+  // other as time passes, like a live encoder would; nothing here is a playlist.
+  const liveSrc = [
+    '-f',
+    'lavfi',
+    '-i',
+    'testsrc2=size=160x90:rate=5',
+    '-f',
+    'lavfi',
+    '-i',
+    'sine=frequency=523:sample_rate=44100',
+    '-t',
+    '70',
+  ];
+  const liveEnc = ['-g', '10', '-keyint_min', '10', '-sc_threshold', '0'];
+  const x264 = ['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'ultrafast', ...liveEnc];
+  const hlsOut = (outDir, extra) =>
+    ff([
+      ...liveSrc,
+      ...extra,
+      '-f',
+      'hls',
+      '-hls_time',
+      '2',
+      '-hls_playlist_type',
+      'vod',
+      '-hls_segment_filename',
+      join(dir, outDir, 'seg%d.ts'),
+      join(dir, outDir, 'index.m3u8'),
+    ]);
+  hlsOut('live/hls', [...x264, '-c:a', 'aac', '-b:a', '64k']);
+  hlsOut('live/hlsv', [...x264, '-an']);
+  hlsOut('live/hlsa', ['-vn', '-c:a', 'aac', '-b:a', '64k']);
+  ff([
+    ...liveSrc,
+    ...x264,
+    '-c:a',
+    'aac',
+    '-b:a',
+    '64k',
+    '-f',
+    'dash',
+    '-seg_duration',
+    '2',
+    '-use_template',
+    '1',
+    '-use_timeline',
+    '0',
+    '-adaptation_sets',
+    'id=0,streams=v id=1,streams=a',
+    join(dir, 'live/dash/manifest.mpd'),
+  ]);
+  writeFileSync(join(dir, '.complete14'), 'ok');
 }

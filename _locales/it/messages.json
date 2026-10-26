@@ -673,5 +673,308 @@
   },
   "errFileUnavailable": {
     "message": "Questo download non ha un file da aprire."
+  },
+  "detectHook": {
+    "message": "Hook nella pagina (fetch/XHR)"
+  },
+  "noteFramesBlocked": {
+    "message": "Player incorporati da altri siti non leggibili: $1"
+  },
+  "allowEmbedded": {
+    "message": "CONSENTI PLAYER INCORPORATI"
+  },
+  "allowEmbeddedHint": {
+    "message": "Chrome chiederà l'accesso solo a quei siti."
+  },
+  "reasonEme": {
+    "message": "La pagina usa la riproduzione protetta (EME/DRM). vdown-helper non aggira il DRM."
+  },
+  "optPageHook": {
+    "message": "Guarda dentro i player (hook nella pagina)"
+  },
+  "optPageHookHint": {
+    "message": "Esegue uno script di sola lettura all'inizio di ogni pagina che visiti, in ogni frame, per notare manifest e file che i player caricano da script e per riconoscere la riproduzione protetta. Non modifica nulla e non invia nulla; richiede l'accesso a tutti i siti, che puoi revocare in qualsiasi momento. Disattivato per impostazione predefinita."
+  },
+  "kindDashStream": {
+    "message": "STREAM DASH"
+  },
+  "reasonDashEncrypted": {
+    "message": "Il manifest DASH dichiara una cifratura (DRM). vdown-helper non aggira il DRM."
+  },
+  "reasonDashClearKey": {
+    "message": "Questo stream DASH è cifrato con ClearKey. Rilevato correttamente (non è DRM), ma il download non è ancora supportato."
+  },
+  "reasonDashPeriods": {
+    "message": "Il manifest ha più periodi: viene scaricato solo il più lungo (il contenuto principale)."
+  },
+  "detectDomTrack": {
+    "message": "Traccia sottotitoli (<track>)"
+  },
+  "reasonSubtitleUnsupported": {
+    "message": "Questa traccia di sottotitoli usa un formato che non si può trasformare in un file di testo (cue WebVTT in MP4 o sottotitoli immagine)."
+  },
+  "kindSubtitle": {
+    "message": "SOTTOTITOLI"
+  },
+  "kindSubtitleStream": {
+    "message": "FLUSSO SOTTOTITOLI"
+  },
+  "pipeSubtitle": {
+    "message": "File di sottotitoli: scaricato, unito se segmentato e scritto come testo. Nessuna elaborazione video."
+  },
+  "subOutput": {
+    "message": "Formato dei sottotitoli"
+  },
+  "subOutputOriginal": {
+    "message": "Come trovato"
+  },
+  "subOutputOriginalStitched": {
+    "message": "WebVTT (segmenti uniti)"
+  },
+  "subOutputSrt": {
+    "message": "SRT (convertito)"
+  },
+  "subOutputHint": {
+    "message": "SRT funziona in quasi tutti i lettori. La conversione mantiene testo e tempi; stile e posizione vengono scartati."
+  },
+  "subtitlesHeading": {
+    "message": "Sottotitoli"
+  },
+  "tabMedia": {
+    "message": "Media"
+  },
+  "tabSubtitles": {
+    "message": "Sottotitoli"
+  },
+  "subtitleLang": {
+    "message": "Lingua: $1"
+  },
+  "reasonTooLarge": {
+    "message": "Questo file incorporato supera il limite di 32 MB per gli URL data:."
+  },
+  "reasonInPageData": {
+    "message": "Il file è incorporato nella pagina stessa (URL data:). È la pagina a consegnarlo; l'estensione non lo scarica mai da sola."
+  },
+  "sourceInline": {
+    "message": "incorporato nella pagina (data:)"
+  },
+  "detectDomImage": {
+    "message": "Immagine nella pagina"
+  },
+  "detectDomStyle": {
+    "message": "Immagine di sfondo CSS"
+  },
+  "detectDomMeta": {
+    "message": "Metadati della pagina (icona / immagine social)"
+  },
+  "tabsLabel": {
+    "message": "Tipi di elementi trovati"
+  },
+  "tabVideo": {
+    "message": "Video"
+  },
+  "tabAudio": {
+    "message": "Audio"
+  },
+  "tabImages": {
+    "message": "Immagini"
+  },
+  "tabFiles": {
+    "message": "File"
+  },
+  "tabAssets": {
+    "message": "Risorse"
+  },
+  "kindImage": {
+    "message": "IMMAGINE"
+  },
+  "kindDocument": {
+    "message": "DOCUMENTO"
+  },
+  "kindArchive": {
+    "message": "ARCHIVIO"
+  },
+  "kindAsset": {
+    "message": "RISORSA DELLA PAGINA"
+  },
+  "frameTop": {
+    "message": "Questa pagina"
+  },
+  "frameEmbedded": {
+    "message": "Incorporato: $1"
+  },
+  "imageMinLabel": {
+    "message": "Immagine più piccola da mostrare"
+  },
+  "imageMinAny": {
+    "message": "Mostra tutte le dimensioni"
+  },
+  "imageMinPx": {
+    "message": "$1 px o più"
+  },
+  "imagesHidden": {
+    "message": "$1 immagini più piccole sono nascoste."
+  },
+  "showMore": {
+    "message": "MOSTRANE ALTRI $1"
+  },
+  "selectAll": {
+    "message": "Seleziona tutto"
+  },
+  "selectNone": {
+    "message": "Deseleziona"
+  },
+  "selectedCount": {
+    "message": "$1 selezionati"
+  },
+  "selectItem": {
+    "message": "Seleziona $1"
+  },
+  "downloadSelected": {
+    "message": "SCARICA $1"
+  },
+  "bulkQueued": {
+    "message": "$1 download in coda."
+  },
+  "bulkFailed": {
+    "message": "Impossibile avviarne $1."
+  },
+  "dimensionsPx": {
+    "message": "$1 × $2 px"
+  },
+  "tabEmpty": {
+    "message": "Nessun elemento di questo tipo in questa pagina."
+  },
+  "pipeZip": {
+    "message": "Archivio ZIP: i file vengono scaricati uno alla volta e impacchettati su disco. Nulla viene ricodificato."
+  },
+  "zipButton": {
+    "message": "ZIP $1"
+  },
+  "jobSkipped": {
+    "message": "$1 file non hanno potuto essere inclusi. Sono elencati in _not-saved.txt dentro lo ZIP."
+  },
+  "errNothingToZip": {
+    "message": "Nessuno dei file selezionati può finire in uno ZIP (incorporati nella pagina, oppure non scaricabili)."
+  },
+  "zipHint": {
+    "message": "Per lo ZIP l'estensione deve leggere ogni file: i siti che lo bloccano potrebbero richiedere l'accesso."
+  },
+  "zipTooLarge": {
+    "message": "I file selezionati superano il limite di dimensione per uno ZIP (il limite di memoria nelle Impostazioni, al massimo 4 GB). Selezionane meno oppure scaricali uno alla volta."
+  },
+  "reasonInPageBlob": {
+    "message": "Il file è tenuto dalla pagina stessa (URL blob:). È la pagina a consegnarlo; l'estensione non lo scarica mai da sola."
+  },
+  "sourceBlob": {
+    "message": "tenuto dalla pagina (blob:)"
+  },
+  "reasonMseNeedsHook": {
+    "message": "Questo video viene dato al lettore a pezzi (Media Source Extensions), quindi non c'è un file da scaricare. Attiva \"Guarda dentro i player\" nelle Impostazioni per catturare ciò che riproduce."
+  },
+  "reasonMseUnrecordable": {
+    "message": "Questo video viene dato al lettore a pezzi e l'hook della pagina non ha visto come: non si può catturare."
+  },
+  "reasonMseCapturable": {
+    "message": "Per questo video non c'è un file né un indirizzo di flusso. Si può catturare: la pagina lo riproduce fino in fondo (muto, volendo più veloce) mentre vdown-helper registra ciò che il lettore riceve. Ottieni la qualità scelta dal lettore."
+  },
+  "jobErrCapture": {
+    "message": "La cattura non è stata completata"
+  },
+  "captureBanner": {
+    "message": "vdown-helper sta catturando questo video"
+  },
+  "captureCancel": {
+    "message": "Annulla"
+  },
+  "captureProgressFast": {
+    "message": "$1% · cattura veloce"
+  },
+  "captureProgressRealtime": {
+    "message": "$1% · cattura in tempo reale"
+  },
+  "captureFast": {
+    "message": "CATTURA (VELOCE)"
+  },
+  "captureRealtime": {
+    "message": "REGISTRA (TEMPO REALE)"
+  },
+  "captureHint": {
+    "message": "Riproduce il video fino in fondo nella pagina, muto, e registra ciò che il lettore riceve. Poi viene rimesso com'era."
+  },
+  "errCaptureProtected": {
+    "message": "Questo video usa una riproduzione protetta e non viene mai catturato."
+  },
+  "errCaptureNoHook": {
+    "message": "Per catturare serve \"Guarda dentro i player\" (Impostazioni) e un ricaricamento della pagina."
+  },
+  "pipeCapture": {
+    "message": "Cattura: la pagina riproduce il video fino in fondo mentre ciò che il lettore riceve viene registrato, poi i flussi vengono copiati in un file. Nulla viene ricodificato."
+  },
+  "stageRecording": {
+    "message": "REGISTRAZIONE"
+  },
+  "kindStream": {
+    "message": "Flusso multimediale live"
+  },
+  "sourceStream": {
+    "message": "un flusso nella pagina (MediaStream)"
+  },
+  "reasonStreamRecordable": {
+    "message": "È un flusso multimediale live riprodotto dalla pagina (fotocamera, condivisione schermo, chiamata o canvas). Non ha un file né un indirizzo, ma può essere registrato mentre viene riprodotto, finché premi Stop o si raggiunge un limite."
+  },
+  "recordStart": {
+    "message": "REGISTRA"
+  },
+  "recordHint": {
+    "message": "Registra ciò che questo flusso riproduce da ora in poi, in WebM (o MP4 dove questo Chrome lo supporta, vedi Impostazioni). Finché registra, nella pagina resta un banner: premi Stop per salvare o Annulla per scartare."
+  },
+  "recordBanner": {
+    "message": "vdown-helper sta registrando questo flusso"
+  },
+  "recordStop": {
+    "message": "Ferma e salva"
+  },
+  "jobStop": {
+    "message": "Ferma e salva"
+  },
+  "pipeRecord": {
+    "message": "Registrazione: il flusso della pagina viene registrato dal browser finché non lo fermi o non si raggiunge un limite; poi il file viene sistemato con una copia dei flussi (durata, indice). vdown-helper non ricodifica nulla."
+  },
+  "secRecording": {
+    "message": "Registrazione"
+  },
+  "secRecordingHint": {
+    "message": "Limiti e formato delle registrazioni di flussi multimediali. Una registrazione si ferma da sola e viene salvata quando si raggiunge un limite."
+  },
+  "optRecordContainer": {
+    "message": "Formato di registrazione"
+  },
+  "optRecordContainerHint": {
+    "message": "L'MP4 è usato solo dove questo Chrome lo registra in modo nativo; altrimenti WebM."
+  },
+  "optRecordMaxMinutes": {
+    "message": "Registrazione più lunga (minuti)"
+  },
+  "optRecordMaxMb": {
+    "message": "Registrazione più grande (MB)"
+  },
+  "reasonLiveRecordable": {
+    "message": "È uno stream live o evento, quindi non si può scaricare come file. Si può registrare: vdown-helper segue lo stream da ora finché premi Stop, lo stream termina o si raggiunge un limite (Impostazioni → Registrazione)."
+  },
+  "recordLiveHint": {
+    "message": "Segue lo stream da ora in poi e salva ciò che trasmette, senza ricodificare. Ferma e salva dalla coda in qualsiasi momento; Annulla scarta la registrazione."
+  },
+  "pipeLive": {
+    "message": "Registrazione live: lo stream viene seguito e ogni nuovo segmento è salvato appena appare, finché lo fermi, termina o si raggiunge un limite; poi le tracce sono unite con una copia dei flussi. Nulla viene ricodificato."
+  },
+  "jobGaps": {
+    "message": "$1 segmento/i non erano più disponibili al momento previsto e mancano nella registrazione."
+  },
+  "detectMetadata": {
+    "message": "Metadati della pagina (Open Graph, JSON-LD, feed)"
+  },
+  "detectSiteApi": {
+    "message": "API pubblica del sito"
   }
 }

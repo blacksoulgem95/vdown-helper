@@ -27,11 +27,39 @@ if (!/^\d+(\.\d+){0,3}$/.test(manifest.version)) fail(`invalid version ${manifes
 for (const [size, p] of Object.entries(manifest.icons ?? {})) need(p, `icon ${size}`);
 for (const p of Object.values(manifest.action?.default_icon ?? {})) need(p, 'action icon');
 need(manifest.action?.default_popup, 'popup');
+
+// The permission surface is fixed: anything new must be a deliberate change to these lists (and to docs/store-policy.md).
+const ALLOWED = {
+  permissions: [
+    'activeTab',
+    'scripting',
+    'downloads',
+    'downloads.open',
+    'storage',
+    'offscreen',
+    'notifications',
+    'sidePanel',
+  ],
+  optional_permissions: ['webRequest', 'declarativeNetRequestWithHostAccess'],
+  optional_host_permissions: ['<all_urls>'],
+};
+for (const [key, allowed] of Object.entries(ALLOWED))
+  for (const p of manifest[key] ?? [])
+    if (!allowed.includes(p)) fail(`manifest ${key} contains "${p}", which is not on the allow-list`);
+for (const key of [
+  'host_permissions',
+  'externally_connectable',
+  'web_accessible_resources',
+  'content_scripts',
+])
+  if (manifest[key] !== undefined)
+    fail(`manifest has "${key}": the extension declares none of these (scripts are injected on demand)`);
 need(manifest.background?.service_worker, 'service worker');
 need(manifest.options_ui?.page, 'options page');
 need(manifest.side_panel?.default_path, 'side panel');
 need('offscreen/offscreen.html', 'offscreen document');
 need('content.js', 'content script injected by scripting.executeScript');
+need('hook.js', 'page hook registered by the background when the user opts in');
 need('vendor/ffmpeg/ffmpeg-core.js', 'bundled FFmpeg core');
 need('vendor/ffmpeg/ffmpeg-core.wasm', 'bundled FFmpeg wasm');
 
@@ -92,9 +120,25 @@ for (const file of walk(dist).filter((f) => f.endsWith('.html'))) {
 for (const file of walk(dist).filter((f) => f.endsWith('.js') && !f.includes(`${join(dist, 'vendor')}`))) {
   const code = readFileSync(file, 'utf8');
   const rel = file.slice(dist.length + 1);
+  // Chrome refuses to load an extension script that contains a Unicode noncharacter ("isn't UTF-8 encoded"), even
+  // though the file is valid UTF-8: a regex written with a literal U+FFFF once broke every scan this way.
+  if (
+    /[\uFDD0-\uFDEF]|[\uD83F\uD87F\uD8BF\uD8FF\uD93F\uD97F\uD9BF\uD9FF\uDA3F\uDA7F\uDABF\uDAFF\uDB3F\uDB7F\uDBBF\uDBFF][\uDFFE\uDFFF]|\uFFFE|\uFFFF/.test(
+      code,
+    )
+  )
+    fail(`${rel}: contains a Unicode noncharacter (Chrome cannot load it as a script)`);
   if (/\beval\s*\(/.test(code) || /new Function\(/.test(code)) fail(`${rel}: eval/new Function present`);
   if (/importScripts\(\s*["']https?:/.test(code) || /import\(\s*["']https?:/.test(code))
     fail(`${rel}: remote import`);
+}
+
+// Test-only players and tools (devDependencies) must never be part of the extension.
+for (const file of walk(dist).filter((f) => f.endsWith('.js') && !f.includes(`${join(dist, 'vendor')}`))) {
+  const code = readFileSync(file, 'utf8');
+  const rel = file.slice(dist.length + 1);
+  if (/\bdashjs\b|dash\.all\.min|\bHls\.Events\b|hls\.min\.js|@playwright|\bplaywright\b/.test(code))
+    fail(`${rel}: contains test-only tooling (hls.js, dash.js or Playwright)`);
 }
 
 const wasm = statSync(join(dist, 'vendor/ffmpeg/ffmpeg-core.wasm')).size;

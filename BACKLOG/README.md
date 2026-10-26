@@ -39,7 +39,7 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-019](VDH-019-readme-docs.md) | README and documentation | done | P1 | docs | VDH-018 |
 | [VDH-020](VDH-020-native-companion-doc.md) | Native companion architecture doc | done | P3 | docs | VDH-019 |
 | [VDH-021](VDH-021-i18n-en-it.md) | Internationalisation (en, it) | done | P1 | ui | VDH-003 |
-| [VDH-022](VDH-022-ci-and-tooling.md) | CI workflow and lint/format tooling | in-progress | P2 | build | VDH-001 |
+| [VDH-022](VDH-022-ci-and-tooling.md) | CI workflow and lint/format tooling | done | P2 | build | VDH-001 |
 | [VDH-023](VDH-023-branding-icons.md) | Logo and icons | done | P2 | ui | VDH-001 |
 | [VDH-024](VDH-024-license-notices.md) | License and third-party notices | done | P2 | docs | VDH-012 |
 | [VDH-025](VDH-025-open-file-needs-gesture.md) | Open / show downloaded file needs a user gesture | done | P1 | ui | VDH-014 |
@@ -50,3 +50,19 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-030](VDH-030-resource-limits-hostile-servers.md) | Byte, time and count limits against hostile servers and playlists | done | P1 | security | VDH-011 |
 | [VDH-031](VDH-031-hls-correctness-fixes.md) | HLS correctness: encrypted init sections, ignored Range, unusable keys | done | P1 | lib | VDH-011 |
 | [VDH-032](VDH-032-release-pipeline.md) | Release pipeline for main (Chrome package + tag + GitHub Release) | in-progress | P1 | build | VDH-022, VDH-002 |
+| [VDH-033](VDH-033-frames-hook-foundation.md) | All-frame scanning, opt-in page hook, header replay | done | P0 | content | VDH-008 |
+| [VDH-034](VDH-034-dash-support.md) | MPEG-DASH support | done | P0 | lib | VDH-033 |
+| [VDH-035](VDH-035-subtitles.md) | Subtitles and captions | done | P1 | lib | VDH-034 |
+| [VDH-036](VDH-036-more-formats-data-urls.md) | More container/audio formats and data: URLs | done | P1 | lib | VDH-033 |
+| [VDH-037](VDH-037-file-types-tabs-zip.md) | Images, documents, archives and page assets with ZIP download | done | P1 | ui | VDH-033 |
+| [VDH-038](VDH-038-blob-mse-capture.md) | Blob files and MSE capture | done | P0 | content | VDH-033 |
+| [VDH-039](VDH-039-mediastream-recording.md) | MediaStream recording | done | P1 | content | VDH-038 |
+| [VDH-040](VDH-040-live-recording.md) | Live and event stream recording | done | P1 | background | VDH-034 |
+| [VDH-041](VDH-041-open-site-metadata.md) | Metadata and open-site recognition | done | P2 | lib | VDH-033 |
+| [VDH-042](VDH-042-tabbed-popup.md) | Tabbed popup with frame grouping | done | P1 | ui | VDH-037 |
+| [VDH-043](VDH-043-test-players-fixtures.md) | Realistic test players and fixtures | done | P1 | test | VDH-033 |
+| [VDH-044](VDH-044-docs-store-policy.md) | Docs, store policy and constraints update | in-progress | P1 | docs | VDH-043 |
+| [VDH-045](VDH-045-clearkey-cenc.md) | ClearKey / CENC decryption for DASH | todo | P3 | lib | VDH-034 |
+| [VDH-046](VDH-046-verify-site-adapters.md) | Verify the open-site adapters against the real services | todo | P3 | test | VDH-041 |
+| [VDH-047](VDH-047-security-review-fixes.md) | Fixes from the independent security review | done | P0 | security | VDH-044 |
+| [VDH-048](VDH-048-ci-green-and-pr-flow.md) | CI green on GitHub, release bump rule, PR-and-merge flow | in-progress | P0 | build | VDH-022, VDH-032, VDH-047 |

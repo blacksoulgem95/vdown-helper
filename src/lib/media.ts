@@ -70,11 +70,27 @@ const MIME_TO_FORMAT: Record<string, MediaFormat> = {
   'audio/wave': 'wav',
   'audio/ogg': 'ogg',
   'audio/flac': 'flac',
+  'audio/opus': 'opus',
+  'audio/aiff': 'aiff',
+  'audio/x-aiff': 'aiff',
+  'audio/x-ms-wma': 'wma',
+  'video/x-flv': 'flv',
+  'video/x-msvideo': 'avi',
+  'video/avi': 'avi',
+  'video/x-ms-wmv': 'wmv',
+  'video/x-ms-asf': 'asf',
+  'video/3gpp': '3gp',
+  'video/3gpp2': '3gp',
+  'video/mpeg': 'mpg',
   'application/vnd.apple.mpegurl': 'hls',
   'application/x-mpegurl': 'hls',
   'audio/mpegurl': 'm3u',
   'audio/x-mpegurl': 'm3u',
   'application/dash+xml': 'dash',
+  'text/vtt': 'vtt',
+  'application/x-subrip': 'srt',
+  'text/srt': 'srt',
+  'application/ttml+xml': 'ttml',
 };
 
 const EXT_TO_FORMAT: Record<string, MediaFormat> = {
@@ -91,11 +107,29 @@ const EXT_TO_FORMAT: Record<string, MediaFormat> = {
   wav: 'wav',
   ogg: 'ogg',
   oga: 'ogg',
-  opus: 'ogg',
+  opus: 'opus',
   flac: 'flac',
+  aif: 'aiff',
+  aiff: 'aiff',
+  aifc: 'aiff',
+  wma: 'wma',
+  flv: 'flv',
+  avi: 'avi',
+  wmv: 'wmv',
+  asf: 'asf',
+  '3gp': '3gp',
+  '3g2': '3gp',
+  mpg: 'mpg',
+  mpeg: 'mpg',
+  mpe: 'mpg',
   m3u8: 'hls',
   m3u: 'm3u',
   mpd: 'dash',
+  vtt: 'vtt',
+  webvtt: 'vtt',
+  srt: 'srt',
+  ttml: 'ttml',
+  dfxp: 'ttml',
 };
 
 export function formatFromMime(mime: string | undefined): MediaFormat | undefined {
@@ -116,6 +150,9 @@ export function formatFromUrl(url: string): MediaFormat | undefined {
   return EXT_TO_FORMAT[extensionOf(url)];
 }
 
+/** Subtitle documents that are saved or converted as text. */
+export const SUBTITLE_FILE_FORMATS: ReadonlySet<MediaFormat> = new Set(['vtt', 'srt', 'ttml']);
+
 export const AUDIO_ONLY_FORMATS: ReadonlySet<MediaFormat> = new Set([
   'mp3',
   'm4a',
@@ -123,11 +160,30 @@ export const AUDIO_ONLY_FORMATS: ReadonlySet<MediaFormat> = new Set([
   'wav',
   'ogg',
   'flac',
+  'opus',
+  'aiff',
+  'wma',
+]);
+
+export const VIDEO_FORMATS: ReadonlySet<MediaFormat> = new Set([
+  'mp4',
+  'webm',
+  'mkv',
+  'mov',
+  'ogv',
+  'ts',
+  'flv',
+  'avi',
+  'wmv',
+  'asf',
+  '3gp',
+  'mpg',
+  'hls',
 ]);
 
 export function mediaTypeOf(format: MediaFormat): 'video' | 'audio' | 'unknown' {
   if (AUDIO_ONLY_FORMATS.has(format)) return 'audio';
-  if (['mp4', 'webm', 'mkv', 'mov', 'ogv', 'ts', 'hls'].includes(format)) return 'video';
+  if (VIDEO_FORMATS.has(format)) return 'video';
   return 'unknown';
 }
 

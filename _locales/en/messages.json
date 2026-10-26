@@ -673,5 +673,308 @@
   },
   "errFileUnavailable": {
     "message": "This download has no file to open."
+  },
+  "detectHook": {
+    "message": "Page hook (fetch/XHR)"
+  },
+  "noteFramesBlocked": {
+    "message": "Embedded players from other sites could not be read: $1"
+  },
+  "allowEmbedded": {
+    "message": "ALLOW EMBEDDED PLAYERS"
+  },
+  "allowEmbeddedHint": {
+    "message": "Chrome will ask for access to those sites only."
+  },
+  "reasonEme": {
+    "message": "The page uses protected playback (EME/DRM). vdown-helper does not bypass DRM."
+  },
+  "optPageHook": {
+    "message": "Look inside players (page hook)"
+  },
+  "optPageHookHint": {
+    "message": "Runs a small read-only script at the start of every page you visit, in every frame, to notice manifests and files that players load from script and to recognise protected playback. It changes nothing and sends nothing; it needs access to all sites, which you can revoke at any time. Off by default."
+  },
+  "kindDashStream": {
+    "message": "DASH STREAM"
+  },
+  "reasonDashEncrypted": {
+    "message": "The DASH manifest declares encryption (DRM). vdown-helper does not bypass DRM."
+  },
+  "reasonDashClearKey": {
+    "message": "This DASH stream is encrypted with ClearKey. Detected correctly (it is not DRM), but downloading it is not supported yet."
+  },
+  "reasonDashPeriods": {
+    "message": "This manifest has several periods: only the longest (the main content) is downloaded."
+  },
+  "detectDomTrack": {
+    "message": "Subtitle track (<track>)"
+  },
+  "reasonSubtitleUnsupported": {
+    "message": "This subtitle track uses a format that cannot be turned into a text file (WebVTT-in-MP4 cues or image subtitles)."
+  },
+  "kindSubtitle": {
+    "message": "SUBTITLE"
+  },
+  "kindSubtitleStream": {
+    "message": "SUBTITLE STREAM"
+  },
+  "pipeSubtitle": {
+    "message": "Subtitle file: fetched, joined if segmented, and written as text. No video processing."
+  },
+  "subOutput": {
+    "message": "Subtitle format"
+  },
+  "subOutputOriginal": {
+    "message": "As found"
+  },
+  "subOutputOriginalStitched": {
+    "message": "WebVTT (segments joined)"
+  },
+  "subOutputSrt": {
+    "message": "SRT (converted)"
+  },
+  "subOutputHint": {
+    "message": "SRT works in almost every player. Conversion keeps the text and timing; styling and positioning are dropped."
+  },
+  "subtitlesHeading": {
+    "message": "Subtitles"
+  },
+  "tabMedia": {
+    "message": "Media"
+  },
+  "tabSubtitles": {
+    "message": "Subtitles"
+  },
+  "subtitleLang": {
+    "message": "Language: $1"
+  },
+  "reasonTooLarge": {
+    "message": "This embedded file is larger than the 32 MB limit for data: URLs."
+  },
+  "reasonInPageData": {
+    "message": "The file is embedded in the page itself (a data: URL). The page hands it over; the extension never fetches it."
+  },
+  "sourceInline": {
+    "message": "embedded in the page (data:)"
+  },
+  "detectDomImage": {
+    "message": "Image on the page"
+  },
+  "detectDomStyle": {
+    "message": "CSS background image"
+  },
+  "detectDomMeta": {
+    "message": "Page metadata (icon / social image)"
+  },
+  "tabsLabel": {
+    "message": "Kinds of items found"
+  },
+  "tabVideo": {
+    "message": "Video"
+  },
+  "tabAudio": {
+    "message": "Audio"
+  },
+  "tabImages": {
+    "message": "Images"
+  },
+  "tabFiles": {
+    "message": "Files"
+  },
+  "tabAssets": {
+    "message": "Assets"
+  },
+  "kindImage": {
+    "message": "IMAGE"
+  },
+  "kindDocument": {
+    "message": "DOCUMENT"
+  },
+  "kindArchive": {
+    "message": "ARCHIVE"
+  },
+  "kindAsset": {
+    "message": "PAGE ASSET"
+  },
+  "frameTop": {
+    "message": "This page"
+  },
+  "frameEmbedded": {
+    "message": "Embedded: $1"
+  },
+  "imageMinLabel": {
+    "message": "Smallest image to list"
+  },
+  "imageMinAny": {
+    "message": "Show all sizes"
+  },
+  "imageMinPx": {
+    "message": "$1 px and larger"
+  },
+  "imagesHidden": {
+    "message": "$1 smaller images are hidden."
+  },
+  "showMore": {
+    "message": "SHOW $1 MORE"
+  },
+  "selectAll": {
+    "message": "Select all"
+  },
+  "selectNone": {
+    "message": "Clear selection"
+  },
+  "selectedCount": {
+    "message": "$1 selected"
+  },
+  "selectItem": {
+    "message": "Select $1"
+  },
+  "downloadSelected": {
+    "message": "DOWNLOAD $1"
+  },
+  "bulkQueued": {
+    "message": "$1 downloads queued."
+  },
+  "bulkFailed": {
+    "message": "$1 could not be started."
+  },
+  "dimensionsPx": {
+    "message": "$1 × $2 px"
+  },
+  "tabEmpty": {
+    "message": "Nothing of this kind was found on this page."
+  },
+  "pipeZip": {
+    "message": "ZIP archive: the files are fetched one by one and packed on disk. Nothing is re-encoded."
+  },
+  "zipButton": {
+    "message": "ZIP $1"
+  },
+  "jobSkipped": {
+    "message": "$1 file(s) could not be included. They are listed in _not-saved.txt inside the ZIP."
+  },
+  "errNothingToZip": {
+    "message": "None of the selected files can be put in a ZIP (embedded in the page, or not downloadable)."
+  },
+  "zipHint": {
+    "message": "A ZIP needs the extension to read each file, so sites that block it may need access."
+  },
+  "zipTooLarge": {
+    "message": "The selected files add up to more than the size limit for a ZIP (the memory limit in Settings, at most 4 GB). Select fewer files or download them one by one."
+  },
+  "reasonInPageBlob": {
+    "message": "The file is held by the page itself (a blob: URL). The page hands it over; the extension never fetches it."
+  },
+  "sourceBlob": {
+    "message": "held by the page (blob:)"
+  },
+  "reasonMseNeedsHook": {
+    "message": "This video is fed to the player piece by piece (Media Source Extensions), so there is no file to download. Turn on \"Look inside players\" in Settings to capture what it plays."
+  },
+  "reasonMseUnrecordable": {
+    "message": "This video is fed to the player piece by piece, and the page hook never saw how: it cannot be captured."
+  },
+  "reasonMseCapturable": {
+    "message": "There is no file or stream address for this video. It can be captured: the page plays it through (muted, optionally faster) while vdown-helper records what the player receives. You get the quality the player chose."
+  },
+  "jobErrCapture": {
+    "message": "The capture could not be completed"
+  },
+  "captureBanner": {
+    "message": "vdown-helper is capturing this video"
+  },
+  "captureCancel": {
+    "message": "Cancel"
+  },
+  "captureProgressFast": {
+    "message": "$1% · fast capture"
+  },
+  "captureProgressRealtime": {
+    "message": "$1% · real-time capture"
+  },
+  "captureFast": {
+    "message": "CAPTURE (FAST)"
+  },
+  "captureRealtime": {
+    "message": "RECORD (REAL TIME)"
+  },
+  "captureHint": {
+    "message": "Plays the video through in the page, muted, and records what the player receives. It is put back as it was afterwards."
+  },
+  "errCaptureProtected": {
+    "message": "This video uses protected playback and is never captured."
+  },
+  "errCaptureNoHook": {
+    "message": "Capturing needs \"Look inside players\" (Settings) and a reload of the page."
+  },
+  "pipeCapture": {
+    "message": "Capture: the page plays the video through while what the player receives is recorded, then the streams are copied into a file. Nothing is re-encoded."
+  },
+  "stageRecording": {
+    "message": "RECORDING"
+  },
+  "kindStream": {
+    "message": "Live media stream"
+  },
+  "sourceStream": {
+    "message": "a stream in the page (MediaStream)"
+  },
+  "reasonStreamRecordable": {
+    "message": "This is a live media stream the page is playing (camera, screen share, call or canvas). It has no file or address, but it can be recorded while it plays, until you press Stop or a limit is reached."
+  },
+  "recordStart": {
+    "message": "RECORD"
+  },
+  "recordHint": {
+    "message": "Records what this stream plays from now on, as WebM (or MP4 where this Chrome supports it, see Settings). A banner stays on the page while it records; press Stop to save, or Cancel to discard."
+  },
+  "recordBanner": {
+    "message": "vdown-helper is recording this stream"
+  },
+  "recordStop": {
+    "message": "Stop and save"
+  },
+  "jobStop": {
+    "message": "Stop and save"
+  },
+  "pipeRecord": {
+    "message": "Recording: the page's stream is recorded by the browser until you stop it or a limit is reached, then the file is tidied with a stream copy (duration, index). Nothing is re-encoded by vdown-helper."
+  },
+  "secRecording": {
+    "message": "Recording"
+  },
+  "secRecordingHint": {
+    "message": "Limits and format for recordings of media streams. A recording stops by itself and is saved when a limit is reached."
+  },
+  "optRecordContainer": {
+    "message": "Recording format"
+  },
+  "optRecordContainerHint": {
+    "message": "MP4 is used only where this Chrome can record it natively; otherwise WebM."
+  },
+  "optRecordMaxMinutes": {
+    "message": "Longest recording (minutes)"
+  },
+  "optRecordMaxMb": {
+    "message": "Largest recording (MB)"
+  },
+  "reasonLiveRecordable": {
+    "message": "This is a live or event stream, so it cannot be downloaded as a file. It can be recorded: vdown-helper follows the stream from now on until you press Stop, the stream ends, or a limit (Settings → Recording) is reached."
+  },
+  "recordLiveHint": {
+    "message": "Follows the stream from now on and saves what it plays, without re-encoding. Stop and save from the queue at any time; Cancel discards the recording."
+  },
+  "pipeLive": {
+    "message": "Live recording: the stream is followed and each new segment is saved as it appears, until you stop it, it ends, or a limit is reached; then the tracks are joined with a stream copy. Nothing is re-encoded."
+  },
+  "jobGaps": {
+    "message": "$1 segment(s) were no longer available when due and are missing from the recording."
+  },
+  "detectMetadata": {
+    "message": "Page metadata (Open Graph, JSON-LD, feed)"
+  },
+  "detectSiteApi": {
+    "message": "The site's public API"
   }
 }

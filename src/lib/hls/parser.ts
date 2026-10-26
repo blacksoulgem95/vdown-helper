@@ -13,7 +13,10 @@ import type {
   PlaylistClass,
   RenditionType,
 } from '@/types/hls';
-import { isSafeFetchUrl, parseUrl } from '../security';
+import { MAX_URL_LENGTH, isSafeFetchUrl, parseUrl } from '../security';
+
+/** The most segments a playlist may list (the segment engine has the same limit). */
+const MAX_SEGMENTS = 20_000;
 import { parseAttributes, parseNumber, parseResolution } from './attributes';
 
 const MEDIA_TAGS = [
@@ -58,6 +61,8 @@ function fail(code: HlsError['code'], message: string, line?: number): HlsParseR
 }
 
 function resolveUri(uri: string, base: string): string | undefined {
+  // Each relative line is resolved against the playlist's own address: a long base would multiply into every segment.
+  if (uri.length > MAX_URL_LENGTH || base.length > MAX_URL_LENGTH) return undefined;
   const url = parseUrl(uri, base);
   if (!url) return undefined;
   const href = url.toString();
@@ -270,6 +275,7 @@ function parseMedia(lines: string[], url: string): HlsParseResult {
       }
       if (currentKey) seg.key = currentKey;
       if (currentMap) seg.map = currentMap;
+      if (segments.length >= MAX_SEGMENTS) return fail('malformed', 'The playlist lists too many segments');
       segments.push(seg);
       pendingDuration = undefined;
       pendingTitle = undefined;

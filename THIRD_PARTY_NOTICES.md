@@ -8,6 +8,7 @@ against the upstream source, so check them before redistributing.
 | --------------------------------------------------------------- | ------- | -------------------- | ---------------------------------------------------- |
 | `@ffmpeg/core` (FFmpeg compiled to WebAssembly)                 | 0.12.10 | **GPL-2.0-or-later** | `dist/vendor/ffmpeg/ffmpeg-core.{js,wasm}` (≈ 31 MB) |
 | `@ffmpeg/ffmpeg`                                                | 0.12.15 | MIT                  | offscreen bundle + worker                            |
+| fflate (ZIP writer)                                             | 0.8.3   | MIT                  | offscreen bundle                                     |
 | React / React DOM                                               | 19.3.1  | MIT                  | popup, options, side panel                           |
 | lucide-react (icons)                                            | 1.61.0  | ISC                  | popup, options, side panel                           |
 | Inter (variable, latin subset) via `@fontsource-variable/inter` | 5.3.0   | SIL OFL-1.1          | `dist/assets/*.woff2`                                |
@@ -26,3 +27,14 @@ against the upstream source, so check them before redistributing.
   licence questions is a legal decision for the project owner.** If that is a concern, a build without the core is
   possible: delete `dist/vendor/ffmpeg`, and merging/remuxing/audio conversion are then unavailable while direct
   downloads and plain TS/fMP4 concatenation keep working. Jobs that need FFmpeg then fail with a "Conversion failed" error.
+
+## Development-only tools (not part of the extension)
+
+These are installed as `devDependencies` and used by the test suite only. `npm run check:dist` fails the build if any of them ends up in `dist/`.
+
+| Component                                           | Version | Declared licence | Used for                                                              |
+| --------------------------------------------------- | ------- | ---------------- | --------------------------------------------------------------------- |
+| hls.js                                              | 1.7.3   | Apache-2.0       | a genuine HLS player (real MediaSource playback) in the E2E fixtures  |
+| dash.js                                             | 5.2.1   | BSD-3-Clause     | a genuine DASH player (real MediaSource playback) in the E2E fixtures |
+| Playwright                                          | 1.64.1  | Apache-2.0       | drives a real Chromium with the extension loaded                      |
+| ffmpeg / ffprobe (system binaries, not in the repo) | any     | LGPL/GPL         | generate the fixtures and decode the downloaded files to check them   |

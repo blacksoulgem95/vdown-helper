@@ -1,9 +1,10 @@
 import { registerHandlers } from '@/lib/messaging';
 import { SETTINGS_KEY, loadSettings } from '@/lib/settings';
-import { isSafeFetchUrl, log } from '@/lib/security';
+import { isExtensionPage, isSafeFetchUrl, log } from '@/lib/security';
 import type { OffscreenEvent } from '@/types/messages';
 import { inspectVariant, scanTab } from './detect';
 import { listJobs } from './jobStore';
+import { syncHook } from './hooks';
 import { hasHostAccess } from './pageFetch';
 import { setObserverEnabled } from './observer';
 import { clearHistory, handleOffscreenEvent, jobAction, reconcile, submit, syncById } from './runner';
@@ -12,9 +13,9 @@ import { clearTabState, getTabState } from './tabState';
 registerHandlers({
   scan: async ({ tabId }) => ({ ok: true, state: await scanTab(tabId) }),
   'get-state': async ({ tabId }) => ({ ok: true, state: await getTabState(tabId) }),
-  'inspect-variant': async ({ tabId, url }) => {
+  'inspect-variant': async ({ tabId, url, frameId }) => {
     try {
-      return { ok: true, inspection: await inspectVariant(tabId, url) };
+      return { ok: true, inspection: await inspectVariant(tabId, url, frameId) };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : 'inspect-failed' };
     }
@@ -35,7 +36,7 @@ registerHandlers({
 // Events from the offscreen document (segment downloader / FFmpeg).
 chrome.runtime.onMessage.addListener((raw: unknown, sender) => {
   const ev = raw as Partial<OffscreenEvent> | null;
-  if (!ev || ev.channel !== 'vdown-offscreen-event' || sender.id !== chrome.runtime.id) return false;
+  if (!ev || ev.channel !== 'vdown-offscreen-event' || !isExtensionPage(sender)) return false;
   void handleOffscreenEvent(ev as OffscreenEvent).catch((e: unknown) =>
     log.error('offscreen event failed:', e),
   );
@@ -67,6 +68,7 @@ chrome.tabs.onRemoved.addListener((tabId) => void clearTabState(tabId));
 async function syncObserver(): Promise<void> {
   const s = await loadSettings();
   setObserverEnabled(s.networkObserver);
+  await syncHook();
 }
 
 chrome.storage.onChanged.addListener((changes, area) => {

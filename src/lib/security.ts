@@ -12,9 +12,30 @@ export function parseUrl(input: string, base?: string): URL | undefined {
 }
 
 /** True for http(s) URLs only. Everything else (javascript:, data:, file:, chrome:, ftp:, blob: ...) is rejected. */
+/** The longest address the extension will fetch. Real signed URLs stay well below this; a manifest cannot make it grow. */
+export const MAX_URL_LENGTH = 8192;
+
 export function isSafeFetchUrl(input: string): boolean {
+  if (input.length > MAX_URL_LENGTH) return false;
   const url = parseUrl(input);
   return url !== undefined && ALLOWED_FETCH_PROTOCOLS.has(url.protocol);
+}
+
+/**
+ * True for a message sent by one of THIS extension's own pages (popup, options, side panel, background, offscreen).
+ * A content script also has `sender.id === chrome.runtime.id`, but it runs next to a hostile page: it has a page address.
+ */
+export function isExtensionPage(sender: { id?: string; url?: string }): boolean {
+  return (
+    sender.id === chrome.runtime.id &&
+    typeof sender.url === 'string' &&
+    sender.url.startsWith(chrome.runtime.getURL(''))
+  );
+}
+
+/** A blob: URL created by this extension's own offscreen document (the only kind that may be handed to chrome.downloads). */
+export function isOwnBlobUrl(url: unknown): url is string {
+  return typeof url === 'string' && url.startsWith(`blob:${chrome.runtime.getURL('').replace(/\/$/, '')}/`);
 }
 
 export function isBlobUrl(input: string): boolean {
@@ -91,6 +112,8 @@ export function normalizeUrl(input: string): string {
 
 /** Never log full URLs: query strings and fragments often carry signed tokens. */
 export function redactUrl(input: string): string {
+  // A data: URL is its own payload: show only the media type.
+  if (/^data:/i.test(input)) return `data:${input.slice(5).split(/[;,]/)[0]?.slice(0, 100) ?? ''}`;
   const url = parseUrl(input);
   if (!url) return '[invalid-url]';
   const query = url.search ? '?…' : '';

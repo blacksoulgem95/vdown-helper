@@ -14,11 +14,16 @@ export const DEFAULT_SETTINGS: Settings = {
   subfolder: '',
   askWhereToSave: false,
   autoScan: false,
+  pageHook: false,
   networkObserver: false,
+  imageMinPx: 100,
   maxConcurrentDownloads: 2,
   segmentConcurrency: 4,
   maxMemoryMb: 2048,
   maxEncodeDurationSec: 0,
+  recordContainer: 'webm',
+  recordMaxMinutes: 120,
+  recordMaxMb: 4096,
   notifyOnComplete: true,
   notifyOnError: true,
 };
@@ -28,11 +33,15 @@ const QUALITIES: QualityPreset[] = ['highest', '2160', '1440', '1080', '720', '4
 const AUDIO_FORMATS: AudioFormat[] = ['mp3', 'm4a', 'aac', 'wav'];
 const BITRATES: AudioBitrate[] = [128, 192, 256, 320];
 
+export const IMAGE_MIN_CHOICES = [0, 100, 300, 800] as const;
+
 export const LIMITS = {
   maxConcurrentDownloads: { min: 1, max: 5 },
   segmentConcurrency: { min: 1, max: 8 },
   maxMemoryMb: { min: 128, max: 8192 },
   maxEncodeDurationSec: { min: 0, max: 86_400 },
+  recordMaxMinutes: { min: 1, max: 1440 },
+  recordMaxMb: { min: 64, max: 16_384 },
   namingTemplate: { maxLength: 200 },
 } as const;
 
@@ -65,7 +74,9 @@ export function sanitizeSettings(raw: unknown): Settings {
     subfolder: typeof r['subfolder'] === 'string' ? sanitizeSubfolder(r['subfolder']) : d.subfolder,
     askWhereToSave: bool(r['askWhereToSave'], d.askWhereToSave),
     autoScan: bool(r['autoScan'], d.autoScan),
+    pageHook: bool(r['pageHook'], d.pageHook),
     networkObserver: bool(r['networkObserver'], d.networkObserver),
+    imageMinPx: oneOf(r['imageMinPx'], IMAGE_MIN_CHOICES, d.imageMinPx),
     maxConcurrentDownloads: int(
       r['maxConcurrentDownloads'],
       LIMITS.maxConcurrentDownloads,
@@ -74,6 +85,9 @@ export function sanitizeSettings(raw: unknown): Settings {
     segmentConcurrency: int(r['segmentConcurrency'], LIMITS.segmentConcurrency, d.segmentConcurrency),
     maxMemoryMb: int(r['maxMemoryMb'], LIMITS.maxMemoryMb, d.maxMemoryMb),
     maxEncodeDurationSec: int(r['maxEncodeDurationSec'], LIMITS.maxEncodeDurationSec, d.maxEncodeDurationSec),
+    recordContainer: oneOf(r['recordContainer'], ['webm', 'mp4'] as const, d.recordContainer),
+    recordMaxMinutes: int(r['recordMaxMinutes'], LIMITS.recordMaxMinutes, d.recordMaxMinutes),
+    recordMaxMb: int(r['recordMaxMb'], LIMITS.recordMaxMb, d.recordMaxMb),
     notifyOnComplete: bool(r['notifyOnComplete'], d.notifyOnComplete),
     notifyOnError: bool(r['notifyOnError'], d.notifyOnError),
   };

@@ -16,10 +16,96 @@ const TYPES = {
   '.ts': 'video/mp2t',
   '.mp4': 'video/mp4',
   '.bin': 'application/octet-stream',
+  '.vtt': 'text/vtt; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.pdf': 'application/pdf',
+  '.csv': 'text/csv',
+  '.zip': 'application/zip',
+  '.css': 'text/css',
+  '.js': 'text/javascript',
+  '.woff2': 'font/woff2',
+  '.flv': 'video/x-flv',
+  '.avi': 'video/x-msvideo',
+  '.wmv': 'video/x-ms-wmv',
+  '.asf': 'video/x-ms-asf',
+  '.3gp': 'video/3gpp',
+  '.mpg': 'video/mpeg',
+  '.aiff': 'audio/aiff',
+  '.wma': 'audio/x-ms-wma',
+  '.opus': 'audio/opus',
+  '.srt': 'application/x-subrip',
+  '.ttml': 'application/ttml+xml',
 };
+
+const NM = join(import.meta.dirname, '..', 'node_modules');
+const LIBS = {
+  'hls.min.js': join(NM, 'hls.js/dist/hls.min.js'),
+  'dash.all.min.js': join(NM, 'dashjs/dist/modern/umd/dash.all.min.js'),
+};
+
+// Live streams: /__live/<kind>/... shows the pre-cut segments one after the other as time passes (2 s per segment, a
+// window of 4, two available at the start), like a live encoder. ?id=<name> picks a clock (started by its first request,
+// or restarted by POST /__live/start?id=), ?len=<n> ends the stream after n segments, ?gone=3,5 makes those segments
+// 404 (the server dropped them), ?audioskip=<n> hides the first n segments of the separate audio playlist.
+const LIVE_SEG_MS = 2000;
+function liveResponse(path, url, liveStarts) {
+  const q = url.searchParams;
+  const id = q.get('id') ?? 'default';
+  if (!liveStarts.has(id)) liveStarts.set(id, Date.now());
+  const t0 = liveStarts.get(id);
+  const len = Number(q.get('len') ?? 14);
+  const gone = new Set((q.get('gone') ?? '').split(',').filter(Boolean).map(Number));
+  const n = Math.min(len, Math.floor((Date.now() - t0) / LIVE_SEG_MS) + 2);
+  const ended = n >= len;
+  const first = Math.max(0, n - 4);
+  const media = (set, lo = 0) => {
+    const from = Math.max(first, lo);
+    let b = `#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:${from}\n`;
+    for (let i = from; i < n; i++)
+      b += `#EXTINF:2.000,\n/live/${set}/seg${i}.ts${gone.has(i) ? '?gone=1' : ''}\n`;
+    return ended ? `${b}#EXT-X-ENDLIST\n` : b;
+  };
+  const rest = path.slice('/__live/'.length);
+  const hls = { type: 'application/vnd.apple.mpegurl' };
+  if (rest === 'hls/index.m3u8') return { ...hls, body: media('hls') };
+  if (rest === 'hlssep/video.m3u8') return { ...hls, body: media('hlsv') };
+  if (rest === 'hlssep/audio.m3u8') return { ...hls, body: media('hlsa', Number(q.get('audioskip') ?? 0)) };
+  if (rest === 'hlssep/master.m3u8') {
+    const qs = url.search;
+    return {
+      ...hls,
+      body:
+        `#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="English",LANGUAGE="en",DEFAULT=YES,AUTOSELECT=YES,URI="/__live/hlssep/audio.m3u8${qs}"\n` +
+        `#EXT-X-STREAM-INF:BANDWIDTH=300000,RESOLUTION=160x90,CODECS="avc1.42c00b,mp4a.40.2",AUDIO="aud"\n/__live/hlssep/video.m3u8${qs}\n`,
+    };
+  }
+  if (rest === 'dash/manifest.mpd') {
+    const head = ended
+      ? `type="static" mediaPresentationDuration="PT${len * 2}S"`
+      : `type="dynamic" availabilityStartTime="${new Date(t0 - 4000).toISOString()}" minimumUpdatePeriod="PT2S" timeShiftBufferDepth="PT8S"`;
+    const tpl = `<SegmentTemplate timescale="1000" duration="2000" startNumber="0" initialization="/__live/dash/init-$RepresentationID$.m4s" media="/__live/dash/seg-$RepresentationID$-$Number$.m4s"/>`;
+    return {
+      type: 'application/dash+xml',
+      body:
+        `<?xml version="1.0"?><MPD xmlns="urn:mpeg:dash:schema:mpd:2011" ${head} minBufferTime="PT2S" profiles="urn:mpeg:dash:profile:isoff-live:2011">` +
+        `<Period id="0" start="PT0S"><AdaptationSet id="0" contentType="video" mimeType="video/mp4" segmentAlignment="true">${tpl}` +
+        `<Representation id="0" bandwidth="300000" width="160" height="90" codecs="avc1.42c00b"/></AdaptationSet>` +
+        `<AdaptationSet id="1" contentType="audio" mimeType="audio/mp4" lang="en" segmentAlignment="true">${tpl}` +
+        `<Representation id="1" bandwidth="64000" codecs="mp4a.40.2" audioSamplingRate="44100"/></AdaptationSet></Period></MPD>`,
+    };
+  }
+  const seg = /^dash\/seg-(\d)-(\d+)\.m4s$/.exec(rest);
+  if (seg)
+    return { file: `/live/dash/chunk-stream${seg[1]}-${String(Number(seg[2]) + 1).padStart(5, '0')}.m4s` };
+  const init = /^dash\/init-(\d)\.m4s$/.exec(rest);
+  if (init) return { file: `/live/dash/init-stream${init[1]}.m4s` };
+  return undefined;
+}
 
 export function startServers(root, pagesDir) {
   const state = { flakyEnabled: false, hits: [] };
+  const liveStarts = new Map();
 
   const handler = (origin) => async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://x');
@@ -52,6 +138,79 @@ export function startServers(root, pagesDir) {
       if (m[1] === 'slow' && path.endsWith('.ts')) await new Promise((r) => setTimeout(r, 1500));
     }
 
+    // Test players (hls.js, dash.js) are dev dependencies served from node_modules, on every origin: pages in nested
+    // frames load their own copy. They are never part of the extension.
+    if (req.method === 'GET' && path.startsWith('/__lib/')) {
+      const lib = LIBS[path.slice('/__lib/'.length)];
+      if (!lib || !existsSync(lib)) return void res.writeHead(404).end();
+      res.writeHead(200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'no-store' });
+      return void createReadStream(lib).pipe(res);
+    }
+
+    // A PeerTube-shaped instance on the "website" origin: the watch page, the public API and a podcast feed.
+    if (origin === 'A' && /^\/w\/[A-Za-z0-9-]{8,40}$/.test(path)) path = '/pages/peertube.html';
+    if (origin === 'A' && /^\/api\/v1\/videos\/[A-Za-z0-9-]{8,40}$/.test(path)) {
+      state.hits.push(`peertube-api cookie=${req.headers.cookie ?? '-'}`);
+      const base = `http://${req.headers.host}`;
+      const body = {
+        id: 42,
+        uuid: '9c9de5e8-0a1e-484a-b099-e80766180a6d',
+        name: 'A PeerTube video',
+        duration: 6,
+        isLive: false,
+        thumbnailPath: '/files/photo.jpg',
+        files: [
+          {
+            resolution: { id: 360, label: '360p' },
+            width: 640,
+            height: 360,
+            fileUrl: `${base}/media/sample.mp4?r=360`,
+          },
+          {
+            resolution: { id: 720, label: '720p' },
+            width: 1280,
+            height: 720,
+            fileUrl: `${base}/media/sample.mp4?r=720`,
+          },
+        ],
+        streamingPlaylists: [{ id: 1, type: 1, playlistUrl: `${base}/hls/master.m3u8`, files: [] }],
+      };
+      return void res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(body));
+    }
+    if (origin === 'A' && path === '/feed.xml') {
+      const base = `http://${req.headers.host}`;
+      return void res
+        .writeHead(200, { 'Content-Type': 'application/rss+xml' })
+        .end(
+          `<?xml version="1.0"?><rss version="2.0"><channel><title>Podcast</title><item><title>Episode one</title><enclosure url="${base}/formats/clip.opus" type="audio/ogg" length="1"/></item></channel></rss>`,
+        );
+    }
+
+    // Live streams (see liveResponse), only on the "website" origin.
+    if (origin === 'A' && path.startsWith('/__live/')) {
+      if (req.method === 'POST' && path === '/__live/start') {
+        liveStarts.set(url.searchParams.get('id') ?? 'default', Date.now());
+        return void res.writeHead(204).end();
+      }
+      const live = liveResponse(path, url, liveStarts);
+      if (!live) return void res.writeHead(404).end();
+      if (live.body !== undefined) {
+        headers['Content-Type'] = live.type;
+        headers['Cache-Control'] = 'no-store';
+        return void res.writeHead(200, headers).end(live.body);
+      }
+      path = live.file; // a segment: served from the fixtures like any file
+    }
+    if (path.startsWith('/live/') && url.searchParams.get('gone'))
+      return void res.writeHead(404, headers).end('gone');
+
+    // A file that looks fine to a HEAD request (so it can be selected) but whose body fails: for the ZIP "not saved" list.
+    if (origin === 'A' && path === '/__headok/report.pdf') {
+      if (req.method === 'HEAD')
+        return void res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Length': 10 }).end();
+      return void res.writeHead(500).end('boom');
+    }
+
     if (origin === 'A' && req.method === 'POST' && path === '/__flaky/enable') {
       state.flakyEnabled = true;
       return void res.writeHead(204).end();
@@ -77,6 +236,20 @@ export function startServers(root, pagesDir) {
         }
       }, 200);
       return;
+    }
+
+    // /__ref/<path>?need=<origin>: only answers requests that look like they come from that page (hotlink protection).
+    if (path.startsWith('/__ref/')) {
+      const need = url.searchParams.get('need') ?? '';
+      const referer = String(req.headers.referer ?? '');
+      const originHdr = req.headers.origin ? String(req.headers.origin) : '';
+      const okReferer = need !== '' && referer.startsWith(`${need}/`);
+      const okOrigin = originHdr === '' || originHdr === need;
+      state.hits.push(
+        `ref-check need=${need} referer=${referer || '-'} origin=${originHdr || '-'} -> ${okReferer && okOrigin}`,
+      );
+      if (!okReferer || !okOrigin) return void res.writeHead(403, headers).end('hotlinking is not allowed');
+      path = path.slice('/__ref'.length);
     }
 
     // The flaky playlist's segments are real files, but 404 until enabled.
@@ -112,19 +285,26 @@ export function startServers(root, pagesDir) {
     createReadStream(file).pipe(res);
   };
 
-  const a = createServer(handler('A'));
-  const b = createServer(handler('B'));
+  // A = the "website", B = a CDN that is not granted, C and D = extra origins for nested iframes (127.0.0.x are all
+  // loopback addresses on Linux, and each is a different origin from every other).
+  const hosts = { A: '127.0.0.1', B: '127.0.0.1', C: '127.0.0.2', D: '127.0.0.3' };
+  const names = { A: '127.0.0.1', B: 'localhost', C: '127.0.0.2', D: '127.0.0.3' };
+  const servers = Object.fromEntries(Object.keys(hosts).map((k) => [k, createServer(handler(k))]));
   return new Promise((resolve) => {
-    a.listen(0, '127.0.0.1', () =>
-      b.listen(0, '127.0.0.1', () =>
+    let pending = Object.keys(servers).length;
+    for (const [k, srv] of Object.entries(servers)) {
+      srv.listen(0, hosts[k], () => {
+        if (--pending > 0) return;
+        const base = (k) => `http://${names[k]}:${servers[k].address().port}`;
         resolve({
-          a: `http://127.0.0.1:${a.address().port}`,
-          // "localhost" is a different origin from 127.0.0.1, so it is not covered by the test build's host grant.
-          b: `http://localhost:${b.address().port}`,
+          a: base('A'),
+          b: base('B'),
+          c: base('C'),
+          d: base('D'),
           state,
-          close: () => Promise.all([new Promise((r) => a.close(r)), new Promise((r) => b.close(r))]),
-        }),
-      ),
-    );
+          close: () => Promise.all(Object.values(servers).map((srv2) => new Promise((r) => srv2.close(r)))),
+        });
+      });
+    }
   });
 }

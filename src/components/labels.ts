@@ -25,6 +25,12 @@ const REASONS: Record<ReasonCode, MessageKey> = {
   'blob-source': 'reasonBlob',
   drm: 'reasonDrm',
   'sample-aes': 'reasonSampleAes',
+  eme: 'reasonEme',
+  'dash-clearkey': 'reasonDashClearKey',
+  'subtitle-unsupported': 'reasonSubtitleUnsupported',
+  'too-large': 'reasonTooLarge',
+  'mse-needs-hook': 'reasonMseNeedsHook',
+  'mse-unrecordable': 'reasonMseUnrecordable',
   cors: 'reasonCors',
   'http-error': 'reasonHttp',
   network: 'reasonNetwork',
@@ -43,6 +49,11 @@ export function reasonText(d: Downloadability): string {
   if (d.reason === 'http-error' && d.detail) return `${base} (${d.detail})`;
   if (d.status === 'downloadable' && d.detail === 'aes-128') return t('reasonAes128');
   if (d.status === 'downloadable' && d.detail === 'headers-unreadable') return t('reasonHeadersUnreadable');
+  if (d.status === 'downloadable' && d.detail === 'in-page-data') return t('reasonInPageData');
+  if (d.status === 'downloadable' && d.detail === 'in-page-blob') return t('reasonInPageBlob');
+  if (d.status === 'downloadable' && d.detail === 'mse-capturable') return t('reasonMseCapturable');
+  if (d.status === 'downloadable' && d.detail === 'live-recordable') return t('reasonLiveRecordable');
+  if (d.status === 'downloadable' && d.detail === 'stream-recordable') return t('reasonStreamRecordable');
   return base;
 }
 
@@ -52,6 +63,8 @@ export function kindLabel(r: MediaResource): string {
       return t('kindHlsMaster');
     case 'hls-media':
       return t('kindHlsMedia');
+    case 'dash':
+      return t('kindDashStream');
     case 'unsupported-playlist':
       return r.playlist?.playlistClass === 'm3u-plain'
         ? t('kindPlainM3u')
@@ -59,7 +72,17 @@ export function kindLabel(r: MediaResource): string {
           ? t('kindDash')
           : t('kindPlaylist');
     case 'blob':
-      return t('kindBlob');
+      return r.held?.kind === 'stream' ? t('kindStream') : t('kindBlob');
+    case 'image':
+      return t('kindImage');
+    case 'document':
+      return t('kindDocument');
+    case 'archive':
+      return t('kindArchive');
+    case 'asset':
+      return t('kindAsset');
+    case 'subtitle':
+      return r.format === 'hls' || r.format === 'dash' ? t('kindSubtitleStream') : t('kindSubtitle');
     default:
       return t('kindFile');
   }
@@ -70,6 +93,7 @@ const STAGES: Record<JobStage, MessageKey> = {
   preparing: 'stagePreparing',
   downloading: 'stageDownloading',
   merging: 'stageMerging',
+  recording: 'stageRecording',
   encoding: 'stageEncoding',
   completed: 'stageCompleted',
   failed: 'stageFailed',
@@ -92,10 +116,15 @@ export function jobErrorText(job: DownloadJob): string {
     'chrome-download': 'jobErrChrome',
     interrupted: 'jobErrInterrupted',
     invalid: 'jobErrInvalid',
+    capture: 'jobErrCapture',
   };
+  if (e.code === 'too-large' && job.request.zip) return t('zipTooLarge');
   const key = map[e.code];
   const base = key ? t(key) : t('errGeneric');
-  return e.code === 'http-error' || e.code === 'chrome-download' || e.code === 'ffmpeg'
+  return e.code === 'http-error' ||
+    e.code === 'chrome-download' ||
+    e.code === 'ffmpeg' ||
+    e.code === 'capture'
     ? `${base} (${e.message.slice(0, 120)})`
     : base;
 }

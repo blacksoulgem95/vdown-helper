@@ -1,13 +1,13 @@
-import { FolderOpen, Pause, Play, RotateCcw, Square, Trash2, X } from 'lucide-react';
+import { FolderOpen, Pause, Play, RotateCcw, Save, Square, Trash2, X } from 'lucide-react';
 import { formatBytes, formatDuration, formatSpeed } from '@/lib/media';
-import { canRetry, isActive, isQueued, isTerminal } from '@/lib/queue';
+import { canRetry, canStop, isActive, isQueued, isTerminal } from '@/lib/queue';
 import { t } from '@/lib/i18n';
 import type { DownloadJob } from '@/types/download';
 import { StageTrack } from './StageTrack';
 import { jobErrorText } from './labels';
 import { IconButton, ProgressBar, cx } from './ui';
 
-export type JobAction = 'cancel' | 'retry' | 'pause' | 'resume' | 'open' | 'show' | 'remove';
+export type JobAction = 'cancel' | 'retry' | 'pause' | 'resume' | 'open' | 'show' | 'remove' | 'stop';
 
 function stats(job: DownloadJob): string {
   const p = job.progress;
@@ -18,6 +18,7 @@ function stats(job: DownloadJob): string {
         ? `${formatBytes(p.bytesDone)} / ${formatBytes(p.bytesTotal)}`
         : formatBytes(p.bytesDone),
     );
+  if (p.elapsedSec !== undefined) parts.unshift(formatDuration(p.elapsedSec));
   if (p.unitsTotal !== undefined && p.unitsDone !== undefined)
     parts.push(t('segmentsProgress', p.unitsDone, p.unitsTotal));
   const speed = formatSpeed(p.bytesPerSecond);
@@ -41,7 +42,7 @@ export function QueueItem({
       ? 'danger'
       : done
         ? 'acid'
-        : job.stage === 'merging' || job.stage === 'encoding'
+        : job.stage === 'merging' || job.stage === 'encoding' || job.stage === 'recording'
           ? 'magenta'
           : 'neon';
   const pct = job.progress.fraction !== undefined ? `${Math.round(job.progress.fraction * 100)}%` : '';
@@ -83,6 +84,16 @@ export function QueueItem({
           {jobErrorText(job)}
         </p>
       )}
+      {done && job.skipped ? (
+        <p role="status" className="mt-1.5 text-[11px] leading-snug text-magenta">
+          {t('jobSkipped', job.skipped)}
+        </p>
+      ) : null}
+      {done && job.gaps ? (
+        <p role="status" className="mt-1.5 text-[11px] leading-snug text-magenta">
+          {t('jobGaps', job.gaps)}
+        </p>
+      ) : null}
       {done && job.filePath && (
         <p className="mono mt-1.5 truncate text-[10.5px] text-muted" title={job.filePath}>
           {job.filePath.split(/[\\/]/).pop()}
@@ -102,6 +113,11 @@ export function QueueItem({
               <Pause size={14} aria-hidden="true" />
             </IconButton>
           ))}
+        {canStop(job) && (
+          <IconButton label={t('jobStop')} onClick={() => onAction(job.id, 'stop')}>
+            <Save size={14} aria-hidden="true" />
+          </IconButton>
+        )}
         {(active || isQueued(job)) && (
           <IconButton label={t('cancel')} onClick={() => onAction(job.id, 'cancel')}>
             <Square size={13} aria-hidden="true" />

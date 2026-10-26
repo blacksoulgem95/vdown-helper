@@ -14,21 +14,55 @@ let registered = false;
 interface Observed {
   url: string;
   mime?: string;
+  /** Frame that made the request (webRequest frameId): lets the player's own frame probe it. */
+  frameId?: number;
 }
 
 function relevant(url: string, mime: string): boolean {
   const ext = extensionOf(url);
   if (SEGMENT_EXT.has(ext)) return false;
   if (formatFromMime(mime)) return true;
-  return ['mp4', 'm4v', 'webm', 'mkv', 'mov', 'mp3', 'm4a', 'wav', 'ogg', 'flac', 'm3u8', 'mpd'].includes(
-    ext,
-  );
+  return [
+    'mp4',
+    'm4v',
+    'webm',
+    'mkv',
+    'mov',
+    'mp3',
+    'm4a',
+    'wav',
+    'ogg',
+    'flac',
+    'opus',
+    'aiff',
+    'aif',
+    'wma',
+    'flv',
+    'avi',
+    'wmv',
+    'asf',
+    '3gp',
+    '3g2',
+    'mpg',
+    'mpeg',
+    'm3u8',
+    'mpd',
+    'vtt',
+    'srt',
+    'ttml',
+    'dfxp',
+  ].includes(ext);
 }
 
 export async function getObserved(tabId: number): Promise<RawCandidate[]> {
   const stored = await chrome.storage.session.get(key(tabId));
   const list = (stored[key(tabId)] as Observed[] | undefined) ?? [];
-  return list.map((o) => ({ url: o.url, method: 'network', ...(o.mime ? { mimeType: o.mime } : {}) }));
+  return list.map((o) => ({
+    url: o.url,
+    method: 'network' as const,
+    ...(o.mime ? { mimeType: o.mime } : {}),
+    ...(o.frameId !== undefined && o.frameId >= 0 ? { frameId: o.frameId } : {}),
+  }));
 }
 
 async function record(tabId: number, o: Observed): Promise<void> {
@@ -46,7 +80,9 @@ const listener: HeadersListener = (d) => {
   if (d.tabId < 0 || !isSafeFetchUrl(d.url)) return undefined;
   const ct = d.responseHeaders?.find((h) => h.name.toLowerCase() === 'content-type')?.value ?? '';
   if (relevant(d.url, ct)) {
-    const o: Observed = ct ? { url: d.url, mime: ct.split(';')[0]?.trim() ?? '' } : { url: d.url };
+    const o: Observed = ct
+      ? { url: d.url, mime: ct.split(';')[0]?.trim() ?? '', frameId: d.frameId }
+      : { url: d.url, frameId: d.frameId };
     void record(d.tabId, o);
   }
   return undefined;

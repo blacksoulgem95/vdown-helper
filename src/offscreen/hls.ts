@@ -1,6 +1,7 @@
 import { parseHls } from '@/lib/hls/parser';
 import { fetchText } from '@/lib/netprobe';
 import { SpeedMeter } from '@/lib/queue';
+import { mayExtensionFetch } from '@/lib/security';
 import type { HlsKey, HlsMediaPlaylist, HlsSegment } from '@/types/hls';
 import type { JobProgress } from '@/types/download';
 import { CancelledError, PipelineError } from './errors';
@@ -13,6 +14,8 @@ export interface StageOptions {
   fileName: string | ((fragmented: boolean) => string);
   concurrency: number;
   credentialedOrigins?: string[];
+  /** Who is asking (see NetContext); omitted only by tests. */
+  net?: NetContext;
   signal: AbortSignal;
   /** Abort when staged bytes exceed this (used when FFmpeg must later hold the result in memory). */
   maxBytes?: number;
@@ -31,16 +34,44 @@ const RETRIES = 3;
  * Cookies are only sent to origins the user granted access to (DownloadRequest.credentialedOrigins). Everything
  * else is fetched without credentials, which is also what wildcard-CORS CDNs require.
  */
-type Creds = (url: string) => RequestCredentials;
-export function credentialsFor(origins: string[] | undefined): Creds {
+type Creds = ((url: string) => RequestCredentials) & { allowed?: (url: string) => boolean };
+
+/**
+ * Who is asking, for two rules that a hostile manifest must not be able to bend:
+ *  - `pageUrl`: the extension (which is exempt from CORS) never fetches a private-network or loopback address named by
+ *    a manifest on behalf of a public page;
+ *  - `owner`: the address of the manifest or document that names the URLs. Cookies follow it: a URL on a granted origin
+ *    gets them only if the thing that listed it is on a granted origin too, so a third party's playlist cannot make
+ *    the extension send the user's cookies to the page's site.
+ */
+export interface NetContext {
+  pageUrl: string;
+  owner: string;
+}
+
+export function credentialsFor(origins: string[] | undefined, net?: NetContext): Creds {
   const granted = new Set(origins ?? []);
-  return (url) => {
+  const originOf = (u: string): string | undefined => {
     try {
-      return granted.has(new URL(url).origin) ? 'include' : 'omit';
+      return new URL(u).origin;
     } catch {
-      return 'omit';
+      return undefined;
     }
   };
+  const ownerOrigin = net ? originOf(net.owner) : undefined;
+  const ownerGranted = !net || (ownerOrigin !== undefined && granted.has(ownerOrigin));
+  const creds: Creds = (url) => {
+    const o = originOf(url);
+    return ownerGranted && o !== undefined && granted.has(o) ? 'include' : 'omit';
+  };
+  if (net) creds.allowed = (url) => mayExtensionFetch(url, net.pageUrl);
+  return creds;
+}
+
+/** Refuse an address the extension must not visit on behalf of this page (see NetContext). */
+function guard(creds: Creds, url: string): void {
+  if (creds.allowed && !creds.allowed(url))
+    throw new PipelineError('invalid', 'A private-network address named by a stream was not fetched');
 }
 
 function check(signal: AbortSignal): void {
@@ -81,6 +112,7 @@ async function request(
 ): Promise<{ res: Response; abort: () => void; signal: AbortSignal }> {
   const headers: Record<string, string> = {};
   if (range) headers['Range'] = `bytes=${range.offset}-${range.offset + range.length - 1}`;
+  guard(creds, url);
   let lastErr: PipelineError = new PipelineError('network', 'Request failed');
   for (let attempt = 0; attempt <= RETRIES; attempt++) {
     check(signal);
@@ -172,7 +204,7 @@ async function readCapped(
   return out;
 }
 
-async function getBytes(
+export async function getBytes(
   url: string,
   signal: AbortSignal,
   creds: Creds,
@@ -204,8 +236,11 @@ export async function loadMediaPlaylist(
   url: string,
   signal: AbortSignal,
   creds: Creds,
+  /** A live recording reads playlists that have no end yet. */
+  allowLive = false,
 ): Promise<HlsMediaPlaylist> {
   check(signal);
+  guard(creds, url);
   const res = await fetchText(url, fetch, creds(url));
   if (!res.ok) {
     throw new PipelineError(
@@ -222,10 +257,28 @@ export async function loadMediaPlaylist(
       'protected',
       'This stream uses DRM or SAMPLE-AES encryption, which is not supported',
     );
-  if (!p.endList) throw new PipelineError('invalid', 'Live streams cannot be downloaded');
+  if (!p.endList && !allowLive) throw new PipelineError('invalid', 'Live streams cannot be downloaded');
   if (p.segments.length > MAX_SEGMENTS)
     throw new PipelineError('invalid', 'The playlist has too many segments');
   return p;
+}
+
+/** Fetch a manifest (text) with the same limits, credential rules and error classification as segments. */
+export async function fetchManifestText(
+  url: string,
+  signal: AbortSignal,
+  creds: Creds,
+): Promise<{ text: string; url: string }> {
+  check(signal);
+  guard(creds, url);
+  const res = await fetchText(url, fetch, creds(url));
+  if (!res.ok) {
+    throw new PipelineError(
+      res.kind === 'http' ? 'http-error' : 'cors',
+      res.kind === 'http' ? `HTTP ${res.status ?? 0}` : 'The manifest request was blocked',
+    );
+  }
+  return { text: res.text ?? '', url: res.finalUrl || url };
 }
 
 function ivFor(key: HlsKey, sequence: number): Uint8Array {
@@ -241,10 +294,75 @@ function ivFor(key: HlsKey, sequence: number): Uint8Array {
 
 /** Download a media playlist's segments (decrypting AES-128) in order into a file on disk. */
 export async function stageHlsPlaylist(opts: StageOptions): Promise<StagedMedia> {
-  const { signal } = opts;
-  const creds = credentialsFor(opts.credentialedOrigins);
-  const playlist = await loadMediaPlaylist(opts.playlistUrl, signal, creds);
-  const segs = playlist.segments;
+  const playlist = await loadMediaPlaylist(
+    opts.playlistUrl,
+    opts.signal,
+    credentialsFor(opts.credentialedOrigins, opts.net),
+  );
+  return stageSegmentList({
+    ...opts,
+    segs: playlist.segments,
+    fragmented: playlist.fragmented,
+    durationSec: playlist.totalDuration,
+  });
+}
+
+export type SegmentListOptions = Omit<StageOptions, 'playlistUrl'> & {
+  segs: HlsSegment[];
+  fragmented: boolean;
+  durationSec: number;
+};
+
+/**
+ * The shared segment engine (HLS, DASH, live recording): fetch segments in parallel but write them to disk in order,
+ * decrypting AES-128 where a key applies, writing each init section once, with caps, retries and cancellation.
+ */
+export async function stageSegmentList(opts: SegmentListOptions): Promise<StagedMedia> {
+  const out = await createStageFile(
+    opts.jobId,
+    typeof opts.fileName === 'function' ? opts.fileName(opts.fragmented) : opts.fileName,
+  );
+  try {
+    await writeSegments(opts, out, { mapKey: '', skipped: 0 });
+    const file = await out.finish();
+    return { file, bytes: out.bytes, fragmented: opts.fragmented, durationSec: opts.durationSec };
+  } catch (e) {
+    await out.abort();
+    throw e;
+  }
+}
+
+/** Where segments are appended, and what is remembered between calls (a live recording appends in batches). */
+export interface SegmentSink {
+  write(data: Uint8Array): Promise<void>;
+  readonly bytes: number;
+}
+export interface SegmentSinkState {
+  /** The initialisation section last written, so a later batch does not repeat it. */
+  mapKey: string;
+  /** Segments the server no longer had (HTTP 404/410) and that were left out. */
+  skipped: number;
+  /** Seconds of media written. */
+  seconds?: number;
+}
+
+/**
+ * Fetch `opts.segs` (in parallel, written in order) and append them to `out`. With `tolerateMissing`, a segment that
+ * the server no longer has is skipped (and counted) instead of failing the whole recording.
+ */
+export async function writeSegments(
+  opts: Omit<SegmentListOptions, 'fileName'> & {
+    fileName?: SegmentListOptions['fileName'];
+    tolerateMissing?: boolean;
+    /** Checked before every fetch and after every write: when true nothing more is fetched or written (a limit was reached). */
+    shouldStop?: () => boolean;
+  },
+  out: SegmentSink,
+  state: SegmentSinkState,
+): Promise<void> {
+  const { signal, segs } = opts;
+  const creds = credentialsFor(opts.credentialedOrigins, opts.net);
+  if (segs.length > MAX_SEGMENTS) throw new PipelineError('invalid', 'The stream has too many segments');
 
   const free = await freeBytes();
   if (free !== undefined && free < 64 * 1024 * 1024) {
@@ -268,22 +386,22 @@ export async function stageHlsPlaylist(opts: StageOptions): Promise<StagedMedia>
     return p;
   };
 
-  const out = await createStageFile(
-    opts.jobId,
-    typeof opts.fileName === 'function' ? opts.fileName(playlist.fragmented) : opts.fileName,
-  );
   const meter = new SpeedMeter();
   const started = Date.now();
   let downloadedBytes = 0;
   let writeIdx = 0;
   let nextIdx = 0;
   const window = Math.max(2, opts.concurrency * 3);
-  const done = new Map<number, Uint8Array>();
+  const done = new Map<number, Uint8Array | null>();
   const waiters: Array<() => void> = [];
-  let lastMapKey = '';
+  let lastMapKey = state.mapKey;
   let writing: Promise<void> = Promise.resolve();
 
+  let reported = 0; // nothing written yet is not worth a report
   const report = () => {
+    // A flush that wrote nothing (a later segment finished first) has nothing new to say.
+    if (writeIdx === reported) return;
+    reported = writeIdx;
     const now = Date.now();
     meter.update(writeIdx, now);
     const p: JobProgress = {
@@ -314,8 +432,16 @@ export async function stageHlsPlaylist(opts: StageOptions): Promise<StagedMedia>
     }
   };
 
-  const fetchSegment = async (seg: HlsSegment): Promise<Uint8Array> => {
-    let data = await getBytes(seg.uri, signal, creds, seg.byteRange);
+  const fetchSegment = async (seg: HlsSegment): Promise<Uint8Array | null> => {
+    let data: Uint8Array;
+    try {
+      data = await getBytes(seg.uri, signal, creds, seg.byteRange);
+    } catch (e) {
+      // a live stream drops old segments: one that is gone is a gap in the recording, not the end of it
+      if (opts.tolerateMissing && e instanceof PipelineError && /^HTTP (404|410)$/.test(e.message))
+        return null;
+      throw e;
+    }
     downloadedBytes += data.byteLength;
     const key = seg.key;
     if (key && key.method === 'AES-128') data = await decryptBytes(key, data, seg.sequence);
@@ -325,10 +451,17 @@ export async function stageHlsPlaylist(opts: StageOptions): Promise<StagedMedia>
   const flush = (): Promise<void> => {
     writing = writing.then(async () => {
       for (;;) {
-        const data = done.get(writeIdx);
-        if (!data) break;
+        if (opts.shouldStop?.()) break;
+        if (!done.has(writeIdx)) break;
+        const data = done.get(writeIdx) ?? null;
         done.delete(writeIdx);
         const seg = segs[writeIdx] as HlsSegment;
+        if (data === null) {
+          state.skipped++;
+          writeIdx++;
+          for (const w of waiters.splice(0)) w();
+          continue;
+        }
         if (seg.map) {
           const mapKey = `${seg.map.uri}|${seg.map.byteRange?.offset ?? ''}`;
           if (mapKey !== lastMapKey) {
@@ -338,9 +471,11 @@ export async function stageHlsPlaylist(opts: StageOptions): Promise<StagedMedia>
               init = await decryptBytes(seg.map.key, init, seg.sequence);
             await out.write(init);
             lastMapKey = mapKey;
+            state.mapKey = mapKey;
           }
         }
         await out.write(data);
+        state.seconds = (state.seconds ?? 0) + seg.duration;
         writeIdx++;
         if (out.bytes > (opts.maxBytes ?? MAX_TOTAL_BYTES)) {
           throw new PipelineError('too-large', 'The download exceeds the configured size limit');
@@ -355,6 +490,7 @@ export async function stageHlsPlaylist(opts: StageOptions): Promise<StagedMedia>
   const worker = async () => {
     for (;;) {
       check(signal);
+      if (opts.shouldStop?.()) return;
       const i = nextIdx;
       if (i >= segs.length) return;
       if (i >= writeIdx + window) {
@@ -371,11 +507,6 @@ export async function stageHlsPlaylist(opts: StageOptions): Promise<StagedMedia>
     const n = Math.max(1, Math.min(opts.concurrency, segs.length));
     await Promise.all(Array.from({ length: n }, worker));
     await flush();
-    const file = await out.finish();
-    return { file, bytes: out.bytes, fragmented: playlist.fragmented, durationSec: playlist.totalDuration };
-  } catch (e) {
-    await out.abort();
-    throw e;
   } finally {
     // Wake anything still parked so a failed job does not leave dangling promises.
     for (const w of waiters.splice(0)) w();
@@ -387,7 +518,11 @@ export async function stageDirectFile(
   opts: Omit<StageOptions, 'playlistUrl' | 'concurrency' | 'fileName'> & { url: string; fileName: string },
 ): Promise<{ file: File; bytes: number }> {
   const { signal } = opts;
-  const { res, abort, signal: s } = await request(opts.url, signal, credentialsFor(opts.credentialedOrigins));
+  const {
+    res,
+    abort,
+    signal: s,
+  } = await request(opts.url, signal, credentialsFor(opts.credentialedOrigins, opts.net));
   const total = Number(res.headers.get('content-length')) || undefined;
   const cap = opts.maxBytes ?? MAX_TOTAL_BYTES;
   if (total !== undefined && total > cap) {

@@ -4,8 +4,9 @@ import type { Plan } from './compat';
 /** Allowed stage transitions. Retry is a separate, explicit operation (see retryJob). */
 export const TRANSITIONS: Readonly<Record<JobStage, readonly JobStage[]>> = {
   detected: ['preparing', 'cancelled', 'failed'],
-  preparing: ['downloading', 'merging', 'encoding', 'cancelled', 'failed'],
+  preparing: ['downloading', 'recording', 'merging', 'encoding', 'cancelled', 'failed'],
   downloading: ['merging', 'encoding', 'completed', 'cancelled', 'failed'],
+  recording: ['merging', 'completed', 'cancelled', 'failed'],
   merging: ['encoding', 'completed', 'cancelled', 'failed'],
   encoding: ['completed', 'cancelled', 'failed'],
   completed: [],
@@ -13,7 +14,13 @@ export const TRANSITIONS: Readonly<Record<JobStage, readonly JobStage[]>> = {
   cancelled: [],
 };
 
-export const ACTIVE_STAGES: readonly JobStage[] = ['preparing', 'downloading', 'merging', 'encoding'];
+export const ACTIVE_STAGES: readonly JobStage[] = [
+  'preparing',
+  'downloading',
+  'recording',
+  'merging',
+  'encoding',
+];
 export const TERMINAL_STAGES: readonly JobStage[] = ['completed', 'failed', 'cancelled'];
 
 export const isActive = (j: Pick<DownloadJob, 'stage'>): boolean => ACTIVE_STAGES.includes(j.stage);
@@ -32,6 +39,9 @@ export class IllegalTransitionError extends Error {
 
 /** Only the stages this job will really pass through, in order (never a simulated one). */
 export function stagesFor(plan: Pick<Plan, 'pipeline' | 'video' | 'audio' | 'requiresFfmpeg'>): JobStage[] {
+  // A recording has no download: it records until it is stopped, and is then tidied up (duration, index) by a copy.
+  if (plan.pipeline === 'record' || plan.pipeline === 'live')
+    return ['detected', 'preparing', 'recording', 'merging', 'completed'];
   const stages: JobStage[] = ['detected', 'preparing', 'downloading'];
   if (plan.requiresFfmpeg) {
     const reencodes = plan.audio === 'transcode' || plan.video === 'transcode';
@@ -84,6 +94,9 @@ export function failJob(job: DownloadJob, now: number, error: JobError): Downloa
 export function canRetry(job: DownloadJob): boolean {
   return job.stage === 'failed' || job.stage === 'cancelled';
 }
+
+/** A running recording can be stopped (and saved), which is different from cancelling it. */
+export const canStop = (j: Pick<DownloadJob, 'stage'>): boolean => j.stage === 'recording';
 
 /** Reset a failed/cancelled job so the scheduler picks it up again. */
 export function retryJob(job: DownloadJob, now: number): DownloadJob {
@@ -140,4 +153,40 @@ export class SpeedMeter {
       return undefined;
     return remainingBytes / r;
   }
+}
+
+/** Chrome errors that mean "the server refused this request": worth one retry with the frame's headers replayed. */
+export const REFUSED_BY_SERVER: readonly string[] = ['SERVER_FORBIDDEN', 'SERVER_UNAUTHORIZED'];
+
+export function canRestage(job: DownloadJob, chromeError: string | undefined): boolean {
+  return (
+    job.stage === 'downloading' &&
+    !job.staged &&
+    job.request.replay !== undefined &&
+    !job.request.isHls &&
+    !job.request.isDash &&
+    chromeError !== undefined &&
+    REFUSED_BY_SERVER.includes(chromeError)
+  );
+}
+
+/**
+ * Hand a refused native download to the extension's own fetch pipeline (once). The job goes back to PREPARING so the
+ * runner starts it again; it cannot be paused any more because Chrome no longer owns the transfer.
+ */
+export function restage(job: DownloadJob, now: number): DownloadJob {
+  if (job.stage !== 'downloading' || job.staged) throw new IllegalTransitionError(job.stage, 'preparing');
+  const next: DownloadJob = {
+    ...job,
+    stage: 'preparing',
+    progress: {},
+    updatedAt: now,
+    paused: false,
+    canPause: false,
+    viaOffscreen: true,
+    staged: true,
+  };
+  delete next.chromeDownloadId;
+  delete next.error;
+  return next;
 }

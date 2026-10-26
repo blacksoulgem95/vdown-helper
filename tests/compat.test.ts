@@ -227,3 +227,111 @@ describe('"Original quality" mode', () => {
     ).toBe(true);
   });
 });
+
+describe('legacy and extra source formats', () => {
+  const plan = (over: Partial<PlanInput>) =>
+    planOutput(input({ videoFamily: undefined, audioFamily: undefined, ...over }));
+
+  it('keeps any of them as they are: a native download with the format as extension', () => {
+    for (const f of ['flv', 'avi', 'wmv', 'asf', '3gp', 'mpg'] as const) {
+      expect(plan({ sourceFormat: f })).toMatchObject({
+        valid: true,
+        pipeline: 'native',
+        extension: f,
+        requiresFfmpeg: false,
+      });
+    }
+  });
+
+  it('only copies into containers that can take the format, and never offers a re-encode', () => {
+    const targets = (f: PlanInput['sourceFormat']) =>
+      (['mp4', 'mkv', 'ts'] as const).filter((c) => plan({ sourceFormat: f, container: c }).valid);
+    expect(targets('flv')).toEqual(['mp4', 'mkv', 'ts']);
+    expect(targets('avi')).toEqual(['mkv']);
+    expect(targets('wmv')).toEqual(['mkv']);
+    expect(targets('asf')).toEqual(['mkv']);
+    expect(targets('mpg')).toEqual(['mkv', 'ts']);
+    expect(targets('3gp')).toEqual(['mp4', 'mkv']);
+    const refused = plan({ sourceFormat: 'wmv', container: 'mp4' });
+    expect(refused).toMatchObject({ valid: false, issues: ['video-codec-container'] });
+    // a video-only copy follows the same rule
+    expect(plan({ sourceFormat: 'avi', mode: 'video-only', container: 'mp4' }).issues).toEqual([
+      'video-codec-container',
+    ]);
+    const mkv = plan({ sourceFormat: 'avi', container: 'mkv' });
+    expect(mkv).toMatchObject({ valid: true, pipeline: 'file-ffmpeg-copy', video: 'copy', extension: 'mkv' });
+  });
+
+  it('sources that are not restricted keep working as before', () => {
+    expect(plan({ sourceFormat: 'webm', container: 'mp4' }).valid).toBe(true);
+    expect(plan({ sourceFormat: 'mov', container: 'mkv' }).valid).toBe(true);
+  });
+
+  it('an audio file saved as it is works with the default settings (it used to be refused as "no video")', () => {
+    for (const f of ['mp3', 'm4a', 'aac', 'wav', 'ogg', 'flac', 'aiff', 'wma', 'opus'] as const) {
+      expect(plan({ sourceFormat: f, hasVideo: false, mode: 'original' })).toMatchObject({
+        valid: true,
+        pipeline: 'native',
+        audio: 'copy',
+        extension: f,
+        requiresFfmpeg: false,
+      });
+    }
+    // an audio-only HLS rendition is joined without FFmpeg
+    expect(
+      plan({ sourceFormat: 'hls', isHls: true, hasVideo: false, hasMuxedAudio: true, mode: 'original' }),
+    ).toMatchObject({ valid: true, pipeline: 'hls-concat', extension: 'ts' });
+    expect(
+      plan({
+        sourceFormat: 'hls',
+        isHls: true,
+        fragmented: true,
+        hasVideo: false,
+        hasMuxedAudio: true,
+        mode: 'original',
+      }),
+    ).toMatchObject({ valid: true, pipeline: 'hls-concat', extension: 'm4a' });
+  });
+
+  it('an audio file saved as it is works with the default settings (it used to be refused as "no video")', () => {
+    for (const f of ['mp3', 'm4a', 'aac', 'wav', 'ogg', 'flac', 'aiff', 'wma', 'opus'] as const) {
+      expect(plan({ sourceFormat: f, hasVideo: false, mode: 'original' })).toMatchObject({
+        valid: true,
+        pipeline: 'native',
+        audio: 'copy',
+        extension: f,
+        requiresFfmpeg: false,
+      });
+    }
+    // an audio-only HLS rendition is joined without FFmpeg
+    expect(
+      plan({ sourceFormat: 'hls', isHls: true, hasVideo: false, hasMuxedAudio: true, mode: 'original' }),
+    ).toMatchObject({ valid: true, pipeline: 'hls-concat', extension: 'ts' });
+    expect(
+      plan({
+        sourceFormat: 'hls',
+        isHls: true,
+        fragmented: true,
+        hasVideo: false,
+        hasMuxedAudio: true,
+        mode: 'original',
+      }),
+    ).toMatchObject({ valid: true, pipeline: 'hls-concat', extension: 'm4a' });
+  });
+
+  it('audio formats are audio files: extracted and converted, with real encodes only for audio', () => {
+    for (const f of ['aiff', 'wma', 'opus'] as const) {
+      const mp3 = plan({ sourceFormat: f, hasVideo: false, mode: 'audio-only', audioFormat: 'mp3' });
+      expect(mp3).toMatchObject({
+        valid: true,
+        pipeline: 'ffmpeg-transcode',
+        audio: 'transcode',
+        extension: 'mp3',
+      });
+      // video-only of an audio file is meaningless
+      expect(plan({ sourceFormat: f, hasVideo: false, mode: 'video-only' }).issues).toEqual([
+        'no-video-source',
+      ]);
+    }
+  });
+});

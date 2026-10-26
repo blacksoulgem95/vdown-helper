@@ -140,11 +140,12 @@ describe('HLS', () => {
   it.each([
     ['AES-128 is downloadable', AES, 'downloadable', 'ok'],
     ['SAMPLE-AES is protected', SAMPLE_AES, 'protected', 'sample-aes'],
-    ['live streams are unsupported', LIVE, 'unsupported', 'live'],
+    ['live streams can be recorded, not downloaded', LIVE, 'downloadable', 'ok'],
   ])('media playlist: %s', async (_n, text, status, reason) => {
     const url = 'https://cdn.example/p.m3u8';
     const [r] = await analyzeCandidates([cand(url)], ctx, fetcher({ [url]: okText(text, url) }));
     expect(r?.downloadability).toMatchObject({ status, reason });
+    if (text === LIVE) expect(r?.downloadability.detail).toBe('live-recordable');
   });
   it('separates plain M3U, DASH and malformed playlists from HLS', async () => {
     const out = await analyzeCandidates(
@@ -165,12 +166,118 @@ describe('HLS', () => {
     );
     const by = Object.fromEntries(out.map((r) => [new URL(r.url).pathname, r.downloadability]));
     expect(by['/list.m3u']).toMatchObject({ status: 'unsupported', reason: 'plain-m3u' });
-    expect(by['/m.mpd']).toMatchObject({ status: 'unsupported', reason: 'dash' });
+    // an MPD with no periods is a malformed DASH manifest (real ones are covered by the DASH tests below)
+    expect(by['/m.mpd']).toMatchObject({ status: 'unsupported', reason: 'malformed' });
     expect(by['/bad.m3u8']).toMatchObject({ status: 'unsupported', reason: 'malformed' });
   });
   it('hides variant playlists that a master already offers', async () => {
     const f = fetcher({ [MASTER_URL]: okText(MASTER, MASTER_URL), [V1080]: okText(MEDIA, V1080) });
     const out = await analyzeCandidates([cand(V1080, { method: 'performance' }), cand(MASTER_URL)], ctx, f);
-    expect(out.map((r) => r.kind)).toEqual(['hls-master']);
+    // the master's own subtitle rendition is listed too, as a subtitle (see tests/subtitle-analyze.test.ts)
+    expect(out.map((r) => r.kind).filter((k) => k !== 'subtitle')).toEqual(['hls-master']);
+  });
+});
+
+describe('DASH', () => {
+  const MPD_URL = 'https://cdn.example/show/manifest.mpd';
+  const mpd = (
+    extra = '',
+    attrs = 'type="static" mediaPresentationDuration="PT20S"',
+  ) => `<?xml version="1.0"?>
+<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" ${attrs}><Period>
+  <AdaptationSet contentType="video" mimeType="video/mp4">${extra}
+    <SegmentTemplate timescale="1000" duration="4000" initialization="v/$RepresentationID$/i.mp4" media="v/$RepresentationID$/$Number$.m4s"/>
+    <Representation id="720" bandwidth="2000000" width="1280" height="720" codecs="avc1.64001f"/>
+    <Representation id="360" bandwidth="800000" width="640" height="360" codecs="avc1.4d401e"/>
+  </AdaptationSet>
+  <AdaptationSet contentType="audio" mimeType="audio/mp4" lang="en"><SegmentTemplate timescale="1000" duration="4000" initialization="a/i.mp4" media="a/$Number$.m4s"/>
+    <Representation id="aud" bandwidth="128000" codecs="mp4a.40.2"/></AdaptationSet>
+</Period></MPD>`;
+  const run = async (text: string, mime = 'application/dash+xml') => {
+    const f = fetcher({ [MPD_URL]: okText(text, MPD_URL, mime) });
+    return (await analyzeCandidates([cand(MPD_URL)], ctx, f))[0]!;
+  };
+
+  it('lists only the real representations, best first, with separate audio and an estimated size', async () => {
+    const r = await run(mpd());
+    expect(r.kind).toBe('dash');
+    expect(r.format).toBe('dash');
+    expect(r.variants.map((v) => [v.height, v.bandwidth, v.audioGroup])).toEqual([
+      [720, 2_000_000, 'dash-audio'],
+      [360, 800_000, 'dash-audio'],
+    ]);
+    expect(r.variants[0]!.uri).toBe(`${MPD_URL}#vdh-rep=720`);
+    expect(r.audioTracks.map((a) => [a.name, a.language, a.uri])).toEqual([
+      ['en', 'en', `${MPD_URL}#vdh-rep=aud`],
+    ]);
+    expect(r).toMatchObject({
+      durationSec: 20,
+      height: 720,
+      downloadability: { status: 'downloadable', reason: 'ok' },
+      sizeIsEstimate: true,
+    });
+    expect(r.sizeBytes).toBe(Math.round((2_000_000 * 20) / 8));
+    expect(r.playlist).toMatchObject({
+      playlistClass: 'dash',
+      segmentCount: 5,
+      live: false,
+      fragmented: true,
+      periods: 1,
+    });
+  });
+  it('is recognised by content, not just by file name', async () => {
+    const f = fetcher({
+      'https://cdn.example/stream?id=9': okText(
+        mpd(),
+        'https://cdn.example/stream?id=9',
+        'application/dash+xml',
+      ),
+    });
+    const [r] = await analyzeCandidates(
+      [cand('https://cdn.example/stream?id=9', { mimeType: 'application/dash+xml' })],
+      ctx,
+      f,
+    );
+    expect(r?.kind).toBe('dash');
+  });
+  it('refuses Widevine / PlayReady manifests as protected', async () => {
+    const r = await run(
+      mpd('<ContentProtection schemeIdUri="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"/>'),
+    );
+    expect(r.downloadability).toMatchObject({ status: 'protected', reason: 'drm' });
+    expect(r.downloadability.detail).toContain('widevine');
+  });
+  it('does not call ClearKey DRM, but cannot download it until its key is obtainable', async () => {
+    const r = await run(
+      mpd('<ContentProtection schemeIdUri="urn:uuid:e2719d58-a985-b3c9-781a-b030af78d30e"/>'),
+    );
+    expect(r.downloadability).toMatchObject({ status: 'unsupported', reason: 'dash-clearkey' });
+  });
+  it('live (dynamic) manifests can be recorded, not downloaded', async () => {
+    const r = await run(mpd('', 'type="dynamic" minimumUpdatePeriod="PT2S"'));
+    expect(r.downloadability).toMatchObject({ status: 'downloadable', detail: 'live-recordable' });
+    expect(r.playlist?.live).toBe(true);
+  });
+  it('malformed manifests are reported, not guessed at', async () => {
+    expect((await run('<MPD><Period></Period></MPD>')).downloadability).toMatchObject({
+      status: 'unsupported',
+      reason: 'malformed',
+    });
+    expect((await run('<MPD><Period><broken></MPD>')).downloadability).toMatchObject({
+      status: 'unsupported',
+      reason: 'malformed',
+    });
+  });
+  it('audio-only manifests are audio', async () => {
+    const text = mpd().replace(/<AdaptationSet contentType="video"[\s\S]*?<\/AdaptationSet>/, '');
+    const r = await run(text);
+    expect(r.mediaType).toBe('audio');
+    expect(r.variants).toHaveLength(0);
+    expect(r.downloadability.status).toBe('downloadable');
+  });
+  it('video that already carries audio does not offer a separate track', async () => {
+    const r = await run(mpd().replace('codecs="avc1.64001f"', 'codecs="avc1.64001f,mp4a.40.2"'));
+    expect(r.variants.find((v) => v.height === 720)?.audioGroup).toBeUndefined();
+    expect(r.variants.find((v) => v.height === 360)?.audioGroup).toBe('dash-audio');
   });
 });

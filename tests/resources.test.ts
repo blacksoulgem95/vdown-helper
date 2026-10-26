@@ -9,6 +9,13 @@ import {
 import { makeResource } from './helpers';
 
 describe('resourceId', () => {
+  it('keeps DASH representations of one manifest apart from the manifest and each other', () => {
+    const m = 'https://a.com/m.mpd';
+    expect(resourceId(`${m}#vdh-rep=en`)).not.toBe(resourceId(m));
+    expect(resourceId(`${m}#vdh-rep=en`)).not.toBe(resourceId(`${m}#vdh-rep=fr`));
+    expect(resourceId(`${m}#vdh-rep=en`)).toBe(resourceId(`${m}#vdh-rep=en`));
+    expect(resourceId(`${m}#other`)).toBe(resourceId(m));
+  });
   it('is stable across fragments, query order and default ports', () => {
     expect(resourceId('https://a.com/v.mp4?b=2&a=1#x')).toBe(resourceId('https://a.com:443/v.mp4?a=1&b=2'));
   });

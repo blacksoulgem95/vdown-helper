@@ -11,6 +11,11 @@ import type { AudioBitrate, AudioFormat, OutputMode } from '@/types/download';
 import type { QualityPreset } from '@/types/settings';
 
 const ALL_SITES: chrome.permissions.Permissions = { origins: ['<all_urls>'] };
+// The page hook also lets downloads replay the Referer/Origin of the frame that owns a stream.
+const HOOK: chrome.permissions.Permissions = {
+  origins: ['<all_urls>'],
+  permissions: ['declarativeNetRequestWithHostAccess'],
+};
 const OBSERVER: chrome.permissions.Permissions = { permissions: ['webRequest'], origins: ['<all_urls>'] };
 
 // The typings expose a callback/promise hybrid; this pins the promise form.
@@ -54,6 +59,14 @@ export function OptionsApp() {
     await update({ autoScan: on });
     await refreshPermissions();
   };
+  const toggleHook = async (on: boolean) => {
+    if (on) {
+      const ok = await chrome.permissions.request(HOOK);
+      if (!ok) return flash('danger', t('permDenied'));
+    }
+    await update({ pageHook: on });
+    await refreshPermissions();
+  };
   const toggleObserver = async (on: boolean) => {
     if (on) {
       const ok = await chrome.permissions.request(OBSERVER);
@@ -64,8 +77,10 @@ export function OptionsApp() {
     await refreshPermissions();
   };
   const revokeAll = async () => {
-    await update({ autoScan: false, networkObserver: false });
-    await chrome.permissions.remove({ permissions: ['webRequest'] }).catch(() => false);
+    await update({ autoScan: false, networkObserver: false, pageHook: false });
+    await chrome.permissions
+      .remove({ permissions: ['webRequest', 'declarativeNetRequestWithHostAccess'] })
+      .catch(() => false);
     await chrome.permissions.remove(ALL_SITES).catch(() => false);
     await refreshPermissions();
     flash('acid', t('permRevoked'));
@@ -187,6 +202,12 @@ export function OptionsApp() {
             onChange={(v) => void toggleAutoScan(v)}
           />
           <Toggle
+            label={t('optPageHook')}
+            description={t('optPageHookHint')}
+            checked={settings.pageHook && allSites}
+            onChange={(v) => void toggleHook(v)}
+          />
+          <Toggle
             label={t('optObserver')}
             description={t('optObserverHint')}
             checked={settings.networkObserver && observerOk}
@@ -237,6 +258,39 @@ export function OptionsApp() {
             />
           </div>
           <Notice tone="magenta">{t('processingWarning')}</Notice>
+        </Section>
+
+        <Section title={t('secRecording')} hint={t('secRecordingHint')}>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <SelectField
+              label={t('optRecordContainer')}
+              hint={t('optRecordContainerHint')}
+              value={settings.recordContainer}
+              onChange={(e) => void update({ recordContainer: e.target.value === 'mp4' ? 'mp4' : 'webm' })}
+              options={[
+                { value: 'webm', label: 'WebM' },
+                { value: 'mp4', label: 'MP4' },
+              ]}
+            />
+            <TextField
+              label={t('optRecordMaxMinutes')}
+              type="number"
+              min={LIMITS.recordMaxMinutes.min}
+              max={LIMITS.recordMaxMinutes.max}
+              value={settings.recordMaxMinutes}
+              onChange={(e) =>
+                void update({ recordMaxMinutes: num(e.target.value, settings.recordMaxMinutes) })
+              }
+            />
+            <TextField
+              label={t('optRecordMaxMb')}
+              type="number"
+              min={LIMITS.recordMaxMb.min}
+              max={LIMITS.recordMaxMb.max}
+              value={settings.recordMaxMb}
+              onChange={(e) => void update({ recordMaxMb: num(e.target.value, settings.recordMaxMb) })}
+            />
+          </div>
         </Section>
 
         <Section title={t('secNotifications')}>

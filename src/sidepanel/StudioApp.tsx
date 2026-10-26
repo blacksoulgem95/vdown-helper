@@ -26,6 +26,7 @@ import {
 import type { DownloadJob, OutputMode, VideoContainer } from '@/types/download';
 import type { MediaResource } from '@/types/media';
 import type { TabState } from '@/types/messages';
+import { SubtitleForm } from './SubtitleForm';
 
 interface Selection {
   tabId: number;
@@ -63,8 +64,10 @@ export function StudioApp() {
           <p className="mono text-[12px] uppercase tracking-[0.14em]">{t('studioEmptyTitle')}</p>
           <p className="mx-auto mt-2 max-w-[320px] text-[12px] text-muted">{t('studioEmptyBody')}</p>
         </Panel>
+      ) : // Re-mount when the selection changes so choices reset for the new resource.
+      resource.kind === 'subtitle' ? (
+        <SubtitleForm key={`${resource.id}:${selection?.at ?? 0}`} resource={resource} />
       ) : (
-        // Re-mount when the selection changes so choices reset for the new resource.
         <StudioForm key={`${resource.id}:${selection?.at ?? 0}`} resource={resource} />
       )}
 
@@ -122,11 +125,12 @@ function StudioForm({ resource }: { resource: MediaResource }) {
   const variant = resource.kind === 'hls-master' ? resource.variants[choices.variantIndex] : undefined;
   const audioOpts = audioOptions(resource, variant);
   const isHls = resource.kind === 'hls-master' || resource.kind === 'hls-media';
+  const isSegmented = isHls || resource.kind === 'dash';
 
   // Which playlists will this choice read? Inspect them to learn duration, segments, encryption and origins.
   const draft = useMemo(() => buildRequest(resource, settings, choices), [resource, settings, choices]);
   useEffect(() => {
-    if (!isHls) return;
+    if (!isSegmented) return;
     let alive = true;
     setInspecting(true);
     setInspectError(undefined);
@@ -199,7 +203,6 @@ function StudioForm({ resource }: { resource: MediaResource }) {
     if (!ok) setResult({ tone: 'danger', text: t('errAccessDenied') });
   };
 
-  const poster = resource.poster && sameSite(resource.poster, resource) ? resource.poster : undefined;
   const estimated = req.estimatedBytes;
   const videoMode = choices.mode !== 'audio-only';
   const showBitrate = bitrateOptions(plan).length > 0;
@@ -211,17 +214,14 @@ function StudioForm({ resource }: { resource: MediaResource }) {
       <Panel className="overflow-hidden">
         <div className="flex gap-3 p-3">
           <div className="relative h-[72px] w-[116px] shrink-0 overflow-hidden rounded-md border border-neon/20 bg-void">
-            {poster ? (
-              <img src={poster} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-neon/60">
-                {resource.mediaType === 'audio' ? (
-                  <AudioLines size={26} aria-hidden="true" />
-                ) : (
-                  <Film size={26} aria-hidden="true" />
-                )}
-              </div>
-            )}
+            {/* No remote poster: loading one would make the extension request an address the page chose. */}
+            <div className="flex h-full w-full items-center justify-center text-neon/60">
+              {resource.mediaType === 'audio' ? (
+                <AudioLines size={26} aria-hidden="true" />
+              ) : (
+                <Film size={26} aria-hidden="true" />
+              )}
+            </div>
             <div
               aria-hidden="true"
               className="pointer-events-none absolute inset-0 bg-[repeating-linear-gradient(0deg,rgba(0,0,0,0.18)_0_1px,transparent_1px_3px)]"
@@ -244,7 +244,7 @@ function StudioForm({ resource }: { resource: MediaResource }) {
           <dd className="break-all text-fg/85">{redactUrl(resource.url)}</dd>
           <dt className="text-muted">{t('detailStatus')}</dt>
           <dd className="text-fg/85">{reasonText(resource.downloadability)}</dd>
-          {isHls && (
+          {isSegmented && (
             <>
               <dt className="text-muted">{t('studioPlaylist')}</dt>
               <dd className="text-fg/85">
@@ -306,50 +306,52 @@ function StudioForm({ resource }: { resource: MediaResource }) {
       </Panel>
 
       {/* Quality */}
-      {resource.kind === 'hls-master' && resource.variants.length > 0 && videoMode && (
-        <Panel className="p-3">
-          <h3 className="label mb-2">{t('studioVariants')}</h3>
-          <div role="radiogroup" aria-label={t('studioVariants')} className="space-y-1.5">
-            {resource.variants.map((v, i) => {
-              const active = choices.variantIndex === i;
-              return (
-                <button
-                  key={v.uri}
-                  type="button"
-                  role="radio"
-                  aria-checked={active}
-                  onClick={() =>
-                    set({
-                      variantIndex: i,
-                      audioIndex: audioOptions(resource, v).findIndex((a) => a.isDefault),
-                    })
-                  }
-                  className={cx(
-                    'flex w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-left transition-colors',
-                    active ? 'border-neon bg-neon/10' : 'border-white/12 hover:border-neon/40',
-                  )}
-                >
-                  <span className="mono w-[58px] shrink-0 text-[12px] font-bold">
-                    {resolutionLabel(v.height, v.width) || '—'}
-                  </span>
-                  <span className="mono w-[60px] shrink-0 text-[10px] uppercase text-magenta">
-                    {qualityTag(v.height)}
-                  </span>
-                  <span className="mono min-w-0 flex-1 truncate text-[10.5px] text-muted">
-                    {[
-                      formatBitrate(v.averageBandwidth ?? v.bandwidth),
-                      v.frameRate ? `${v.frameRate} fps` : '',
-                      v.codecs ?? '',
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </Panel>
-      )}
+      {(resource.kind === 'hls-master' || resource.kind === 'dash') &&
+        resource.variants.length > 0 &&
+        videoMode && (
+          <Panel className="p-3">
+            <h3 className="label mb-2">{t('studioVariants')}</h3>
+            <div role="radiogroup" aria-label={t('studioVariants')} className="space-y-1.5">
+              {resource.variants.map((v, i) => {
+                const active = choices.variantIndex === i;
+                return (
+                  <button
+                    key={v.uri}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() =>
+                      set({
+                        variantIndex: i,
+                        audioIndex: audioOptions(resource, v).findIndex((a) => a.isDefault),
+                      })
+                    }
+                    className={cx(
+                      'flex w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-left transition-colors',
+                      active ? 'border-neon bg-neon/10' : 'border-white/12 hover:border-neon/40',
+                    )}
+                  >
+                    <span className="mono w-[58px] shrink-0 text-[12px] font-bold">
+                      {resolutionLabel(v.height, v.width) || '—'}
+                    </span>
+                    <span className="mono w-[60px] shrink-0 text-[10px] uppercase text-magenta">
+                      {qualityTag(v.height)}
+                    </span>
+                    <span className="mono min-w-0 flex-1 truncate text-[10.5px] text-muted">
+                      {[
+                        formatBitrate(v.averageBandwidth ?? v.bandwidth),
+                        v.frameRate ? `${v.frameRate} fps` : '',
+                        v.codecs ?? '',
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </Panel>
+        )}
 
       {/* Audio track */}
       {audioOpts.length > 0 && choices.mode !== 'video-only' && (
@@ -510,6 +512,7 @@ function StudioForm({ resource }: { resource: MediaResource }) {
 function pipelineText(plan: Plan): string {
   switch (plan.pipeline) {
     case 'native':
+    case 'file-staged':
       return t('pipeNative');
     case 'hls-concat':
       return t('pipeConcat');
@@ -520,13 +523,15 @@ function pipelineText(plan: Plan): string {
       return plan.video === 'copy' && plan.audio === 'transcode'
         ? t('pipeTranscodeAudio')
         : t('pipeTranscode');
+    case 'subtitle':
+      return t('pipeSubtitle');
+    case 'zip':
+      return t('pipeZip');
+    case 'capture':
+      return t('pipeCapture');
+    case 'record':
+      return t('pipeRecord');
+    case 'live':
+      return t('pipeLive');
   }
-}
-
-/** Only load a poster from a site the user is already on (it was loaded by the page itself). */
-function sameSite(url: string, r: MediaResource): boolean {
-  const u = parseUrl(url);
-  if (!u || u.protocol !== 'https:') return false;
-  const page = parseUrl(r.pageUrl);
-  return u.hostname === page?.hostname;
 }

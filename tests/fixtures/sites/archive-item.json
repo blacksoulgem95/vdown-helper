@@ -1,0 +1,46 @@
+{
+  "created": 1700000000,
+  "d1": "ia800000.us.archive.org",
+  "dir": "/12/items/example_item",
+  "files": [
+    { "name": "__ia_thumb.jpg", "source": "original", "format": "Item Tile" },
+    { "name": "example_item_meta.xml", "source": "original", "format": "Metadata" },
+    {
+      "name": "example item.mp4",
+      "source": "derivative",
+      "format": "h.264",
+      "size": "9876543",
+      "length": "61.5",
+      "width": "640",
+      "height": "480"
+    },
+    {
+      "name": "example_item.ogv",
+      "source": "derivative",
+      "format": "Ogg Video",
+      "size": "5432100",
+      "length": "61.5"
+    },
+    {
+      "name": "example_item.avi",
+      "source": "original",
+      "format": "AVI",
+      "size": "99999999",
+      "length": "61.5",
+      "width": "720",
+      "height": "480"
+    },
+    {
+      "name": "audio/part 1.mp3",
+      "source": "derivative",
+      "format": "VBR MP3",
+      "size": "123456",
+      "length": "30.25"
+    },
+    { "name": "../../escape.mp4", "source": "original", "format": "MPEG4" },
+    { "name": "example_item_thumb.gif", "source": "derivative", "format": "Animated GIF" }
+  ],
+  "files_count": 8,
+  "metadata": { "identifier": "example_item", "mediatype": "movies", "title": "An Example Item" },
+  "server": "ia800000.us.archive.org"
+}

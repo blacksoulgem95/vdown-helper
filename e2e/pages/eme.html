@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>EME page</title>
+  </head>
+  <body>
+    <video id="v" src="/media/sample.mp4" muted width="200" title="Protected-looking clip"></video>
+    <script>
+      const sys = new URLSearchParams(location.search).get('ks') || 'com.widevine.alpha';
+      // Headless Chromium has no CDM, so this rejects: the page hook records the REQUEST, which is what matters.
+      navigator
+        .requestMediaKeySystemAccess(sys, [
+          {
+            initDataTypes: ['cenc'],
+            videoCapabilities: [{ contentType: 'video/mp4; codecs="avc1.42E01E"' }],
+          },
+        ])
+        .catch(() => {});
+    </script>
+  </body>
+</html>

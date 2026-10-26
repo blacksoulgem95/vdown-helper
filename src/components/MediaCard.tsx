@@ -6,6 +6,7 @@ import {
   Film,
   KeyRound,
   Layers,
+  Radio,
   ListMusic,
   Settings2,
   ShieldCheck,
@@ -18,8 +19,17 @@ import type { MediaResource } from '@/types/media';
 import { kindLabel, reasonText, statusBadge } from './labels';
 import { Badge, Button, Notice, cx } from './ui';
 
+/** Where page-held bytes come from, in words. */
+export const heldSource = (r: MediaResource): string =>
+  r.held?.kind === 'blob'
+    ? t('sourceBlob')
+    : r.held?.kind === 'stream'
+      ? t('sourceStream')
+      : t('sourceInline');
+
 /** Short, token-free hint of where a resource lives, to tell apart cards that share a page title. */
 function sourceHint(r: MediaResource): string {
+  if (r.held) return heldSource(r);
   const u = parseUrl(r.url);
   if (!u) return '';
   const tail = u.pathname.split('/').filter(Boolean).slice(-2).join('/');
@@ -39,8 +49,15 @@ const DETECTION_KEY = {
   'dom-element': 'detectDomElement',
   'dom-source': 'detectDomSource',
   'dom-link': 'detectDomLink',
+  'dom-track': 'detectDomTrack',
+  'dom-image': 'detectDomImage',
+  'dom-style': 'detectDomStyle',
+  'dom-meta': 'detectDomMeta',
+  metadata: 'detectMetadata',
+  'site-api': 'detectSiteApi',
   performance: 'detectPerformance',
   network: 'detectNetwork',
+  hook: 'detectHook',
   'manual-rescan': 'detectManual',
 } as const;
 
@@ -51,6 +68,10 @@ export interface MediaCardProps {
   onDownload: (r: MediaResource) => void;
   onConfigure: (r: MediaResource) => void;
   onGrantAccess: (r: MediaResource) => void;
+  /** MediaSource players are captured (the page plays the video through), not downloaded. */
+  onCapture?: (r: MediaResource, speed: 'fast' | 'realtime') => void;
+  /** MediaStreams are recorded until the user stops them. */
+  onRecord?: (r: MediaResource) => void;
 }
 
 export function MediaCard({
@@ -60,10 +81,15 @@ export function MediaCard({
   onDownload,
   onConfigure,
   onGrantAccess,
+  onCapture,
+  onRecord,
 }: MediaCardProps) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
   const badge = statusBadge(r.downloadability);
+  // A live or event stream cannot be downloaded, but it can be recorded as it goes by.
+  const liveRecordable =
+    r.downloadability.status === 'downloadable' && r.downloadability.detail === 'live-recordable';
   const ok = r.downloadability.status === 'downloadable';
   const res = resolutionLabel(r.height, r.width);
   const size =
@@ -118,48 +144,107 @@ export function MediaCard({
         </div>
       )}
 
-      <div className="mt-2.5 flex items-center gap-2">
-        <Button
-          variant="primary"
-          onClick={() => onDownload(r)}
-          disabled={!ok || busy}
-          icon={<Download size={13} aria-hidden="true" />}
-        >
-          {busy ? t('working') : t('download')}
-        </Button>
-        {canGrant ? (
-          <Button
-            variant="secondary"
-            onClick={() => onGrantAccess(r)}
-            icon={<ShieldCheck size={13} aria-hidden="true" />}
+      {r.held?.kind === 'mse' || r.held?.kind === 'stream' || liveRecordable ? (
+        <div className="mt-2.5 space-y-2">
+          {ok && (r.held?.kind === 'stream' || liveRecordable) && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="primary"
+                onClick={() => onRecord?.(r)}
+                disabled={busy}
+                icon={<Radio size={13} aria-hidden="true" />}
+              >
+                {busy ? t('working') : t('recordStart')}
+              </Button>
+            </div>
+          )}
+          {ok && (r.held?.kind === 'stream' || liveRecordable) && (
+            <p className="text-[10.5px] leading-snug text-muted">
+              {liveRecordable ? t('recordLiveHint') : t('recordHint')}
+            </p>
+          )}
+          {ok && r.held?.kind === 'mse' && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="primary"
+                onClick={() => onCapture?.(r, 'fast')}
+                disabled={busy}
+                icon={<Download size={13} aria-hidden="true" />}
+              >
+                {busy ? t('working') : t('captureFast')}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => onCapture?.(r, 'realtime')}
+                disabled={busy}
+                icon={<Radio size={13} aria-hidden="true" />}
+              >
+                {t('captureRealtime')}
+              </Button>
+            </div>
+          )}
+          {ok && r.held?.kind === 'mse' && (
+            <p className="text-[10.5px] leading-snug text-muted">{t('captureHint')}</p>
+          )}
+          <button
+            type="button"
+            className="mono inline-flex items-center gap-1 rounded px-1.5 py-1 text-[10px] uppercase tracking-wider text-muted hover:text-neon"
+            aria-expanded={open}
+            aria-controls={panelId}
+            onClick={() => setOpen((v) => !v)}
           >
-            {t('allowAccess')}
-          </Button>
-        ) : (
+            {t('details')}
+            <ChevronDown
+              size={12}
+              aria-hidden="true"
+              className={cx('transition-transform', open && 'rotate-180')}
+            />
+          </button>
+        </div>
+      ) : (
+        <div className="mt-2.5 flex items-center gap-2">
           <Button
-            variant="secondary"
-            onClick={() => onConfigure(r)}
-            disabled={!ok}
-            icon={<Settings2 size={13} aria-hidden="true" />}
+            variant="primary"
+            onClick={() => onDownload(r)}
+            disabled={!ok || busy}
+            icon={<Download size={13} aria-hidden="true" />}
           >
-            {t('configure')}
+            {busy ? t('working') : t('download')}
           </Button>
-        )}
-        <button
-          type="button"
-          className="mono ml-auto inline-flex items-center gap-1 rounded px-1.5 py-1 text-[10px] uppercase tracking-wider text-muted hover:text-neon"
-          aria-expanded={open}
-          aria-controls={panelId}
-          onClick={() => setOpen((v) => !v)}
-        >
-          {t('details')}
-          <ChevronDown
-            size={12}
-            aria-hidden="true"
-            className={cx('transition-transform', open && 'rotate-180')}
-          />
-        </button>
-      </div>
+          {canGrant ? (
+            <Button
+              variant="secondary"
+              onClick={() => onGrantAccess(r)}
+              icon={<ShieldCheck size={13} aria-hidden="true" />}
+            >
+              {t('allowAccess')}
+            </Button>
+          ) : (
+            <Button
+              variant="secondary"
+              onClick={() => onConfigure(r)}
+              disabled={!ok}
+              icon={<Settings2 size={13} aria-hidden="true" />}
+            >
+              {t('configure')}
+            </Button>
+          )}
+          <button
+            type="button"
+            className="mono ml-auto inline-flex items-center gap-1 rounded px-1.5 py-1 text-[10px] uppercase tracking-wider text-muted hover:text-neon"
+            aria-expanded={open}
+            aria-controls={panelId}
+            onClick={() => setOpen((v) => !v)}
+          >
+            {t('details')}
+            <ChevronDown
+              size={12}
+              aria-hidden="true"
+              className={cx('transition-transform', open && 'rotate-180')}
+            />
+          </button>
+        </div>
+      )}
 
       {open && (
         <dl
@@ -200,14 +285,18 @@ export function MediaCard({
           )}
           <dt className="text-muted">URL</dt>
           <dd>
-            <button
-              type="button"
-              className="inline-flex items-center gap-1 text-neon hover:underline"
-              onClick={() => void navigator.clipboard.writeText(r.url)}
-            >
-              <Copy size={11} aria-hidden="true" />
-              {t('copyUrl')}
-            </button>
+            {r.held ? (
+              <span className="text-fg/85">{heldSource(r)}</span>
+            ) : (
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 text-neon hover:underline"
+                onClick={() => void navigator.clipboard.writeText(r.url)}
+              >
+                <Copy size={11} aria-hidden="true" />
+                {t('copyUrl')}
+              </button>
+            )}
           </dd>
         </dl>
       )}

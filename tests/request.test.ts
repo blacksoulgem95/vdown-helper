@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS } from '@/lib/settings';
-import { audioOptions, buildRequest, defaultChoices, planFromRequest, sanitizeRequest } from '@/lib/request';
+import {
+  audioOptions,
+  buildLiveRequest,
+  buildRecordRequest,
+  buildRequest,
+  defaultChoices,
+  planFromRequest,
+  sanitizeRequest,
+} from '@/lib/request';
 import type { HlsRendition } from '@/types/hls';
 import type { VariantInspection } from '@/types/messages';
 import { makeResource } from './helpers';
@@ -218,5 +226,289 @@ describe('buildRequest: audio-only and video-only on HLS masters', () => {
     const req = buildRequest(master, settings, c);
     expect(req.audioUrl).toBeUndefined();
     expect(planFromRequest(req, limits)).toMatchObject({ valid: true, audio: 'none', video: 'copy' });
+  });
+});
+
+describe('buildRequest: MPEG-DASH', () => {
+  const MPD = 'https://a.com/show/manifest.mpd';
+  const dash = makeResource(MPD, {
+    title: 'Show',
+    kind: 'dash',
+    format: 'dash',
+    durationSec: 600,
+    variants: [
+      {
+        uri: `${MPD}#vdh-rep=v720`,
+        bandwidth: 2_000_000,
+        width: 1280,
+        height: 720,
+        codecs: 'avc1.64001f',
+        audioGroup: 'dash-audio',
+      },
+      {
+        uri: `${MPD}#vdh-rep=v360`,
+        bandwidth: 800_000,
+        width: 640,
+        height: 360,
+        codecs: 'avc1.4d401e',
+        audioGroup: 'dash-audio',
+      },
+    ],
+    audioTracks: [
+      {
+        type: 'AUDIO',
+        groupId: 'dash-audio',
+        name: 'en',
+        language: 'en',
+        uri: `${MPD}#vdh-rep=a1`,
+        isDefault: true,
+        autoSelect: true,
+        codecs: 'mp4a.40.2',
+      },
+    ],
+    playlist: { playlistClass: 'dash', encryption: [], fragmented: true, live: false },
+    downloadability: { status: 'downloadable', reason: 'ok' },
+  });
+  const limits = { maxMemoryMb: 2048, maxEncodeDurationSec: 0 };
+
+  it('addresses representations by URL fragment and marks the request as DASH, not HLS', () => {
+    const req = buildRequest(dash, DEFAULT_SETTINGS, defaultChoices(dash, DEFAULT_SETTINGS));
+    expect(req).toMatchObject({
+      isDash: true,
+      isHls: false,
+      sourceUrl: `${MPD}#vdh-rep=v720`,
+      audioUrl: `${MPD}#vdh-rep=a1`,
+      hasMuxedAudio: false,
+      fragmented: true,
+      masterUrl: MPD,
+    });
+    expect(req.estimatedBytes).toBe(Math.round((2_000_000 * 600) / 8));
+  });
+  it('separate audio means an FFmpeg stream-copy merge into MP4', () => {
+    const c = { ...defaultChoices(dash, DEFAULT_SETTINGS), container: 'mp4' as const };
+    const req = buildRequest(dash, DEFAULT_SETTINGS, c);
+    expect(planFromRequest(req, limits)).toMatchObject({
+      valid: true,
+      requiresFfmpeg: true,
+      video: 'copy',
+      audio: 'copy',
+      extension: 'mp4',
+    });
+    expect(req.filename).toBe('Show [720p].mp4');
+  });
+  it('"original" with a separate audio track still has to merge, and picks MP4 for H.264 + AAC', () => {
+    const req = buildRequest(dash, DEFAULT_SETTINGS, {
+      ...defaultChoices(dash, DEFAULT_SETTINGS),
+      mode: 'original',
+    });
+    expect(planFromRequest(req, limits)).toMatchObject({
+      valid: true,
+      requiresFfmpeg: true,
+      extension: 'mp4',
+    });
+  });
+  it('audio-only fetches just the audio representation and can stream-copy AAC to M4A', () => {
+    const c = {
+      ...defaultChoices(dash, DEFAULT_SETTINGS),
+      mode: 'audio-only' as const,
+      audioFormat: 'm4a' as const,
+    };
+    const req = buildRequest(dash, DEFAULT_SETTINGS, c);
+    expect(req.sourceUrl).toBe(`${MPD}#vdh-rep=a1`);
+    expect(req.audioUrl).toBeUndefined();
+    expect(req.audioCodec).toBe('aac');
+    expect(planFromRequest(req, limits)).toMatchObject({
+      valid: true,
+      audio: 'copy',
+      usesBitrate: false,
+      extension: 'm4a',
+    });
+  });
+  it('audio-only MP3 is a transcode with a bitrate choice', () => {
+    const c = {
+      ...defaultChoices(dash, DEFAULT_SETTINGS),
+      mode: 'audio-only' as const,
+      audioFormat: 'mp3' as const,
+    };
+    expect(planFromRequest(buildRequest(dash, DEFAULT_SETTINGS, c), limits)).toMatchObject({
+      audio: 'transcode',
+      usesBitrate: true,
+    });
+  });
+  it('video-only drops the audio representation', () => {
+    const req = buildRequest(dash, DEFAULT_SETTINGS, {
+      ...defaultChoices(dash, DEFAULT_SETTINGS),
+      mode: 'video-only',
+      container: 'mp4',
+    });
+    expect(req.audioUrl).toBeUndefined();
+    expect(planFromRequest(req, limits)).toMatchObject({ valid: true, audio: 'none' });
+  });
+  it('a DASH request is never retried as a native download', async () => {
+    const { canRestage, createJob, transition } = await import('@/lib/queue');
+    const req = buildRequest(dash, DEFAULT_SETTINGS, defaultChoices(dash, DEFAULT_SETTINGS));
+    const job = transition(
+      transition(
+        createJob(
+          'd',
+          { ...req, replay: { frameUrl: 'https://e.example/', urls: [] } },
+          planFromRequest(req, limits),
+          1,
+        ),
+        'preparing',
+        2,
+      ),
+      'downloading',
+      3,
+    );
+    expect(canRestage(job, 'SERVER_FORBIDDEN')).toBe(false);
+  });
+});
+
+describe('sanitizeRequest: page-held sources', () => {
+  const base = {
+    resourceId: 'r',
+    tabId: 1,
+    pageUrl: 'https://a.com/p',
+    host: 'a.com',
+    mode: 'original',
+    container: 'original',
+    audioFormat: 'mp3',
+    audioBitrate: 192,
+    filename: 'x.mp4',
+    subfolder: '',
+    qualityLabel: '',
+    sourceFormat: 'mp4',
+    isHls: false,
+    hasMuxedAudio: true,
+    hasVideo: true,
+  } as const;
+  const label = 'data:video/mp4;vdh=0123abcd';
+
+  it('accepts only the label, never a data: URL with a payload', () => {
+    expect(sanitizeRequest({ ...base, sourceUrl: label })?.sourceUrl).toBe(label);
+    expect(sanitizeRequest({ ...base, sourceUrl: 'data:video/mp4;base64,AAAA' })).toBeUndefined();
+    expect(sanitizeRequest({ ...base, sourceUrl: 'blob:https://a.com/uuid' })).toBeUndefined();
+  });
+  it('does not combine a label with network sources', () => {
+    expect(sanitizeRequest({ ...base, sourceUrl: label, isHls: true })).toBeUndefined();
+    expect(sanitizeRequest({ ...base, sourceUrl: label, isDash: true })).toBeUndefined();
+    expect(sanitizeRequest({ ...base, sourceUrl: label, audioUrl: 'https://a.com/a.m4a' })).toBeUndefined();
+  });
+  it('drops what only the background may decide', () => {
+    const out = sanitizeRequest({
+      ...base,
+      sourceUrl: label,
+      held: { kind: 'data', id: '0123abcd', bytes: 1, frameId: 9 },
+      replay: { frameUrl: 'https://evil/', urls: [] },
+    });
+    expect(out?.held).toBeUndefined();
+    expect(out?.replay).toBeUndefined();
+  });
+});
+
+describe('recording a MediaStream', () => {
+  const stream = makeResource('data:application/x-vdh-stream;vdh=0a1b2c3d', {
+    kind: 'blob',
+    format: 'unknown',
+    title: 'Camera',
+    held: { kind: 'stream', id: '0a1b2c3d', bytes: 0 },
+    downloadability: { status: 'downloadable', reason: 'ok', detail: 'stream-recordable' },
+    width: 640,
+    height: 360,
+  });
+
+  it('builds a record request with the format the user prefers, named after the page', () => {
+    const req = buildRecordRequest(stream, { ...DEFAULT_SETTINGS, recordContainer: 'mp4' });
+    expect(req).toMatchObject({
+      record: { prefer: 'mp4' },
+      held: { kind: 'stream' },
+      hasVideo: true,
+      qualityLabel: 'RECORD',
+    });
+    expect(req.filename).toMatch(/^Camera \[360p\]\.mp4$/);
+    expect(req.capture).toBeUndefined();
+  });
+
+  it('plans the record pipeline: a stream copy, never a re-encode', () => {
+    const plan = planFromRequest(buildRecordRequest(stream, DEFAULT_SETTINGS), {
+      maxMemoryMb: 2048,
+      maxEncodeDurationSec: 0,
+    });
+    expect(plan).toMatchObject({
+      valid: true,
+      pipeline: 'record',
+      video: 'copy',
+      audio: 'copy',
+      extension: 'webm',
+    });
+    const audioOnly = buildRecordRequest({ ...stream, mediaType: 'audio' }, DEFAULT_SETTINGS);
+    expect(audioOnly.hasVideo).toBe(false);
+    expect(planFromRequest(audioOnly, { maxMemoryMb: 2048, maxEncodeDurationSec: 0 })).toMatchObject({
+      video: 'none',
+      audio: 'copy',
+    });
+  });
+
+  it('keeps only a well-formed record choice from the UI, and never what the page holds', () => {
+    const base = buildRecordRequest(stream, DEFAULT_SETTINGS);
+    expect(sanitizeRequest(base)?.record).toEqual({ prefer: 'webm' });
+    expect(sanitizeRequest(base)?.held).toBeUndefined();
+    const forged = { ...base, record: { prefer: 'avi' } } as unknown as typeof base;
+    expect(sanitizeRequest(forged)?.record).toBeUndefined();
+  });
+});
+
+describe('recording a live stream', () => {
+  const live = makeResource('https://a.com/live/master.m3u8', {
+    title: 'Concert',
+    kind: 'hls-master',
+    format: 'hls',
+    variants: [
+      {
+        uri: 'https://a.com/live/720.m3u8',
+        bandwidth: 3_000_000,
+        width: 1280,
+        height: 720,
+        codecs: 'avc1.4d401e,mp4a.40.2',
+      },
+    ],
+    playlist: { playlistClass: 'hls-master', encryption: [], live: true, fragmented: false },
+    downloadability: { status: 'downloadable', reason: 'ok', detail: 'live-recordable' },
+  });
+
+  it('builds a request that records the preferred variant and is flagged live', () => {
+    const req = buildLiveRequest(live, DEFAULT_SETTINGS);
+    expect(req).toMatchObject({
+      sourceUrl: 'https://a.com/live/720.m3u8',
+      isHls: true,
+      live: true,
+      liveRecord: true,
+      qualityLabel: 'LIVE',
+    });
+    expect(req.filename).toMatch(/^Concert.*\.mp4$/);
+  });
+
+  it('plans the live pipeline (a stream copy), where an ordinary download of a live stream is refused', () => {
+    const req = buildLiveRequest(live, DEFAULT_SETTINGS);
+    const limits = { maxMemoryMb: 2048, maxEncodeDurationSec: 0 };
+    expect(planFromRequest(req, limits)).toMatchObject({
+      valid: true,
+      pipeline: 'live',
+      video: 'copy',
+      audio: 'copy',
+    });
+    const { liveRecord: _l, ...download } = req;
+    void _l;
+    expect(planFromRequest(download, limits)).toMatchObject({ valid: false, issues: ['live-stream'] });
+  });
+
+  it('only a segmented stream can be recorded live', () => {
+    const req = buildLiveRequest(live, DEFAULT_SETTINGS);
+    expect(sanitizeRequest(req)?.liveRecord).toBe(true);
+    expect(sanitizeRequest({ ...req, isHls: false, isDash: false })?.liveRecord).toBeUndefined();
+    expect(planFromRequest({ ...req, isHls: false }, { maxMemoryMb: 1, maxEncodeDurationSec: 0 }).valid).toBe(
+      false,
+    );
   });
 });

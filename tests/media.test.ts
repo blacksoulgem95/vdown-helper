@@ -49,10 +49,39 @@ describe('format detection', () => {
     expect(formatFromUrl('https://a.com/x/master.m3u8')).toBe('hls');
     expect(formatFromUrl('https://a.com/x/list.m3u')).toBe('m3u');
     expect(formatFromUrl('https://a.com/x/noext')).toBeUndefined();
+    const urls: Array<[string, string]> = [
+      ['a.flv', 'flv'],
+      ['a.AVI', 'avi'],
+      ['a.wmv', 'wmv'],
+      ['a.asf', 'asf'],
+      ['a.3gp', '3gp'],
+      ['a.3g2', '3gp'],
+      ['a.mpg', 'mpg'],
+      ['a.mpeg', 'mpg'],
+      ['a.aiff', 'aiff'],
+      ['a.aif', 'aiff'],
+      ['a.wma', 'wma'],
+      ['a.opus', 'opus'],
+    ];
+    for (const [file, fmt] of urls) expect(formatFromUrl(`https://a.com/${file}`)).toBe(fmt);
+    const mimes: Array<[string, string]> = [
+      ['video/x-flv', 'flv'],
+      ['video/x-msvideo', 'avi'],
+      ['video/x-ms-wmv', 'wmv'],
+      ['video/x-ms-asf', 'asf'],
+      ['video/3gpp', '3gp'],
+      ['video/mpeg', 'mpg'],
+      ['audio/aiff', 'aiff'],
+      ['audio/x-ms-wma', 'wma'],
+      ['audio/opus', 'opus'],
+    ];
+    for (const [mime, fmt] of mimes) expect(formatFromMime(mime)).toBe(fmt);
   });
   it('classifies audio vs video', () => {
     expect(mediaTypeOf('mp3')).toBe('audio');
     expect(mediaTypeOf('hls')).toBe('video');
+    for (const f of ['aiff', 'wma', 'opus'] as const) expect(mediaTypeOf(f)).toBe('audio');
+    for (const f of ['flv', 'avi', 'wmv', 'asf', '3gp', 'mpg'] as const) expect(mediaTypeOf(f)).toBe('video');
     expect(mediaTypeOf('unknown')).toBe('unknown');
   });
 });

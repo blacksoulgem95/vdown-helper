@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Live stream fixture</title>
+  </head>
+  <body>
+    <h1>A page whose player follows a live stream</h1>
+    <script>
+      // The page only asks for the manifest (as a player would); the stream is the server's live clock.
+      //   ?src=<path of the manifest below /__live/>  ?id=<clock>  ?len=<segments>  ?gone=<n,n>  ?audioskip=<n>
+      const q = new URLSearchParams(location.search);
+      const params = new URLSearchParams();
+      for (const k of ['id', 'len', 'gone', 'audioskip']) if (q.get(k)) params.set(k, q.get(k));
+      const url = `/__live/${q.get('src')}?${params}`;
+      fetch(url)
+        .then((r) => r.text())
+        .then(() => (window.ready = true));
+    </script>
+  </body>
+</html>

@@ -28,7 +28,22 @@ export type Pipeline =
   /** FFmpeg is needed and at least one stream is re-encoded (audio only; video is never re-encoded). */
   | 'ffmpeg-transcode'
   /** A single non-HLS file is passed through FFmpeg with stream copy. */
-  | 'file-ffmpeg-copy';
+  | 'file-ffmpeg-copy'
+  /**
+   * A plain file fetched by the extension itself (so the owning frame's Referer/Origin can be replayed), staged on
+   * disk and then saved. Never chosen by the planner: only used as a fallback when Chrome's download manager is refused.
+   */
+  | 'file-staged'
+  /** A subtitle fetched, stitched and/or converted in the offscreen document (lib/subtitles). */
+  | 'subtitle'
+  /** Plain files fetched one by one and packed into a ZIP written to disk (lib/zip). */
+  | 'zip'
+  /** A MediaSource player recorded in the page, assembled into one or more files by copying streams (no re-encode). */
+  | 'capture'
+  /** A MediaStream recorded in the page until Stop, saved as WebM or MP4 (no re-encode of what the recorder wrote). */
+  | 'record'
+  /** A live or event stream (HLS, DASH dynamic) recorded by the extension until Stop, the end of the stream or a limit. */
+  | 'live';
 
 export type StreamHandling = 'copy' | 'transcode';
 
@@ -96,6 +111,28 @@ export function audioFitsContainer(
   return TS_AUDIO.has(family);
 }
 
+/**
+ * Containers a plain file of this format may be copied into without re-encoding its video. Legacy formats usually hold
+ * codecs MP4 cannot carry (WMV/VC-1, MPEG-1/2, old AVI codecs), and the planner never re-encodes video, so those are
+ * only offered as a Matroska copy (which takes nearly anything) or kept as they are. A source not listed here is not
+ * restricted. Codecs inside a direct file are not known up front, so this is a property of the format.
+ */
+const REMUX_TARGETS: Partial<Record<MediaFormat, ReadonlySet<Exclude<VideoContainer, 'original'>>>> = {
+  flv: new Set(['mp4', 'mkv', 'ts']),
+  avi: new Set(['mkv']),
+  wmv: new Set(['mkv']),
+  asf: new Set(['mkv']),
+  mpg: new Set(['mkv', 'ts']),
+  '3gp': new Set(['mp4', 'mkv']),
+};
+
+export function sourceFitsContainer(
+  format: MediaFormat,
+  container: Exclude<VideoContainer, 'original'>,
+): boolean {
+  return REMUX_TARGETS[format]?.has(container) ?? true;
+}
+
 /** File extension for a source format. Unknown sources get none: Chrome names them from the response instead. */
 export function fileExtension(format: MediaFormat): string {
   return format === 'unknown' || format === 'blob' || format === 'm3u' || format === 'dash' ? '' : format;
@@ -155,6 +192,18 @@ export function planOutput(i: PlanInput): Plan {
     return finalize(plan, i);
   }
 
+  // ---- An audio-only source kept as it is (an .mp3 link, an audio-only HLS rendition): nothing to convert.
+  if (!i.hasVideo && i.mode === 'original') {
+    if (!hasAudioTrack) issues.push('no-audio-source');
+    if (issues.length) return base;
+    return finalize(
+      i.isHls
+        ? { ...base, pipeline: 'hls-concat', audio: 'copy', extension: i.fragmented ? 'm4a' : 'ts' }
+        : { ...base, pipeline: 'native', audio: 'copy', extension: fileExtension(i.sourceFormat) },
+      i,
+    );
+  }
+
   if (!i.hasVideo) {
     issues.push('no-video-source');
     return base;
@@ -165,6 +214,8 @@ export function planOutput(i: PlanInput): Plan {
     const needsRemux = i.container !== 'original';
     const target = i.container === 'original' ? undefined : i.container;
     if (target && !videoFitsContainer(i.videoFamily, target)) issues.push('video-codec-container');
+    if (target && !i.isHls && !sourceFitsContainer(i.sourceFormat, target))
+      issues.push('video-codec-container');
     if (issues.length) return base;
     const hlsCopy = i.isHls;
     const ext = target ?? (i.isHls ? (i.fragmented ? 'mp4' : 'ts') : fileExtension(i.sourceFormat));
@@ -213,6 +264,7 @@ export function planOutput(i: PlanInput): Plan {
         : 'mkv'
       : i.container;
   if (!videoFitsContainer(i.videoFamily, target)) issues.push('video-codec-container');
+  if (!i.isHls && !sourceFitsContainer(i.sourceFormat, target)) issues.push('video-codec-container');
   const audioOk = audioFitsContainer(i.audioFamily, target);
   // "Original quality" promises no re-encoding at all, so a mismatching audio codec is refused rather than converted.
   if (!audioOk && i.mode === 'original') issues.push('audio-codec-container');

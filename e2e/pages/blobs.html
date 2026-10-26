@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Blob fixture</title>
+  </head>
+  <body>
+    <h1>Media the page holds as blob: URLs</h1>
+    <video id="v" muted controls width="240" title="Blob clip"></video>
+    <audio id="a" controls></audio>
+    <img id="img" alt="blob image" />
+    <video id="mse" muted width="120"></video>
+    <video id="gone" muted width="120"></video>
+    <p><a id="dl" download="big.zip">Download the big archive</a></p>
+    <script>
+      window.urls = {};
+      (async () => {
+        const get = async (path) => (await fetch(path)).blob();
+        // a typed video blob
+        window.urls.video = URL.createObjectURL(await get('/media/sample.mp4'));
+        document.getElementById('v').src = window.urls.video;
+        // untyped blobs: the declared type is empty, the content tells what they are
+        window.urls.audio = URL.createObjectURL(new Blob([await get('/gen/inline.mp3')]));
+        document.getElementById('a').src = window.urls.audio;
+        window.urls.image = URL.createObjectURL(new Blob([await get('/files/hero.png')]));
+        document.getElementById('img').src = window.urls.image;
+        // 9 MiB: more than one transfer chunk
+        window.urls.big = URL.createObjectURL(
+          new Blob([new Uint8Array(9 * 1024 * 1024).fill(7)], { type: 'application/zip' }),
+        );
+        document.getElementById('dl').href = window.urls.big;
+        // a MediaSource: not a file, cannot be read
+        window.urls.mse = URL.createObjectURL(new MediaSource());
+        document.getElementById('mse').src = window.urls.mse;
+        // a blob that was already revoked when anybody looks
+        const dead = URL.createObjectURL(await get('/media/sample.mp4'));
+        document.getElementById('gone').src = dead;
+        URL.revokeObjectURL(dead);
+        window.ready = true;
+      })();
+      // called by the test after the extension has looked: a page may take its blob URLs back at any time
+      window.revokeVideo = () => URL.revokeObjectURL(window.urls.video);
+    </script>
+  </body>
+</html>

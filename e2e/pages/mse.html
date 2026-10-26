@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>MSE fixture</title>
+  </head>
+  <body>
+    <h1>A video fed through Media Source Extensions</h1>
+    <video id="v" controls width="320" title="MSE clip"></video>
+    <script>
+      // A small, realistic MSE player: it appends a few seconds ahead of the playhead, only when the buffer needs it,
+      // and re-sends an initialisation segment only when the quality changes (as real players do). Quality per
+      // segment comes from ?plan=low,low,high.
+      const q = new URLSearchParams(location.search);
+      const plan = (q.get('plan') || 'high,high,high').split(',');
+      const REPS = {
+        low: { init: 'init-0.m4s', seg: (i) => `chunk-0-${i}.m4s`, codec: 'vp09.00.11.08' },
+        high: { init: 'init-1.m4s', seg: (i) => `chunk-1-${i}.m4s`, codec: 'vp09.00.21.08' },
+      };
+      const base = '/mse/';
+      const SEG = 2;
+      const video = document.getElementById('v');
+      window.stats = { appends: 0, inits: 0 };
+      const bytes = async (name) => new Uint8Array(await (await fetch(base + name)).arrayBuffer());
+      const append = (sb, data) =>
+        new Promise((resolve, reject) => {
+          sb.addEventListener('updateend', resolve, { once: true });
+          sb.addEventListener('error', reject, { once: true });
+          sb.appendBuffer(data);
+          window.stats.appends++;
+        });
+      const isBuffered = (sb, t) => {
+        for (let i = 0; i < sb.buffered.length; i++)
+          if (sb.buffered.start(i) <= t && t < sb.buffered.end(i) - 0.05) return true;
+        return false;
+      };
+      const ms = new MediaSource();
+      window.mediaSourceUrl = URL.createObjectURL(ms);
+      if (q.get('revoke')) setTimeout(() => URL.revokeObjectURL(window.mediaSourceUrl), 0);
+      video.src = window.mediaSourceUrl;
+      if (q.get('eme')) {
+        navigator
+          .requestMediaKeySystemAccess('org.w3.clearkey', [
+            {
+              initDataTypes: ['cenc'],
+              videoCapabilities: [{ contentType: 'video/mp4; codecs="vp09.00.11.08"' }],
+            },
+          ])
+          .then((a) => a.createMediaKeys())
+          .then((k) => video.setMediaKeys(k))
+          .catch(() => {});
+      }
+      let vsb;
+      let asb;
+      let currentRep = null;
+      let audioInit = false;
+      let busy = false;
+      async function pump() {
+        if (busy || !vsb || ms.readyState === 'closed') return;
+        busy = true;
+        try {
+          for (let guard = 0; guard < 100; guard++) {
+            const t = video.currentTime;
+            let did = false;
+            for (let i = Math.floor(t / SEG) + 1; i <= 3 && (i - 1) * SEG < t + 8; i++) {
+              if (!isBuffered(vsb, (i - 1) * SEG + 0.01)) {
+                const rep = REPS[plan[i - 1]];
+                if (currentRep !== plan[i - 1]) {
+                  await append(vsb, await bytes(rep.init));
+                  window.stats.inits++;
+                  currentRep = plan[i - 1];
+                }
+                await append(vsb, await bytes(rep.seg(i)));
+                did = true;
+                break;
+              }
+              if (!isBuffered(asb, (i - 1) * SEG + 0.01)) {
+                if (!audioInit) {
+                  await append(asb, await bytes('init-2.m4s'));
+                  audioInit = true;
+                }
+                await append(asb, await bytes(`chunk-2-${i}.m4s`));
+                did = true;
+                break;
+              }
+            }
+            if (!did) break;
+          }
+          if (
+            isBuffered(vsb, 5.9) &&
+            isBuffered(asb, 5.9) &&
+            ms.readyState === 'open' &&
+            !vsb.updating &&
+            !asb.updating
+          )
+            ms.endOfStream();
+        } finally {
+          busy = false;
+        }
+      }
+      ms.addEventListener('sourceopen', async () => {
+        if (vsb) return pump(); // reopened after a buffer was emptied
+        vsb = ms.addSourceBuffer(`video/mp4; codecs="${REPS[plan[0]].codec}"`);
+        asb = ms.addSourceBuffer('audio/mp4; codecs="opus"');
+        ms.duration = 6;
+        window.ready = true;
+        await pump();
+      });
+      for (const ev of ['timeupdate', 'seeking', 'waiting', 'progress', 'canplay'])
+        video.addEventListener(ev, pump);
+      setInterval(pump, 200);
+    </script>
+  </body>
+</html>

@@ -30,7 +30,7 @@ export function emptyState(tabId: number, pageUrl = '', pageTitle = ''): TabStat
     pageUrl,
     pageTitle,
     resources: [],
-    notes: { blobSources: 0, inaccessibleFrames: 0 },
+    notes: { blobSources: 0, inaccessibleFrames: 0, blockedFrameOrigins: [] },
     observing: false,
   };
 }

@@ -3,10 +3,21 @@ import type { VariantInspection } from '@/types/messages';
 import type { MediaResource } from '@/types/media';
 import type { Settings } from '@/types/settings';
 import { t } from './i18n';
-import { originsOf } from './inspect';
+import { originsOf, sampleByOrigin } from './inspect';
 import { probeHeaders } from './netprobe';
 import { send } from './messaging';
-import { audioOptions, buildRequest, defaultChoices, type Choices } from './request';
+import {
+  audioOptions,
+  buildRequest,
+  buildCaptureRequest,
+  buildLiveRequest,
+  buildRecordRequest,
+  buildZipRequest,
+  defaultChoices,
+  planFromRequest,
+  type Choices,
+} from './request';
+import { planZip } from './zip';
 import { mayExtensionFetch, parseUrl } from './security';
 
 export type StartOutcome = { ok: true; jobId: string } | { ok: false; error: string; needsAccess?: string[] };
@@ -30,7 +41,11 @@ export async function hasAccess(origins: string[]): Promise<boolean> {
 export async function requestAccess(origins: string[]): Promise<boolean> {
   if (origins.length === 0 || (await hasAccess(origins))) return true;
   try {
-    return await chrome.permissions.request({ origins: originPatterns(origins) });
+    // The second permission lets downloads replay the owning frame's Referer/Origin; it is optional and harmless alone.
+    return await chrome.permissions.request({
+      origins: originPatterns(origins),
+      permissions: ['declarativeNetRequestWithHostAccess'],
+    });
   } catch {
     return false;
   }
@@ -43,6 +58,7 @@ export function describeError(raw: string): string {
   if (raw === 'unsafe-url') return t('errUnsafeUrl');
   if (raw === 'protected') return t('errProtected');
   if (raw === 'no-permission') return t('errNoPermission');
+  if (raw === 'nothing-to-zip') return t('errNothingToZip');
   if (raw.startsWith('plan:')) {
     const issues = raw.slice(5).split(',').filter(Boolean);
     return issues.map((i) => issueText(i)).join(' ');
@@ -100,18 +116,26 @@ export async function inspectForChoices(
   allowPrompt: boolean,
 ): Promise<{ ok: true; inspections: Inspections } | { ok: false; error: string }> {
   const draft = buildRequest(resource, settings, choices);
-  if (!draft.isHls) return { ok: true, inspections: {} };
+  if (!draft.isHls && !draft.isDash) return { ok: true, inspections: {} };
   const out: Inspections = {};
   for (const [slot, url] of [
     ['video', draft.sourceUrl],
     ['audio', draft.audioUrl],
   ] as const) {
     if (!url) continue;
-    let r = await send('inspect-variant', { tabId: resource.tabId, url });
+    let r = await send('inspect-variant', {
+      tabId: resource.tabId,
+      url,
+      ...(resource.frameId !== undefined ? { frameId: resource.frameId } : {}),
+    });
     if (!r.ok && r.error === 'blocked' && allowPrompt) {
       const origin = originOf(url);
       if (origin && (await requestAccess([origin])))
-        r = await send('inspect-variant', { tabId: resource.tabId, url });
+        r = await send('inspect-variant', {
+          tabId: resource.tabId,
+          url,
+          ...(resource.frameId !== undefined ? { frameId: resource.frameId } : {}),
+        });
     }
     if (!r.ok) return { ok: false, error: `inspect:${r.error}` };
     out[slot] = r.inspection;
@@ -198,4 +222,59 @@ export async function openDownloadedFile(
   } catch {
     return { ok: false, error: t('errFileMissing') };
   }
+}
+
+/** Pack the selected plain files into one ZIP. Asks for access to the sites the files live on (the click is the gesture). */
+export async function startZip(resources: MediaResource[], settings: Settings): Promise<StartOutcome> {
+  const { items } = planZip(resources);
+  if (items.length === 0) return { ok: false, error: t('errNothingToZip') };
+  const request = buildZipRequest(resources, settings);
+  const plan = planFromRequest(request, {
+    maxMemoryMb: settings.maxMemoryMb,
+    maxEncodeDurationSec: settings.maxEncodeDurationSec,
+  });
+  if (!plan.valid) return { ok: false, error: t('zipTooLarge') };
+  const urls = items.map((i) => i.url);
+  const probe: Inspections = {
+    video: {
+      url: request.pageUrl,
+      segmentCount: 0,
+      durationSec: 0,
+      live: false,
+      fragmented: false,
+      encryption: [],
+      protectedByDrm: false,
+      keyUris: [],
+      origins: originsOf(urls),
+      originSamples: sampleByOrigin(urls),
+      firstSegmentExt: '',
+    },
+  };
+  const missing = await originsNeedingAccess(probe, request.pageUrl);
+  if (missing.length > 0 && !(await requestAccess(missing))) {
+    return { ok: false, error: t('errAccessDenied'), needsAccess: missing };
+  }
+  const res = await send('start-download', { request });
+  return res.ok ? { ok: true, jobId: res.jobId } : { ok: false, error: describeError(res.error) };
+}
+
+/** Capture a MediaSource video. The click on the button is the user's decision to let the page play it through. */
+export async function startCapture(
+  resource: MediaResource,
+  settings: Settings,
+  speed: 'fast' | 'realtime',
+): Promise<StartOutcome> {
+  const request = buildCaptureRequest(resource, settings, speed);
+  const res = await send('start-download', { request });
+  return res.ok ? { ok: true, jobId: res.jobId } : { ok: false, error: describeError(res.error) };
+}
+
+/** Record a live stream (HLS, DASH dynamic), or a MediaStream the page plays, until Stop. */
+export async function startRecord(resource: MediaResource, settings: Settings): Promise<StartOutcome> {
+  const request =
+    resource.held?.kind === 'stream'
+      ? buildRecordRequest(resource, settings)
+      : buildLiveRequest(resource, settings);
+  const res = await send('start-download', { request });
+  return res.ok ? { ok: true, jobId: res.jobId } : { ok: false, error: describeError(res.error) };
 }

@@ -1,8 +1,7 @@
-import { Eraser, RefreshCw, Settings } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { Eraser, RefreshCw, Settings, ShieldCheck } from 'lucide-react';
+import { useCallback, useMemo, useState } from 'react';
 import { EmptyState } from '@/components/EmptyState';
 import { Logo } from '@/components/Logo';
-import { MediaCard } from '@/components/MediaCard';
 import { QueueItem, type JobAction } from '@/components/QueueItem';
 import { Badge, Button, IconButton, Notice, cx } from '@/components/ui';
 import { useJobs } from '@/hooks/useJobs';
@@ -10,9 +9,18 @@ import { useSettings } from '@/hooks/useSettings';
 import { useActiveTabId, useTabMedia } from '@/hooks/useTabMedia';
 import { t } from '@/lib/i18n';
 import { send } from '@/lib/messaging';
-import { groupResources } from '@/lib/resources';
-import { openDownloadedFile, originOf, quickDownload, requestAccess } from '@/lib/uiActions';
+import { tabOf } from '@/lib/tabs';
+import {
+  openDownloadedFile,
+  originOf,
+  quickDownload,
+  requestAccess,
+  startCapture,
+  startRecord,
+  startZip,
+} from '@/lib/uiActions';
 import type { MediaResource } from '@/types/media';
+import { ResourceTabs } from './ResourceTabs';
 
 type Feedback = { tone: 'danger' | 'acid'; text: string };
 
@@ -35,7 +43,7 @@ export function PopupApp() {
   const tabId = useActiveTabId();
   const { state, scanning, rescan } = useTabMedia(tabId);
   const jobs = useJobs();
-  const { settings } = useSettings();
+  const { settings, update } = useSettings();
   const [busy, setBusy] = useState<string | undefined>();
   const [feedback, setFeedback] = useState<Record<string, Feedback>>({});
   const version = chrome.runtime.getManifest().version;
@@ -54,6 +62,56 @@ export function PopupApp() {
       setFb(r.id, undefined);
       try {
         const out = await quickDownload(r, settings);
+        setFb(r.id, out.ok ? { tone: 'acid', text: t('queuedOk') } : { tone: 'danger', text: out.error });
+      } finally {
+        setBusy(undefined);
+      }
+    },
+    [settings],
+  );
+
+  const onBulk = useCallback(
+    async (list: MediaResource[]) => {
+      let queued = 0;
+      let failed = 0;
+      for (const r of list) {
+        const out = await quickDownload(r, settings);
+        if (out.ok) queued++;
+        else failed++;
+      }
+      return { queued, failed };
+    },
+    [settings],
+  );
+
+  const onZip = useCallback(
+    async (list: MediaResource[]) => {
+      const out = await startZip(list, settings);
+      return out.ok ? ({ ok: true } as const) : ({ ok: false, error: out.error } as const);
+    },
+    [settings],
+  );
+
+  const onCapture = useCallback(
+    async (r: MediaResource, speed: 'fast' | 'realtime') => {
+      setBusy(r.id);
+      setFb(r.id, undefined);
+      try {
+        const out = await startCapture(r, settings, speed);
+        setFb(r.id, out.ok ? { tone: 'acid', text: t('queuedOk') } : { tone: 'danger', text: out.error });
+      } finally {
+        setBusy(undefined);
+      }
+    },
+    [settings],
+  );
+
+  const onRecord = useCallback(
+    async (r: MediaResource) => {
+      setBusy(r.id);
+      setFb(r.id, undefined);
+      try {
+        const out = await startRecord(r, settings);
         setFb(r.id, out.ok ? { tone: 'acid', text: t('queuedOk') } : { tone: 'danger', text: out.error });
       } finally {
         setBusy(undefined);
@@ -86,6 +144,13 @@ export function PopupApp() {
   );
 
   const [queueNote, setQueueNote] = useState<string | undefined>();
+  const onAllowFrames = useCallback(
+    async (origins: string[]) => {
+      if (await requestAccess(origins)) await rescan();
+    },
+    [rescan],
+  );
+
   const onJobAction = useCallback(
     async (id: string, action: JobAction) => {
       setQueueNote(undefined);
@@ -102,9 +167,13 @@ export function PopupApp() {
     [jobs],
   );
 
-  const resources = state?.resources ?? [];
-  const groups = groupResources(resources);
-  const downloadable = resources.filter((r) => r.downloadability.status === 'downloadable').length;
+  const resources = useMemo(() => state?.resources ?? [], [state?.resources]);
+  // The headline counts what the extension is for: audio, video and their subtitles. Images and files have their own tabs.
+  const mediaOnly = useMemo(
+    () => resources.filter((r) => ['video', 'audio', 'subtitles'].includes(tabOf(r))),
+    [resources],
+  );
+  const downloadable = mediaOnly.filter((r) => r.downloadability.status === 'downloadable').length;
   const pageHost = state?.pageUrl ? safeHost(state.pageUrl) : '';
   const errText = pageErrorText(state?.status === 'error' ? state.error : undefined);
   const finished = jobs.filter((j) => ['completed', 'failed', 'cancelled'].includes(j.stage));
@@ -156,8 +225,8 @@ export function PopupApp() {
             <div className="text-right">
               <p className="label">{t('detected')}</p>
               <p className="mono text-[18px] leading-none text-fg">
-                {resources.length}
-                {resources.length > 0 && (
+                {mediaOnly.length}
+                {mediaOnly.length > 0 && (
                   <span className="ml-1 text-[10px] text-acid">{t('readyCount', downloadable)}</span>
                 )}
               </p>
@@ -178,8 +247,26 @@ export function PopupApp() {
         {state && state.notes.blobSources > 0 && (
           <Notice tone="magenta">{t('noteBlob', state.notes.blobSources)}</Notice>
         )}
-        {state && state.notes.inaccessibleFrames > 0 && (
-          <Notice>{t('noteFrames', state.notes.inaccessibleFrames)}</Notice>
+        {state && (state.notes.blockedFrameOrigins ?? []).length > 0 ? (
+          <Notice tone="neon">
+            <p>{t('noteFramesBlocked', (state.notes.blockedFrameOrigins ?? []).map(hostOf).join(', '))}</p>
+            <p className="mt-1 text-[11px] text-muted">{t('allowEmbeddedHint')}</p>
+            <div className="mt-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void onAllowFrames(state.notes.blockedFrameOrigins ?? [])}
+                icon={<ShieldCheck size={13} aria-hidden="true" />}
+              >
+                {t('allowEmbedded')}
+              </Button>
+            </div>
+          </Notice>
+        ) : (
+          state &&
+          state.notes.inaccessibleFrames > 0 && (
+            <Notice>{t('noteFrames', state.notes.inaccessibleFrames)}</Notice>
+          )
         )}
 
         {resources.length === 0 ? (
@@ -195,31 +282,20 @@ export function PopupApp() {
             />
           )
         ) : (
-          <ul className="space-y-2.5" aria-label={t('detectedMedia')}>
-            {groups.map((g) => (
-              <li key={g.key} className="list-none">
-                {g.items.length > 1 && (
-                  <p className="label mb-1.5 flex items-center justify-between">
-                    <span className="truncate">{g.title}</span>
-                    <span>{g.items.length}</span>
-                  </p>
-                )}
-                <ul className="space-y-2.5">
-                  {g.items.map((r) => (
-                    <MediaCard
-                      key={r.id}
-                      resource={r}
-                      busy={busy === r.id}
-                      {...(feedback[r.id] ? { feedback: feedback[r.id] as Feedback } : {})}
-                      onDownload={(x) => void onDownload(x)}
-                      onConfigure={(x) => void onConfigure(x)}
-                      onGrantAccess={(x) => void onGrantAccess(x)}
-                    />
-                  ))}
-                </ul>
-              </li>
-            ))}
-          </ul>
+          <ResourceTabs
+            resources={resources}
+            settings={settings}
+            busy={busy}
+            feedback={feedback}
+            onDownload={(x) => void onDownload(x)}
+            onConfigure={(x) => void onConfigure(x)}
+            onGrantAccess={(x) => void onGrantAccess(x)}
+            onCapture={(x, speed) => void onCapture(x, speed)}
+            onRecord={(x) => void onRecord(x)}
+            onBulk={onBulk}
+            onZip={onZip}
+            onMinImage={(px) => void update({ imageMinPx: px })}
+          />
         )}
 
         {jobs.length > 0 && (
@@ -260,6 +336,14 @@ export function PopupApp() {
       </footer>
     </div>
   );
+}
+
+function hostOf(origin: string): string {
+  try {
+    return new URL(origin).host;
+  } catch {
+    return origin;
+  }
 }
 
 function safeHost(url: string): string {

@@ -1,14 +1,24 @@
 import { buildFfmpegArgs, MIME_BY_EXTENSION } from '@/lib/ffmpegArgs';
 import { log } from '@/lib/security';
+import { heldLimit } from '@/types/ingest';
 import type { DownloadRequest, JobProgress, JobStage } from '@/types/download';
 import type { OffscreenEvent, OffscreenPlan } from '@/types/messages';
 import { CancelledError, PipelineError, asPipelineError } from './errors';
 import { runFfmpeg } from './ffmpeg';
-import { stageDirectFile, stageHlsPlaylist } from './hls';
+import { stageDashRepresentation } from './dash';
+import { expectCapture, expectIngest, expectRecording } from './ingest';
+import { stageDirectFile, stageHlsPlaylist, type StageOptions } from './hls';
 import { removeJobDir } from './opfs';
+import { storageReady } from './startup';
+import { buildSubtitle } from './subtitle';
+import { buildZip } from './zip';
+import { assembleCapture } from './capture';
+import { dashLiveSource, hlsLiveSource, liveProgress, recordLiveTrack, type LiveTrackResult } from './live';
 
 interface Running {
   abort: AbortController;
+  /** Live recordings: aborted when the user presses Stop (the recording then ends normally). */
+  stop?: AbortController;
   blobUrl?: string;
 }
 const running = new Map<string, Running>();
@@ -18,11 +28,15 @@ function emit(ev: OffscreenEvent): void {
   chrome.runtime.sendMessage(ev).catch(() => undefined);
 }
 
-function makeProgressSender(jobId: string) {
+export function makeProgressSender(jobId: string) {
   let last = 0;
   return (progress: JobProgress, force = false) => {
     const now = Date.now();
-    if (!force && now - last < 250) return;
+    // The report that completes a stage is never dropped: otherwise a fast download can end showing stale counters.
+    const complete =
+      progress.fraction === 1 ||
+      (progress.unitsTotal !== undefined && progress.unitsDone === progress.unitsTotal);
+    if (!force && !complete && now - last < 250) return;
     last = now;
     emit({ channel: 'vdown-offscreen-event', type: 'progress', jobId, progress });
   };
@@ -47,6 +61,11 @@ export function startJob(jobId: string, request: DownloadRequest, plan: Offscree
   });
 }
 
+/** Finish a live recording and keep what it has (cancel would discard it). */
+export function stopJob(jobId: string): void {
+  running.get(jobId)?.stop?.abort();
+}
+
 export function cancelJob(jobId: string): void {
   running.get(jobId)?.abort.abort();
 }
@@ -59,8 +78,135 @@ export async function releaseJob(jobId: string): Promise<void> {
   await removeJobDir(jobId);
 }
 
+/**
+ * Record a live or event stream (HLS or DASH dynamic): one file per track (video, and a separate audio when there is
+ * one), then a stream copy into MP4 when the result fits the memory limit. Stop keeps what was recorded.
+ */
+async function recordLive(
+  jobId: string,
+  req: DownloadRequest,
+  plan: OffscreenPlan,
+  entry: Running,
+  send: (p: JobProgress, force?: boolean) => void,
+): Promise<void> {
+  const { signal } = entry.abort;
+  const stop = new AbortController();
+  entry.stop = stop;
+  const origins = req.credentialedOrigins ?? [];
+  const urls = [req.sourceUrl, ...(req.audioUrl ? [req.audioUrl] : [])];
+  const maxBytes = ((plan.recordMaxMb ?? 4096) * MB) / urls.length;
+  const maxSeconds = (plan.recordMaxMinutes ?? 120) * 60;
+  const seen = urls.map(() => ({ seconds: 0, bytes: 0, gaps: 0 }));
+  stage(jobId, 'recording');
+  const tracks = urls.map((url, i) =>
+    recordLiveTrack({
+      jobId,
+      fileName: (frag) => `${i === 0 ? 'video' : 'audio'}.${frag ? 'mp4' : 'ts'}`,
+      source: req.isDash
+        ? dashLiveSource(url, signal, origins, { pageUrl: req.pageUrl, owner: url })
+        : hlsLiveSource(url, signal, origins, { pageUrl: req.pageUrl, owner: url }),
+      concurrency: plan.segmentConcurrency,
+      credentialedOrigins: origins,
+      net: { pageUrl: req.pageUrl, owner: url },
+      signal,
+      stop: stop.signal,
+      onLimit: () => stop.abort(),
+      maxSeconds,
+      maxBytes,
+      onProgress: (p) => {
+        seen[i] = p;
+        send({ ...liveProgress(seen), elapsedSec: Math.max(...seen.map((t) => t.seconds)) });
+      },
+    }),
+  );
+  let results: LiveTrackResult[];
+  try {
+    results = await Promise.all(tracks);
+  } catch (e) {
+    stop.abort(); // the other track must not run on alone
+    await Promise.allSettled(tracks);
+    throw e;
+  }
+  stage(jobId, 'merging');
+  const [main, audio] = results as [LiveTrackResult, LiveTrackResult | undefined];
+  const gaps = results.reduce((n, r) => n + r.gaps, 0);
+  const total = results.reduce((n, r) => n + r.bytes, 0);
+  const hasVideo = req.hasVideo;
+  const extension = hasVideo ? 'mp4' : 'm4a';
+  let blob: Blob | undefined;
+  if (total <= (plan.maxMemoryMb * MB) / 2) {
+    try {
+      const output = `out.${extension}`;
+      const data = await runFfmpeg({
+        inputs: audio ? [main.file, audio.file] : [main.file],
+        output,
+        signal,
+        durationSec: Math.max(1, ...results.map((r) => r.seconds)),
+        onProgress: (fraction) => send(fraction === undefined ? {} : { fraction }),
+        args: (paths) =>
+          buildFfmpegArgs({
+            mode: hasVideo ? 'video-audio' : 'audio-only',
+            extension,
+            video: hasVideo ? 'copy' : 'none',
+            audio: 'copy',
+            videoPath: paths[0] as string,
+            ...(paths[1] ? { audioPath: paths[1] } : {}),
+            audioFormat: 'm4a',
+            audioBitrate: 192,
+            keepOffsets: paths.length > 1,
+            output,
+          }),
+      });
+      if (data.byteLength > 0)
+        blob = new Blob([data as Uint8Array<ArrayBuffer>], {
+          type: MIME_BY_EXTENSION[extension] ?? 'application/octet-stream',
+        });
+    } catch (e) {
+      if (asPipelineError(e) instanceof CancelledError) throw e;
+      if (audio) throw e; // two tracks cannot be saved as one without the join
+      log.warn('could not convert the recording, keeping it as recorded:', asPipelineError(e).message);
+    }
+  } else if (audio) {
+    throw new PipelineError(
+      'too-large',
+      'The recording is too large to join its video and audio in memory: raise the memory limit in Settings',
+    );
+  }
+  let outExtension = extension;
+  if (!blob) {
+    // The recording as the stream delivered it: TS, or fragmented MP4.
+    outExtension = main.fragmented ? (hasVideo ? 'mp4' : 'm4a') : 'ts';
+    blob = new Blob([main.file], { type: MIME_BY_EXTENSION[outExtension] ?? 'application/octet-stream' });
+  }
+  if (signal.aborted) throw new CancelledError();
+  entry.blobUrl = URL.createObjectURL(blob);
+  emit({
+    channel: 'vdown-offscreen-event',
+    type: 'ready',
+    jobId,
+    blobUrl: entry.blobUrl,
+    bytes: blob.size,
+    extension: outExtension,
+    ...(gaps > 0 ? { gaps } : {}),
+  });
+}
+
+/** The file extension of a recorder's output type. */
+export function recordingExtension(mime: string): string {
+  const mp4 = /mp4/i.test(mime);
+  if (mp4) return mime.startsWith('audio/') ? 'm4a' : 'mp4';
+  return 'webm';
+}
+
 function ext(fragmented: boolean): string {
   return fragmented ? 'mp4' : 'ts';
+}
+
+/** Stage one stream: an HLS media playlist, or one representation of a DASH manifest. */
+function stageStream(url: string, opts: Omit<StageOptions, 'playlistUrl'>, dash: boolean) {
+  return dash
+    ? stageDashRepresentation({ ...opts, ref: url })
+    : stageHlsPlaylist({ ...opts, playlistUrl: url });
 }
 
 async function execute(
@@ -73,7 +219,184 @@ async function execute(
   const send = makeProgressSender(jobId);
   const maxBytes = plan.requiresFfmpeg ? plan.maxMemoryMb * MB : undefined;
   const credentialedOrigins = req.credentialedOrigins ?? [];
-  stage(jobId, 'downloading');
+  // A recording is not a download: its stage (RECORDING) starts when the page has begun to record.
+  if (plan.pipeline !== 'record' && plan.pipeline !== 'live') stage(jobId, 'downloading');
+
+  // A recording of a MediaStream: the page connects and streams the recorder's output as it is made.
+  const recordStarted = Date.now();
+  const recorded =
+    plan.pipeline === 'record' && req.held
+      ? expectRecording({
+          jobId,
+          tabId: req.tabId,
+          frameId: req.held.frameId ?? 0,
+          // the page stops itself at the user's limit; this is the hard stop in case it does not
+          maxBytes: Math.ceil((plan.recordMaxMb ?? 4096) * MB * 1.05) + 16 * MB,
+          signal,
+          onStart: () => stage(jobId, 'recording'),
+          onProgress: (bytes) => send({ bytesDone: bytes, elapsedSec: (Date.now() - recordStarted) / 1000 }),
+        })
+      : undefined;
+  recorded?.catch(() => undefined);
+
+  // A capture registers like the held bytes below: the page connects the moment the background starts it.
+  const captured =
+    plan.pipeline === 'capture' && req.held
+      ? expectCapture({
+          jobId,
+          tabId: req.tabId,
+          frameId: req.held.frameId ?? 0,
+          maxBytes: plan.maxMemoryMb * MB,
+          signal,
+          onProgress: (bytes, frac) =>
+            send({ bytesDone: bytes, ...(frac !== undefined ? { fraction: frac * 0.8 } : {}) }),
+        })
+      : undefined;
+  captured?.catch(() => undefined);
+
+  // The page may connect with its bytes at any moment, so the expectation is registered before anything is awaited.
+  const heldBytes =
+    req.held && !req.capture && !req.record
+      ? expectIngest({
+          jobId,
+          tabId: req.tabId,
+          frameId: req.held.frameId ?? 0,
+          fileName: `source.${req.sourceFormat === 'unknown' ? 'bin' : req.sourceFormat}`,
+          maxBytes:
+            maxBytes === undefined ? heldLimit(req.held.kind) : Math.min(maxBytes, heldLimit(req.held.kind)),
+          signal,
+          onProgress: (bytes, total) =>
+            send({ bytesDone: bytes, bytesTotal: total, fraction: total ? bytes / total : 1 }),
+        })
+      : undefined;
+  heldBytes?.catch(() => undefined); // reported where it is awaited
+  await storageReady;
+
+  // Recording of a live stream: look at it until Stop, its end or a limit, then join the tracks with a stream copy.
+  if (plan.pipeline === 'live') {
+    await recordLive(jobId, req, plan, entry, send);
+    return;
+  }
+
+  // Recording of a MediaStream: tidy the recorder's output with a stream copy (duration, index), within the memory limit.
+  if (recorded) {
+    const rec = await recorded;
+    stage(jobId, 'merging');
+    const extension = recordingExtension(rec.mime);
+    let blob: Blob = new Blob([rec.file], { type: rec.mime.split(';')[0] ?? 'application/octet-stream' });
+    if (rec.bytes <= (plan.maxMemoryMb * MB) / 2) {
+      try {
+        const output = `out.${extension}`;
+        const hasVideo = rec.mime.startsWith('video/');
+        const data = await runFfmpeg({
+          inputs: [rec.file],
+          output,
+          signal,
+          onProgress: (fraction) => send(fraction === undefined ? {} : { fraction }),
+          args: (paths) =>
+            buildFfmpegArgs({
+              mode: hasVideo ? 'video-audio' : 'audio-only',
+              extension,
+              video: hasVideo ? 'copy' : 'none',
+              audio: 'copy',
+              videoPath: paths[0] as string,
+              audioFormat: 'm4a',
+              audioBitrate: 192,
+              output,
+            }),
+        });
+        if (data.byteLength > 0)
+          blob = new Blob([data as Uint8Array<ArrayBuffer>], {
+            type: MIME_BY_EXTENSION[extension] ?? 'application/octet-stream',
+          });
+      } catch (e) {
+        if (asPipelineError(e) instanceof CancelledError) throw e;
+        // The recording itself is what matters: keep it as the recorder wrote it.
+        log.warn('could not tidy the recording, keeping it as recorded:', asPipelineError(e).message);
+      }
+    }
+    if (signal.aborted) throw new CancelledError();
+    entry.blobUrl = URL.createObjectURL(blob);
+    emit({
+      channel: 'vdown-offscreen-event',
+      type: 'ready',
+      jobId,
+      blobUrl: entry.blobUrl,
+      bytes: blob.size,
+      extension,
+    });
+    return;
+  }
+
+  // Capture of a MediaSource player: what the page recorded is assembled into one file per quality it played.
+  if (captured) {
+    const ingest = await captured;
+    stage(jobId, 'merging');
+    const parts = await assembleCapture({
+      jobId,
+      ingest,
+      signal,
+      maxBytes: plan.maxMemoryMb * MB,
+      onProgress: (p) =>
+        send({ ...p, ...(p.fraction !== undefined ? { fraction: 0.8 + p.fraction * 0.2 } : {}) }),
+    });
+    if (signal.aborted) throw new CancelledError();
+    const urls = parts.map((p) =>
+      URL.createObjectURL(
+        new Blob([p.data as Uint8Array<ArrayBuffer>], {
+          type: MIME_BY_EXTENSION[p.extension] ?? 'application/octet-stream',
+        }),
+      ),
+    );
+    entry.blobUrl = urls[0];
+    // further parts are jobs of their own: they need an entry so their blob URL is revoked when they are released
+    const extraParts = parts.slice(1).map((p, i) => {
+      const id = crypto.randomUUID();
+      running.set(id, { abort: new AbortController(), blobUrl: urls[i + 1] as string });
+      return { jobId: id, blobUrl: urls[i + 1] as string, bytes: p.data.byteLength, extension: p.extension };
+    });
+    emit({
+      channel: 'vdown-offscreen-event',
+      type: 'ready',
+      jobId,
+      blobUrl: urls[0] as string,
+      bytes: parts[0]?.data.byteLength ?? 0,
+      extension: parts[0]?.extension ?? 'mp4',
+      ...(extraParts.length > 0 ? { extraParts } : {}),
+    });
+    return;
+  }
+
+  // ZIP of plain files: fetched one by one, written straight to disk.
+  if (plan.pipeline === 'zip') {
+    const zipped = await buildZip(jobId, req, plan.maxMemoryMb, signal, send);
+    if (signal.aborted) throw new CancelledError();
+    entry.blobUrl = URL.createObjectURL(zipped.file);
+    emit({
+      channel: 'vdown-offscreen-event',
+      type: 'ready',
+      jobId,
+      blobUrl: entry.blobUrl,
+      bytes: zipped.bytes,
+      skipped: zipped.failed + (req.zip?.left ?? 0),
+    });
+    return;
+  }
+
+  // Subtitles: small text, joined and converted in memory. No staging, no FFmpeg.
+  if (plan.pipeline === 'subtitle') {
+    const result = await buildSubtitle(req, signal, send);
+    if (signal.aborted) throw new CancelledError();
+    entry.blobUrl = URL.createObjectURL(result.blob);
+    emit({
+      channel: 'vdown-offscreen-event',
+      type: 'ready',
+      jobId,
+      blobUrl: entry.blobUrl,
+      bytes: result.blob.size,
+    });
+    return;
+  }
 
   // 1. Stage the source(s) on disk.
   let videoFile: File;
@@ -81,41 +404,54 @@ async function execute(
   let durationSec = req.durationSec;
   const hasAudioInput = req.audioUrl !== undefined;
 
-  if (req.isHls) {
+  if (req.isHls || req.isDash) {
     const weight = hasAudioInput ? 0.5 : 1;
-    const video = await stageHlsPlaylist({
-      jobId,
-      playlistUrl: req.sourceUrl,
-      fileName: (frag) => `video.${ext(frag)}`,
-      concurrency: plan.segmentConcurrency,
-      credentialedOrigins,
-      signal,
-      ...(maxBytes !== undefined ? { maxBytes } : {}),
-      onProgress: (p) =>
-        send({ ...p, ...(p.fraction !== undefined ? { fraction: p.fraction * weight } : {}) }),
-    });
+    const video = await stageStream(
+      req.sourceUrl,
+      {
+        jobId,
+        fileName: (frag) => `video.${ext(frag)}`,
+        concurrency: plan.segmentConcurrency,
+        credentialedOrigins,
+        net: { pageUrl: req.pageUrl, owner: req.sourceUrl },
+        signal,
+        ...(maxBytes !== undefined ? { maxBytes } : {}),
+        onProgress: (p) =>
+          send({ ...p, ...(p.fraction !== undefined ? { fraction: p.fraction * weight } : {}) }),
+      },
+      req.isDash === true,
+    );
     videoFile = video.file;
     durationSec = durationSec ?? video.durationSec;
     if (hasAudioInput && req.audioUrl) {
-      const audio = await stageHlsPlaylist({
-        jobId,
-        playlistUrl: req.audioUrl,
-        fileName: (frag) => `audio.${frag ? 'mp4' : 'ts'}`,
-        concurrency: plan.segmentConcurrency,
-        credentialedOrigins,
-        signal,
-        ...(maxBytes !== undefined ? { maxBytes: Math.max(0, maxBytes - video.bytes) } : {}),
-        onProgress: (p) =>
-          send({ ...p, ...(p.fraction !== undefined ? { fraction: 0.5 + p.fraction * 0.5 } : {}) }),
-      });
+      const audio = await stageStream(
+        req.audioUrl,
+        {
+          jobId,
+          fileName: (frag) => `audio.${frag ? 'mp4' : 'ts'}`,
+          concurrency: plan.segmentConcurrency,
+          credentialedOrigins,
+          net: { pageUrl: req.pageUrl, owner: req.audioUrl },
+          signal,
+          ...(maxBytes !== undefined ? { maxBytes: Math.max(0, maxBytes - video.bytes) } : {}),
+          onProgress: (p) =>
+            send({ ...p, ...(p.fraction !== undefined ? { fraction: 0.5 + p.fraction * 0.5 } : {}) }),
+        },
+        req.isDash === true,
+      );
       audioFile = audio.file;
     }
+  } else if (req.held) {
+    // Bytes only the page has (a data: URL): the page sends them to us; we never fetch the URL.
+    const ingested = await (heldBytes as NonNullable<typeof heldBytes>);
+    videoFile = ingested.file;
   } else {
     const staged = await stageDirectFile({
       jobId,
       url: req.sourceUrl,
       fileName: `source.${req.sourceFormat === 'unknown' ? 'bin' : req.sourceFormat}`,
       credentialedOrigins,
+      net: { pageUrl: req.pageUrl, owner: req.sourceUrl },
       signal,
       ...(maxBytes !== undefined ? { maxBytes } : {}),
       onProgress: send,

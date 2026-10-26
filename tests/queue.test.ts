@@ -5,6 +5,7 @@ import {
   SpeedMeter,
   TRANSITIONS,
   canRetry,
+  canStop,
   canTransition,
   createJob,
   failJob,
@@ -46,6 +47,38 @@ const plan = (over: Partial<Plan> = {}): Plan => ({
   ...over,
 });
 
+describe('recording', () => {
+  it('has its own stage instead of a download, and is the only thing that can be stopped (saved)', () => {
+    expect(stagesFor(plan({ pipeline: 'record', requiresFfmpeg: true }))).toEqual([
+      'detected',
+      'preparing',
+      'recording',
+      'merging',
+      'completed',
+    ]);
+    expect(canTransition('preparing', 'recording')).toBe(true);
+    expect(canTransition('recording', 'merging')).toBe(true);
+    expect(canTransition('recording', 'completed')).toBe(true);
+    expect(canTransition('recording', 'downloading')).toBe(false);
+    expect(isActive({ stage: 'recording' })).toBe(true);
+    expect(canStop({ stage: 'recording' })).toBe(true);
+    for (const s of ['detected', 'preparing', 'downloading', 'merging', 'completed', 'failed', 'cancelled'])
+      expect(canStop({ stage: s as JobStage })).toBe(false);
+  });
+});
+
+describe('live recording stages', () => {
+  it('a live recording is recorded, then joined', () => {
+    expect(stagesFor(plan({ pipeline: 'live', requiresFfmpeg: true }))).toEqual([
+      'detected',
+      'preparing',
+      'recording',
+      'merging',
+      'completed',
+    ]);
+  });
+});
+
 describe('stagesFor: only the stages a job really passes through', () => {
   it('native', () =>
     expect(stagesFor(plan())).toEqual(['detected', 'preparing', 'downloading', 'completed']));
@@ -84,7 +117,14 @@ describe('transitions', () => {
     }
   });
   it('every non-terminal stage can fail or be cancelled', () => {
-    for (const s of ['detected', 'preparing', 'downloading', 'merging', 'encoding'] as JobStage[]) {
+    for (const s of [
+      'detected',
+      'preparing',
+      'downloading',
+      'recording',
+      'merging',
+      'encoding',
+    ] as JobStage[]) {
       expect(canTransition(s, 'failed')).toBe(true);
       expect(canTransition(s, 'cancelled')).toBe(true);
     }
@@ -152,5 +192,40 @@ describe('SpeedMeter', () => {
     for (let i = 0; i <= 6; i++) m.update(0, i * 500);
     expect(m.etaSeconds(100)).toBeUndefined();
     expect(m.etaSeconds(undefined)).toBeUndefined();
+  });
+});
+
+describe('restage: a refused native download is handed to the extension once', () => {
+  const withReplay = {
+    ...request,
+    replay: { frameUrl: 'https://embed.example/p', urls: [request.sourceUrl] },
+  };
+  const downloading = (req = withReplay) =>
+    transition(transition(createJob('j', req, plan(), 1), 'preparing', 2), 'downloading', 3);
+
+  it('applies to 401/403 on a frame-owned plain file, nothing else', async () => {
+    const { canRestage } = await import('@/lib/queue');
+    expect(canRestage(downloading(), 'SERVER_FORBIDDEN')).toBe(true);
+    expect(canRestage(downloading(), 'SERVER_UNAUTHORIZED')).toBe(true);
+    expect(canRestage(downloading(), 'NETWORK_FAILED')).toBe(false);
+    expect(canRestage(downloading(), 'USER_CANCELED')).toBe(false);
+    expect(canRestage(downloading(), undefined)).toBe(false);
+    expect(canRestage(downloading({ ...request } as typeof withReplay), 'SERVER_FORBIDDEN')).toBe(false); // no frame known
+    expect(canRestage(downloading({ ...withReplay, isHls: true }), 'SERVER_FORBIDDEN')).toBe(false);
+  });
+  it('goes back to PREPARING owned by the offscreen pipeline, cannot pause, and only happens once', async () => {
+    const { restage, canRestage } = await import('@/lib/queue');
+    const j = restage({ ...downloading(), chromeDownloadId: 9, canPause: true }, 10);
+    expect(j).toMatchObject({
+      stage: 'preparing',
+      staged: true,
+      viaOffscreen: true,
+      canPause: false,
+      progress: {},
+    });
+    expect(j.chromeDownloadId).toBeUndefined();
+    expect(canRestage({ ...j, stage: 'downloading' }, 'SERVER_FORBIDDEN')).toBe(false);
+    expect(() => restage({ ...j, stage: 'downloading' }, 11)).toThrow(IllegalTransitionError);
+    expect(() => restage(createJob('x', withReplay, plan(), 1), 11)).toThrow(IllegalTransitionError);
   });
 });

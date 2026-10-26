@@ -43,11 +43,19 @@ export function latestReleased(tags: string[]): Semver | undefined {
   return best;
 }
 
-/** `#major` / `#minor` (or `[major]` / `[minor]`) anywhere in a commit message raises the bump; patch otherwise. */
+/**
+ * A commit raises the bump with `#major` / `#minor` on a line of its own, or `[major]` / `[minor]` in its subject (first
+ * line); patch otherwise. Text that merely mentions the tokens (for example a message describing this rule) does not
+ * count: that is how 1.0.0 was once published by accident.
+ */
 export function detectBump(messages: string[]): Bump {
-  const text = messages.join('\n').toLowerCase();
-  if (/#major\b|\[major\]/.test(text)) return 'major';
-  if (/#minor\b|\[minor\]/.test(text)) return 'minor';
+  const says = (bump: 'major' | 'minor') =>
+    messages.some((m) => {
+      const lines = m.split(/\r?\n/).map((l) => l.trim().toLowerCase());
+      return lines.includes(`#${bump}`) || (lines[0] ?? '').includes(`[${bump}]`);
+    });
+  if (says('major')) return 'major';
+  if (says('minor')) return 'minor';
   return 'patch';
 }
 

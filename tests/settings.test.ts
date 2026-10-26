@@ -47,6 +47,21 @@ describe('sanitizeSettings', () => {
       maxEncodeDurationSec: 0,
     });
   });
+  it('keeps recording limits and the recording format in range', () => {
+    expect(DEFAULT_SETTINGS).toMatchObject({
+      recordContainer: 'webm',
+      recordMaxMinutes: 120,
+      recordMaxMb: 4096,
+    });
+    expect(sanitizeSettings({ recordMaxMinutes: 0, recordMaxMb: 1e9, recordContainer: 'avi' })).toMatchObject(
+      {
+        recordMaxMinutes: 1,
+        recordMaxMb: 16384,
+        recordContainer: 'webm',
+      },
+    );
+    expect(sanitizeSettings({ recordContainer: 'mp4' }).recordContainer).toBe('mp4');
+  });
   it('sanitises the sub-folder and bounds the template', () => {
     expect(sanitizeSettings({ subfolder: '../../evil/x' }).subfolder).toBe('evil/x');
     expect(sanitizeSettings({ namingTemplate: 'x'.repeat(999) }).namingTemplate).toHaveLength(200);
