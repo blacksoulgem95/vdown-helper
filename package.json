@@ -16,7 +16,8 @@
     "test:watch": "vitest",
     "test:e2e": "node e2e/run.mjs",
     "check:dist": "node scripts/check-dist.mjs",
-    "serve:fixtures": "node e2e/serve.mjs"
+    "serve:fixtures": "node e2e/serve.mjs",
+    "package": "node scripts/build.mjs && node scripts/check-dist.mjs && node scripts/package.mjs"
   },
   "dependencies": {
     "@ffmpeg/core": "^0.12.10",
@@ -37,6 +38,7 @@
     "@vitejs/plugin-react": "^6.1.2",
     "eslint": "^10.13.0",
     "eslint-plugin-react-hooks": "^7.1.1",
+    "fflate": "^0.8.3",
     "globals": "^17.13.0",
     "jsdom": "^29.1.1",
     "playwright": "^1.64.1",

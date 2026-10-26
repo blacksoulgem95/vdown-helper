@@ -52,6 +52,23 @@ Install in Chrome:
 `npm run build` also copies the FFmpeg.wasm core (≈ 31 MB) from `node_modules` into `dist/vendor/ffmpeg/`. It is
 bundled with the extension and never downloaded at runtime.
 
+## Releases and the Chrome package
+
+`npm run package` builds the extension, runs the `dist/` checks and writes `release/vdown-helper-<version>.zip`
+(+ a `.sha256`). `manifest.json` is at the root of the zip, source maps are excluded and the archive is reproducible:
+the same commit gives the same SHA-256.
+
+The **Release** workflow (`.github/workflows/release.yml`) runs on every push to `main`: typecheck, lint, format,
+unit tests, build, `check:dist`, package, then it uploads the zip as a build artifact. If `package.json`'s version has
+not been released yet it also creates the tag `v<version>` and a GitHub Release with the zip and checksum attached.
+Pushes that don't change the version never touch an existing release. **To ship a new version, bump `version` in
+`package.json` (the manifest follows it) and merge to `main`.**
+
+Install a release: download `vdown-helper-<version>.zip`, unzip it, open `chrome://extensions`, enable _Developer
+mode_, **Load unpacked** and pick the unzipped folder. The same zip is what the Chrome Web Store accepts for upload
+(the store review and listing are separate steps this repository does not automate). A signed `.crx` is not built:
+that needs a private signing key that must not live in the repo.
+
 ## How to use it
 
 1. **Open the popup** on a page. It scans automatically (`SCANNING` → `READY`); `RESCAN PAGE` scans again, for example
