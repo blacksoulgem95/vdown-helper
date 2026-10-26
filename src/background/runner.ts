@@ -33,6 +33,7 @@ import { getTabState } from './tabState';
 import { installReplay, pruneReplay, removeReplay } from './replay';
 import {
   cancelInOffscreen,
+  stopInOffscreen,
   closeOffscreen,
   offscreenAlive,
   releaseInOffscreen,
@@ -118,6 +119,8 @@ export async function submit(raw: DownloadRequest): Promise<Result<{ jobId: stri
       return fail(`inspect:${e instanceof Error ? e.message : 'failed'}`);
     }
   }
+  // A live recording needs a stream that really is live (the inspection above decides, not the request).
+  if (req.liveRecord && ((!req.isHls && !req.isDash) || !req.live)) return fail('not-live');
   // Capturing and recording only exist for what the page holds: anything else claiming to be one is refused.
   if ((req.capture || req.record) && !isDataLabel(req.sourceUrl)) return fail('unsafe-url');
   if (isDataLabel(req.sourceUrl)) {
@@ -214,7 +217,7 @@ function offscreenPlan(
   plan: Plan,
   maxMemoryMb: number,
   segmentConcurrency: number,
-  recordMaxMb: number,
+  record: { mb: number; minutes: number },
 ): OffscreenPlan {
   return {
     pipeline: plan.pipeline as OffscreenPlan['pipeline'],
@@ -224,7 +227,8 @@ function offscreenPlan(
     audio: plan.audio,
     maxMemoryMb,
     segmentConcurrency,
-    recordMaxMb,
+    recordMaxMb: record.mb,
+    recordMaxMinutes: record.minutes,
   };
 }
 
@@ -260,13 +264,10 @@ async function runJob(id: string): Promise<void> {
     if ((job.staged || job.request.held) && plan.pipeline === 'native') plan.pipeline = 'file-staged';
     if (plan.pipeline === 'native') await runNative(job);
     else {
-      await runInOffscreenDoc(
-        job,
-        plan,
-        settings.maxMemoryMb,
-        settings.segmentConcurrency,
-        settings.recordMaxMb,
-      );
+      await runInOffscreenDoc(job, plan, settings.maxMemoryMb, settings.segmentConcurrency, {
+        mb: settings.recordMaxMb,
+        minutes: settings.recordMaxMinutes,
+      });
       if (job.request.capture) void captureInPage(job);
       else if (job.request.record)
         void recordInPage(job, settings.recordMaxMinutes * 60, settings.recordMaxMb * 1024 * 1024);
@@ -377,9 +378,9 @@ async function runInOffscreenDoc(
   plan: Plan,
   maxMemoryMb: number,
   concurrency: number,
-  recordMaxMb: number,
+  record: { mb: number; minutes: number },
 ): Promise<void> {
-  await runInOffscreen(job.id, job.request, offscreenPlan(plan, maxMemoryMb, concurrency, recordMaxMb));
+  await runInOffscreen(job.id, job.request, offscreenPlan(plan, maxMemoryMb, concurrency, record));
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -470,6 +471,7 @@ export async function handleOffscreenEvent(ev: OffscreenEvent): Promise<void> {
             ...withProgress(j, { fraction: 1, bytesDone: part.bytes, bytesTotal: part.bytes }, now),
             chromeDownloadId: downloadId,
             ...(ev.skipped && part.id === ev.jobId ? { skipped: ev.skipped } : {}),
+            ...(ev.gaps && part.id === ev.jobId ? { gaps: ev.gaps } : {}),
           }));
           startPolling();
         } catch (e) {
@@ -605,8 +607,11 @@ export async function jobAction(
     }
     case 'stop': {
       // Stop and save: the recording ends here and what was recorded is kept (cancel would discard it).
-      if (!canStop(job) || !job.request.held) return fail('not-supported');
-      await finishRecordingInPage(job.request.tabId, job.request.held.frameId ?? 0, jobId);
+      if (!canStop(job)) return fail('not-supported');
+      if (job.request.liveRecord) await stopInOffscreen(jobId);
+      else if (job.request.held)
+        await finishRecordingInPage(job.request.tabId, job.request.held.frameId ?? 0, jobId);
+      else return fail('not-supported');
       return ok();
     }
     case 'retry': {

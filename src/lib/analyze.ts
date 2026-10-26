@@ -210,7 +210,8 @@ export function mediaPlaylistVerdict(p: HlsMediaPlaylist): Downloadability {
     const sample = p.encryption.some((m) => m === 'SAMPLE-AES' || m === 'SAMPLE-AES-CTR');
     return verdict('protected', sample ? 'sample-aes' : 'drm');
   }
-  if (!p.endList) return verdict('unsupported', 'live', 'live-or-event');
+  // A stream that is still being made cannot be downloaded, but it can be recorded as it goes by.
+  if (!p.endList) return verdict('downloadable', 'ok', 'live-recordable');
   if (p.encryption.includes('AES-128')) return verdict('downloadable', 'ok', 'aes-128');
   return verdict('downloadable', 'ok');
 }
@@ -729,7 +730,9 @@ function analyzeDash(r: MediaResource, text: string, url: string): MediaResource
     // Encrypted with ClearKey: only downloadable once its key can be obtained (not implemented yet).
     r.downloadability = verdict('unsupported', 'dash-clearkey');
   } else if (m.type === 'dynamic') {
-    r.downloadability = verdict('unsupported', 'live', 'live-or-event');
+    r.downloadability = top
+      ? verdict('downloadable', 'ok', 'live-recordable')
+      : verdict('unsupported', 'no-segments');
   } else if (!top) {
     r.downloadability = verdict('unsupported', 'no-segments');
   } else {

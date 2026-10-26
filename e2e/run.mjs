@@ -284,29 +284,45 @@ await step('separate audio rendition and AES-128 playlists are recognised', asyn
   assert(aes.downloadability.status === 'downloadable', 'aes should be downloadable');
 });
 
-await step('protected, live, plain M3U and DASH are classified honestly (never downloadable)', async () => {
-  const expect = [
-    ['/hls-drm/index.m3u8', 'protected', 'sample-aes'],
-    ['/hls-live/index.m3u8', 'unsupported', 'live'],
-    ['/lists/playlist.m3u', 'unsupported', 'plain-m3u'],
-    ['/dash/manifest.mpd', 'unsupported', 'malformed'],
-    ['/dash-live/manifest.mpd', 'unsupported', 'live'],
-    ['/dash-drm/manifest.mpd', 'protected', 'drm'],
-  ];
-  for (const [path, status, reason] of expect) {
-    const r = byPath(state, path);
-    assert(r, `${path} not detected`);
-    assert(
-      r.downloadability.status === status && r.downloadability.reason === reason,
-      `${path}: ${JSON.stringify(r.downloadability)}`,
-    );
-    const card = popup.locator(`[data-resource-id="${r.id}"]`);
-    assert(
-      await card.getByRole('button', { name: 'DOWNLOAD' }).isDisabled(),
-      `${path}: DOWNLOAD must be disabled`,
-    );
-  }
-});
+await step(
+  'protected, plain M3U and malformed DASH are classified honestly; live streams are offered for recording only',
+  async () => {
+    const expect = [
+      ['/hls-drm/index.m3u8', 'protected', 'sample-aes'],
+      ['/lists/playlist.m3u', 'unsupported', 'plain-m3u'],
+      ['/dash/manifest.mpd', 'unsupported', 'malformed'],
+      ['/dash-drm/manifest.mpd', 'protected', 'drm'],
+    ];
+    for (const [path, status, reason] of expect) {
+      const r = byPath(state, path);
+      assert(r, `${path} not detected`);
+      assert(
+        r.downloadability.status === status && r.downloadability.reason === reason,
+        `${path}: ${JSON.stringify(r.downloadability)}`,
+      );
+      const card = popup.locator(`[data-resource-id="${r.id}"]`);
+      assert(
+        await card.getByRole('button', { name: 'DOWNLOAD' }).isDisabled(),
+        `${path}: DOWNLOAD must be disabled`,
+      );
+    }
+    // A live stream cannot be downloaded as a file, but it can be recorded: the card offers RECORD, never DOWNLOAD.
+    for (const path of ['/hls-live/index.m3u8', '/dash-live/manifest.mpd']) {
+      const r = byPath(state, path);
+      assert(r, `${path} not detected`);
+      assert(
+        r.downloadability.status === 'downloadable' && r.downloadability.detail === 'live-recordable',
+        `${path}: ${JSON.stringify(r.downloadability)}`,
+      );
+      const card = popup.locator(`[data-resource-id="${r.id}"]`);
+      await card.getByRole('button', { name: 'RECORD', exact: true }).waitFor();
+      assert(
+        (await card.getByRole('button', { name: 'DOWNLOAD' }).count()) === 0,
+        `${path}: no DOWNLOAD for a live stream`,
+      );
+    }
+  },
+);
 
 await step(
   'cross-origin: CORS-open CDN works, CORS-closed CDN is INACCESSIBLE with an access button',
@@ -2956,6 +2972,245 @@ await step(
     }
   },
 );
+
+// ---- Live and event streams (VDH-040): the server shows 2 s segments one after the other as time passes
+async function openLive(src, params = {}) {
+  const clock = `c${Math.random().toString(36).slice(2, 8)}`;
+  const q = new URLSearchParams({ src, id: clock, ...params });
+  const pg = await ctx.newPage();
+  await pg.goto(`${A}/pages/live.html?${q}`);
+  await pg.waitForFunction(() => window.ready === true, null, { timeout: 15000 });
+  const id = await ext(
+    async (u) => (await chrome.tabs.query({})).filter((t) => t.url?.startsWith(u)).at(-1)?.id,
+    `${A}/pages/live.html`,
+  );
+  const pop = await openPopup(id);
+  await pop.getByRole('status').filter({ hasText: 'READY' }).waitFor({ timeout: 45000 });
+  const st = (await ext((i) => chrome.storage.session.get(`tab:${i}`), id))[`tab:${id}`];
+  return { pg, pop, id, clock, st, r: st.resources.find((x) => x.url.includes(`/__live/${src}`)) };
+}
+// Starts the stream's clock again (so the stream is "just beginning" when the recording starts), then clicks RECORD.
+async function recordLive(live) {
+  const known = new Set((await jobs()).map((j) => j.id));
+  await fetch(`${A}/__live/start?id=${live.clock}`, { method: 'POST' });
+  await live.pop
+    .locator(`[data-resource-id="${live.r.id}"]`)
+    .getByRole('button', { name: 'RECORD', exact: true })
+    .click();
+  const job = await until(
+    async () => (await jobs()).find((j) => j.request.liveRecord && !known.has(j.id)),
+    'the live job',
+    15000,
+    100,
+  );
+  return job;
+}
+const jobById = async (id) => (await jobs()).find((j) => j.id === id);
+const startTimes = (file) =>
+  Object.fromEntries(probe(file).raw.streams.map((s) => [s.codec_type, Number(s.start_time)]));
+
+await step(
+  'live HLS: the card offers RECORD (not DOWNLOAD); Stop saves what was recorded as a decodable MP4',
+  async () => {
+    const live = await openLive('hls/index.m3u8', { len: 60 });
+    const r = live.r;
+    assert(r && r.kind === 'hls-media', `resource ${JSON.stringify(r?.kind)}`);
+    assert(
+      r.downloadability.status === 'downloadable' && r.downloadability.detail === 'live-recordable',
+      JSON.stringify(r.downloadability),
+    );
+    const card = live.pop.locator(`[data-resource-id="${r.id}"]`);
+    assert(
+      (await card.getByRole('button', { name: 'DOWNLOAD' }).count()) === 0,
+      'no DOWNLOAD for a live stream',
+    );
+    assert((await card.innerText()).includes('Follows the stream'), 'the card explains what RECORD does');
+    await shot(live.pop, 'popup-live');
+    const job = await recordLive(live);
+    const running = await until(
+      async () => {
+        const j = await jobById(job.id);
+        return j.stage === 'recording' && (j.progress.elapsedSec ?? 0) >= 6 ? j : undefined;
+      },
+      'six seconds of recording',
+      60000,
+      300,
+    );
+    assert(running.progress.bytesDone > 0, 'bytes are counted while recording');
+    await live.pop.getByRole('button', { name: 'Stop and save' }).click();
+    const done = await jobFinished((j) => j.id === job.id, 90000);
+    assert(done.stage === 'completed', `stage ${done.stage}: ${JSON.stringify(done.error)}`);
+    assert(/\.mp4$/.test(done.request.filename), done.request.filename);
+    const stages = await stagesOf(job.id);
+    assert(
+      stages.includes('recording') && stages.includes('merging') && !stages.includes('encoding'),
+      `stages ${stages}`,
+    );
+    const file = fileOf(done);
+    const p = probe(file);
+    assert(p.codecs.includes('h264') && p.codecs.includes('aac'), `${p.codecs}`);
+    assert(p.duration >= 6 && p.duration < 16, `duration ${p.duration}`);
+    assert(decodeErrors(file) === '', 'decode errors');
+    assert(!done.gaps, `no gaps expected: ${done.gaps}`);
+    await live.pop.close();
+    await live.pg.close();
+  },
+);
+
+await step(
+  'live HLS: a stream that ends by itself is saved whole (all 7 segments), without pressing Stop',
+  async () => {
+    const live = await openLive('hls/index.m3u8', { len: 7 });
+    const job = await recordLive(live);
+    const done = await jobFinished((j) => j.id === job.id, 90000);
+    assert(done.stage === 'completed', `stage ${done.stage}: ${JSON.stringify(done.error)}`);
+    const file = fileOf(done);
+    const p = probe(file);
+    assert(Math.abs(p.duration - 14) < 1.2, `duration ${p.duration}`);
+    assert(decodeErrors(file) === '', 'decode errors');
+    assert(!done.gaps, `gaps ${done.gaps}`);
+    await live.pop.close();
+    await live.pg.close();
+  },
+);
+
+await step(
+  'live HLS: a segment the server dropped is a counted gap, not the end of the recording',
+  async () => {
+    const live = await openLive('hls/index.m3u8', { len: 7, gone: '3' });
+    const job = await recordLive(live);
+    const done = await jobFinished((j) => j.id === job.id, 90000);
+    assert(done.stage === 'completed', `stage ${done.stage}: ${JSON.stringify(done.error)}`);
+    assert(done.gaps === 1, `gaps ${done.gaps}`);
+    const p = probe(fileOf(done));
+    // the timeline keeps the real time of the other segments: the missing 2 s are a hole, not squeezed out
+    assert(Math.abs(p.duration - 14) < 1.5, `duration ${p.duration}`);
+    await live.pop.getByText('1 segment(s) were no longer available').waitFor({ timeout: 10000 });
+    await live.pop.close();
+    await live.pg.close();
+  },
+);
+
+await step(
+  'live HLS with a separate audio playlist: both tracks are recorded and keep their real offset',
+  async () => {
+    const live = await openLive('hlssep/master.m3u8', { len: 7, audioskip: 1 });
+    assert(live.r?.kind === 'hls-master', `kind ${live.r?.kind}`);
+    assert(live.r.downloadability.detail === 'live-recordable', JSON.stringify(live.r.downloadability));
+    const job = await recordLive(live);
+    assert(job.request.audioUrl, 'a separate audio track is recorded too');
+    const done = await jobFinished((j) => j.id === job.id, 90000);
+    assert(done.stage === 'completed', `stage ${done.stage}: ${JSON.stringify(done.error)}`);
+    const file = fileOf(done);
+    const p = probe(file);
+    assert(p.types.includes('video') && p.types.includes('audio'), `streams ${p.types}`);
+    // the audio playlist never had the first segment: the audio starts 2 s after the video, as it did on the wire
+    const t = startTimes(file);
+    assert(
+      t.audio - t.video > 1.4 && t.audio - t.video < 2.6,
+      `audio starts ${t.audio - t.video} s after the video`,
+    );
+    assert(decodeErrors(file) === '', 'decode errors');
+    await live.pop.close();
+    await live.pg.close();
+  },
+);
+
+await step('live DASH (dynamic manifest): video and audio are recorded until the stream ends', async () => {
+  const live = await openLive('dash/manifest.mpd', { len: 7 });
+  assert(live.r?.kind === 'dash', `kind ${live.r?.kind}`);
+  assert(live.r.downloadability.detail === 'live-recordable', JSON.stringify(live.r.downloadability));
+  const job = await recordLive(live);
+  const done = await jobFinished((j) => j.id === job.id, 90000);
+  assert(done.stage === 'completed', `stage ${done.stage}: ${JSON.stringify(done.error)}`);
+  const file = fileOf(done);
+  const p = probe(file);
+  assert(p.codecs.includes('h264') && p.codecs.includes('aac'), `${p.codecs}`);
+  assert(Math.abs(p.duration - 14) < 2, `duration ${p.duration}`);
+  assert(decodeErrors(file) === '', 'decode errors');
+  assert(!done.gaps, `gaps ${done.gaps}`);
+  await live.pop.close();
+  await live.pg.close();
+});
+
+await step(
+  'live: Cancel discards the recording; a forged live request for a stream that is not live is refused',
+  async () => {
+    const live = await openLive('hls/index.m3u8', { len: 60 });
+    const job = await recordLive(live);
+    await until(async () => (await jobById(job.id)).stage === 'recording', 'recording', 15000, 100);
+    await new Promise((r) => setTimeout(r, 3000));
+    await ext(
+      (i) =>
+        chrome.runtime.sendMessage({
+          channel: 'vdown',
+          type: 'job-action',
+          payload: { jobId: i, action: 'cancel' },
+        }),
+      job.id,
+    );
+    const done = await jobFinished((j) => j.id === job.id, 30000);
+    assert(done.stage === 'cancelled' && !done.filePath, `stage ${done.stage}`);
+    await live.pop.close();
+    await live.pg.close();
+
+    const forged = await ext(
+      (req) =>
+        chrome.runtime.sendMessage({ channel: 'vdown', type: 'start-download', payload: { request: req } }),
+      {
+        resourceId: 'forged-live',
+        sourceUrl: `${A}/hls/v360/index.m3u8`,
+        tabId,
+        pageUrl: `${A}/pages/main.html`,
+        host: '127.0.0.1',
+        mode: 'original',
+        container: 'original',
+        audioFormat: 'mp3',
+        audioBitrate: 192,
+        filename: 'x.mp4',
+        subfolder: '',
+        qualityLabel: 'x',
+        sourceFormat: 'hls',
+        isHls: true,
+        hasMuxedAudio: true,
+        hasVideo: true,
+        liveRecord: true,
+      },
+    );
+    assert(
+      forged.ok === false,
+      `a live recording of a finished stream was accepted: ${JSON.stringify(forged)}`,
+    );
+  },
+);
+
+await step('live: a recording stops by itself at the configured limit and is saved', async () => {
+  const prev = await ext(async () => (await chrome.storage.local.get('settings')).settings);
+  await ext(
+    (s) => chrome.storage.local.set({ settings: { ...s, schemaVersion: 1, recordMaxMinutes: 1 } }),
+    prev ?? {},
+  );
+  try {
+    const live = await openLive('hls/index.m3u8', { len: 120 });
+    const started = Date.now();
+    const job = await recordLive(live);
+    const done = await jobFinished((j) => j.id === job.id, 150000).catch(async (e) => {
+      throw new Error(
+        `${e.message}: ${JSON.stringify((await jobById(job.id))?.progress)} ${(await jobById(job.id))?.stage}`,
+      );
+    });
+    assert(done.stage === 'completed', `stage ${done.stage}: ${JSON.stringify(done.error)}`);
+    const took = (Date.now() - started) / 1000;
+    assert(took > 55 && took < 100, `stopped after ${took} s, expected about 60`);
+    const p = probe(fileOf(done));
+    assert(p.duration >= 58 && p.duration < 70, `duration ${p.duration}`);
+    assert(decodeErrors(fileOf(done)) === '', 'decode errors');
+    await live.pop.close();
+    await live.pg.close();
+  } finally {
+    await ext((s) => chrome.storage.local.set({ settings: s }), prev ?? {});
+  }
+});
 
 await step('capture: EME-protected playback is never captured', async () => {
   const { pg, id } = await openMse('?eme=1');

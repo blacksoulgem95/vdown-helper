@@ -535,6 +535,8 @@ function pipelineText(plan: Plan): string {
       return t('pipeCapture');
     case 'record':
       return t('pipeRecord');
+    case 'live':
+      return t('pipeLive');
   }
 }
 

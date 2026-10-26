@@ -354,3 +354,57 @@ describe('a real ffmpeg-generated manifest', () => {
     expect(a.durationSec).toBeCloseTo(6, 0);
   });
 });
+
+describe('dynamic (live) manifests', () => {
+  const START = '2026-01-01T00:00:00Z';
+  const LIVE = mpd(
+    `<Period start="PT0S"><AdaptationSet contentType="video" mimeType="video/mp4">
+       <SegmentTemplate timescale="1000" duration="2000" startNumber="1" initialization="init.mp4" media="seg-$Number$.m4s"/>
+       <Representation id="v" bandwidth="1000000" codecs="avc1.4d401e"/>
+     </AdaptationSet></Period>`,
+    `type="dynamic" availabilityStartTime="${START}" minimumUpdatePeriod="PT2S" timeShiftBufferDepth="PT8S"`,
+  );
+  const at = (sec: number) => Date.parse(START) + sec * 1000;
+  const expand = (nowSec: number) => {
+    const r = parseDash(LIVE, URL0);
+    if (!r.ok) throw new Error('parse');
+    const m = r.manifest;
+    const p = m.periods[mainPeriodIndex(m)]!;
+    return { m, e: expandSegments(m, p, p.representations[0]!, at(nowSec)) };
+  };
+
+  it('reads the clock attributes', () => {
+    const r = parseDash(LIVE, URL0);
+    expect(r.ok && r.manifest).toMatchObject({
+      type: 'dynamic',
+      availabilityStartMs: Date.parse(START),
+      minimumUpdateSec: 2,
+      timeShiftBufferSec: 8,
+    });
+  });
+
+  it('lists the segments that are complete now, within the time-shift window, numbered from startNumber', () => {
+    const { e } = expand(21); // segment k ends at 2(k+1) s: segments 0..9 are complete
+    const urls = e.segments.map((s) => s.uri.split('/').pop());
+    expect(urls).toEqual(['seg-7.m4s', 'seg-8.m4s', 'seg-9.m4s', 'seg-10.m4s']);
+    expect(e.init?.uri).toBe('https://cdn.example/show/init.mp4');
+  });
+
+  it('moves with the clock, and lists nothing before the first segment is complete', () => {
+    expect(expand(1).e.segments).toEqual([]);
+    expect(expand(2.5).e.segments.map((s) => s.uri.split('/').pop())).toEqual(['seg-1.m4s']);
+    expect(expand(30).e.segments.at(-1)?.uri).toMatch(/seg-15\.m4s$/);
+  });
+
+  it('uses the last period as the main one', () => {
+    const r = parseDash(
+      mpd(
+        `<Period id="a" start="PT0S"><AdaptationSet mimeType="video/mp4"><SegmentTemplate timescale="1" duration="2" media="a$Number$.m4s"/><Representation id="v" bandwidth="1"/></AdaptationSet></Period>
+         <Period id="b" start="PT100S"><AdaptationSet mimeType="video/mp4"><SegmentTemplate timescale="1" duration="2" media="b$Number$.m4s"/><Representation id="v" bandwidth="1"/></AdaptationSet></Period>`,
+        `type="dynamic" availabilityStartTime="${START}"`,
+      ),
+      URL0,
+    );
+    expect(r.ok && mainPeriodIndex(r.manifest)).toBe(1);
+  });
+});

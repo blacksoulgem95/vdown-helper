@@ -1,6 +1,6 @@
 import type { OffscreenCommand } from '@/types/messages';
 import { handleIngestPort } from './ingest';
-import { cancelJob, releaseJob, startJob } from './jobs';
+import { cancelJob, releaseJob, startJob, stopJob } from './jobs';
 import './startup';
 
 chrome.runtime.onMessage.addListener((raw: unknown, sender) => {
@@ -12,6 +12,9 @@ chrome.runtime.onMessage.addListener((raw: unknown, sender) => {
       break;
     case 'cancel-job':
       if (cmd.jobId) cancelJob(cmd.jobId);
+      break;
+    case 'stop-job':
+      if (cmd.jobId) stopJob(cmd.jobId);
       break;
     case 'release-job':
       if (cmd.jobId) void releaseJob(cmd.jobId);

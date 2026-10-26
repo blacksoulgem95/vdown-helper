@@ -67,6 +67,18 @@ describe('recording', () => {
   });
 });
 
+describe('live recording stages', () => {
+  it('a live recording is recorded, then joined', () => {
+    expect(stagesFor(plan({ pipeline: 'live', requiresFfmpeg: true }))).toEqual([
+      'detected',
+      'preparing',
+      'recording',
+      'merging',
+      'completed',
+    ]);
+  });
+});
+
 describe('stagesFor: only the stages a job really passes through', () => {
   it('native', () =>
     expect(stagesFor(plan())).toEqual(['detected', 'preparing', 'downloading', 'completed']));

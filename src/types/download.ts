@@ -97,6 +97,11 @@ export interface DownloadRequest {
    * reached. `prefer` is the container wanted; WebM is used when this Chrome cannot record it.
    */
   record?: { prefer: 'webm' | 'mp4' };
+  /**
+   * Record a live or event stream (HLS, DASH dynamic) from now until the user presses Stop, the stream ends or a
+   * limit is reached. The stream must really be live (the background checks).
+   */
+  liveRecord?: true;
   /** A plain file (image, document, archive, page asset) saved as it is. */
   file?: { kind: 'image' | 'document' | 'archive' | 'asset' };
   /** Source description for the queue display. */
@@ -161,6 +166,8 @@ export interface DownloadJob {
   filePath?: string;
   /** Files the job could not include (a ZIP lists them inside the archive). */
   skipped?: number;
+  /** A live recording: segments the server no longer had when they were due (gaps in the recording). */
+  gaps?: number;
   /** Number of times the user retried. */
   attempts: number;
 }

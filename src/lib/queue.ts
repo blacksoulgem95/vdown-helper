@@ -40,7 +40,8 @@ export class IllegalTransitionError extends Error {
 /** Only the stages this job will really pass through, in order (never a simulated one). */
 export function stagesFor(plan: Pick<Plan, 'pipeline' | 'video' | 'audio' | 'requiresFfmpeg'>): JobStage[] {
   // A recording has no download: it records until it is stopped, and is then tidied up (duration, index) by a copy.
-  if (plan.pipeline === 'record') return ['detected', 'preparing', 'recording', 'merging', 'completed'];
+  if (plan.pipeline === 'record' || plan.pipeline === 'live')
+    return ['detected', 'preparing', 'recording', 'merging', 'completed'];
   const stages: JobStage[] = ['detected', 'preparing', 'downloading'];
   if (plan.requiresFfmpeg) {
     const reencodes = plan.audio === 'transcode' || plan.video === 'transcode';

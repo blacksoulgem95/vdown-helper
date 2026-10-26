@@ -140,11 +140,12 @@ describe('HLS', () => {
   it.each([
     ['AES-128 is downloadable', AES, 'downloadable', 'ok'],
     ['SAMPLE-AES is protected', SAMPLE_AES, 'protected', 'sample-aes'],
-    ['live streams are unsupported', LIVE, 'unsupported', 'live'],
+    ['live streams can be recorded, not downloaded', LIVE, 'downloadable', 'ok'],
   ])('media playlist: %s', async (_n, text, status, reason) => {
     const url = 'https://cdn.example/p.m3u8';
     const [r] = await analyzeCandidates([cand(url)], ctx, fetcher({ [url]: okText(text, url) }));
     expect(r?.downloadability).toMatchObject({ status, reason });
+    if (text === LIVE) expect(r?.downloadability.detail).toBe('live-recordable');
   });
   it('separates plain M3U, DASH and malformed playlists from HLS', async () => {
     const out = await analyzeCandidates(
@@ -252,9 +253,9 @@ describe('DASH', () => {
     );
     expect(r.downloadability).toMatchObject({ status: 'unsupported', reason: 'dash-clearkey' });
   });
-  it('live (dynamic) manifests are not downloadable yet', async () => {
+  it('live (dynamic) manifests can be recorded, not downloaded', async () => {
     const r = await run(mpd('', 'type="dynamic" minimumUpdatePeriod="PT2S"'));
-    expect(r.downloadability).toMatchObject({ status: 'unsupported', reason: 'live' });
+    expect(r.downloadability).toMatchObject({ status: 'downloadable', detail: 'live-recordable' });
     expect(r.playlist?.live).toBe(true);
   });
   it('malformed manifests are reported, not guessed at', async () => {

@@ -85,6 +85,9 @@ export function MediaCard({
   const [open, setOpen] = useState(false);
   const panelId = useId();
   const badge = statusBadge(r.downloadability);
+  // A live or event stream cannot be downloaded, but it can be recorded as it goes by.
+  const liveRecordable =
+    r.downloadability.status === 'downloadable' && r.downloadability.detail === 'live-recordable';
   const ok = r.downloadability.status === 'downloadable';
   const res = resolutionLabel(r.height, r.width);
   const size =
@@ -139,9 +142,9 @@ export function MediaCard({
         </div>
       )}
 
-      {r.held?.kind === 'mse' || r.held?.kind === 'stream' ? (
+      {r.held?.kind === 'mse' || r.held?.kind === 'stream' || liveRecordable ? (
         <div className="mt-2.5 space-y-2">
-          {ok && r.held.kind === 'stream' && (
+          {ok && (r.held?.kind === 'stream' || liveRecordable) && (
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant="primary"
@@ -153,10 +156,12 @@ export function MediaCard({
               </Button>
             </div>
           )}
-          {ok && r.held.kind === 'stream' && (
-            <p className="text-[10.5px] leading-snug text-muted">{t('recordHint')}</p>
+          {ok && (r.held?.kind === 'stream' || liveRecordable) && (
+            <p className="text-[10.5px] leading-snug text-muted">
+              {liveRecordable ? t('recordLiveHint') : t('recordHint')}
+            </p>
           )}
-          {ok && r.held.kind === 'mse' && (
+          {ok && r.held?.kind === 'mse' && (
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant="primary"
@@ -176,7 +181,7 @@ export function MediaCard({
               </Button>
             </div>
           )}
-          {ok && r.held.kind === 'mse' && (
+          {ok && r.held?.kind === 'mse' && (
             <p className="text-[10.5px] leading-snug text-muted">{t('captureHint')}</p>
           )}
           <button

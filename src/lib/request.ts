@@ -364,6 +364,7 @@ export function planFromRequest(
   if (req.zip) return planZipJob(req, limits);
   if (req.capture) return planCapture();
   if (req.record) return planRecord(req);
+  if (req.liveRecord) return planLive(req);
   const segmented = req.isHls || req.isDash === true;
   const input: PlanInput = {
     isHls: segmented, // the planner's "isHls" means: a segmented stream (HLS or DASH)
@@ -397,6 +398,44 @@ function planCapture(): Plan {
     audio: 'copy',
     extension: 'mp4',
     usesBitrate: false,
+  };
+}
+
+/**
+ * A live or event stream (HLS, DASH dynamic) recorded by the extension itself. Each track is staged on disk as the
+ * stream goes by; the result is joined with a stream copy (MP4, or the stream's own TS when it is too large for that).
+ */
+function planLive(req: Pick<DownloadRequest, 'isHls' | 'isDash' | 'hasVideo' | 'live'>): Plan {
+  const issues: Plan['issues'] = [];
+  if (!req.isHls && req.isDash !== true) issues.push('unsupported-source');
+  return {
+    valid: issues.length === 0,
+    issues,
+    pipeline: 'live',
+    requiresFfmpeg: true,
+    video: req.hasVideo ? 'copy' : 'none',
+    audio: 'copy',
+    extension: req.hasVideo ? 'mp4' : 'm4a',
+    usesBitrate: false,
+  };
+}
+
+/** A recording request for a live stream the scan found, with the quality the user's settings prefer. */
+export function buildLiveRequest(resource: MediaResource, settings: Settings): DownloadRequest {
+  const choices = defaultChoices(resource, settings);
+  const req = buildRequest(resource, settings, {
+    ...choices,
+    mode: resource.mediaType === 'audio' ? 'original' : 'video-audio',
+    container: 'original',
+  });
+  const ext = req.hasVideo ? 'mp4' : 'm4a';
+  const base = req.filename ? req.filename.replace(/\.[a-z0-9]{1,5}$/i, '') : resource.title;
+  return {
+    ...req,
+    filename: withExtension(base || resource.title, ext),
+    qualityLabel: 'LIVE',
+    live: true,
+    liveRecord: true,
   };
 }
 
@@ -585,6 +624,7 @@ export function sanitizeRequest(req: DownloadRequest): DownloadRequest | undefin
       req.capture && (req.capture.speed === 'fast' || req.capture.speed === 'realtime')
         ? { speed: req.capture.speed }
         : undefined,
+    liveRecord: req.liveRecord === true && (req.isHls || req.isDash === true) ? true : undefined,
     record:
       req.record && (req.record.prefer === 'webm' || req.record.prefer === 'mp4')
         ? { prefer: req.record.prefer }

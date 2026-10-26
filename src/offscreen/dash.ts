@@ -6,7 +6,7 @@ import {
   protectionsOf,
 } from '@/lib/dash/parser';
 import { parseDashRef } from '@/lib/dash/ref';
-import type { DashRepresentation } from '@/types/dash';
+import type { DashManifest, DashRepresentation } from '@/types/dash';
 import type { HlsSegment } from '@/types/hls';
 import { PipelineError } from './errors';
 import {
@@ -28,11 +28,14 @@ export async function loadDashRepresentation(
   refUrl: string,
   signal: AbortSignal,
   creds: Creds,
+  /** A live recording reads a dynamic manifest at the current time. */
+  live = false,
 ): Promise<{
   rep: DashRepresentation;
   segments: HlsSegment[];
   init?: HlsSegment['map'];
   durationSec: number;
+  manifest: DashManifest;
 }> {
   const ref = parseDashRef(refUrl);
   if (!ref) throw new PipelineError('invalid', 'Not a DASH representation reference');
@@ -40,7 +43,7 @@ export async function loadDashRepresentation(
   const parsed = parseDash(text, url);
   if (!parsed.ok) throw new PipelineError('invalid', `Manifest error: ${parsed.error.code}`);
   const m = parsed.manifest;
-  if (m.type === 'dynamic') throw new PipelineError('invalid', 'Live streams cannot be downloaded');
+  if (m.type === 'dynamic' && !live) throw new PipelineError('invalid', 'Live streams cannot be downloaded');
   const period = m.periods[mainPeriodIndex(m)];
   const rep = period?.representations.find((r) => r.id === ref.repId);
   if (!period || !rep)
@@ -51,7 +54,7 @@ export async function loadDashRepresentation(
   }
   try {
     const expanded = expandSegments(m, period, rep);
-    return { rep, ...expanded };
+    return { rep, manifest: m, ...expanded };
   } catch (e) {
     if (e instanceof DashExpandError) throw new PipelineError('invalid', e.message);
     throw e;
@@ -76,4 +79,26 @@ export async function stageDashRepresentation(
     fragmented: true,
     durationSec: expanded.durationSec,
   });
+}
+
+/** One look at a live (dynamic) DASH representation: the segments available now, and when to look again. */
+export async function pollDashRepresentation(
+  refUrl: string,
+  signal: AbortSignal,
+  creds: Creds,
+): Promise<{
+  segments: HlsSegment[];
+  ended: boolean;
+  refreshSec: number;
+}> {
+  const loaded = await loadDashRepresentation(refUrl, signal, creds, true);
+  const m = loaded.manifest;
+  const segs = loaded.segments;
+  const segSec = segs.length ? Math.max(0.5, segs[segs.length - 1]!.duration) : 2;
+  return {
+    segments: segs,
+    // A manifest that has turned static lists the whole of what was streamed: the stream is over.
+    ended: m.type === 'static',
+    refreshSec: Math.min(10, Math.max(1, m.minimumUpdateSec ?? segSec / 2)),
+  };
 }

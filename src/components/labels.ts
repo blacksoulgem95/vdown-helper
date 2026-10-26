@@ -52,6 +52,7 @@ export function reasonText(d: Downloadability): string {
   if (d.status === 'downloadable' && d.detail === 'in-page-data') return t('reasonInPageData');
   if (d.status === 'downloadable' && d.detail === 'in-page-blob') return t('reasonInPageBlob');
   if (d.status === 'downloadable' && d.detail === 'mse-capturable') return t('reasonMseCapturable');
+  if (d.status === 'downloadable' && d.detail === 'live-recordable') return t('reasonLiveRecordable');
   if (d.status === 'downloadable' && d.detail === 'stream-recordable') return t('reasonStreamRecordable');
   return base;
 }

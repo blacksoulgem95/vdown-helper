@@ -89,6 +89,11 @@ export function QueueItem({
           {t('jobSkipped', job.skipped)}
         </p>
       ) : null}
+      {done && job.gaps ? (
+        <p role="status" className="mt-1.5 text-[11px] leading-snug text-magenta">
+          {t('jobGaps', job.gaps)}
+        </p>
+      ) : null}
       {done && job.filePath && (
         <p className="mono mt-1.5 truncate text-[10.5px] text-muted" title={job.filePath}>
           {job.filePath.split(/[\\/]/).pop()}

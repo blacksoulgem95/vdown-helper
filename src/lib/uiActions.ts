@@ -10,6 +10,7 @@ import {
   audioOptions,
   buildRequest,
   buildCaptureRequest,
+  buildLiveRequest,
   buildRecordRequest,
   buildZipRequest,
   defaultChoices,
@@ -268,8 +269,12 @@ export async function startCapture(
   return res.ok ? { ok: true, jobId: res.jobId } : { ok: false, error: describeError(res.error) };
 }
 
+/** Record a live stream (HLS, DASH dynamic), or a MediaStream the page plays, until Stop. */
 export async function startRecord(resource: MediaResource, settings: Settings): Promise<StartOutcome> {
-  const request = buildRecordRequest(resource, settings);
+  const request =
+    resource.held?.kind === 'stream'
+      ? buildRecordRequest(resource, settings)
+      : buildLiveRequest(resource, settings);
   const res = await send('start-download', { request });
   return res.ok ? { ok: true, jobId: res.jobId } : { ok: false, error: describeError(res.error) };
 }

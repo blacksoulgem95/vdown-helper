@@ -56,6 +56,17 @@ export async function cancelInOffscreen(jobId: string): Promise<void> {
   }
 }
 
+/** Finish a live recording and save what it has (the user pressed Stop). */
+export async function stopInOffscreen(jobId: string): Promise<void> {
+  if (!(await exists())) return;
+  const cmd: OffscreenCommand = { channel: 'vdown-offscreen', type: 'stop-job', jobId };
+  try {
+    await chrome.runtime.sendMessage(cmd);
+  } catch {
+    // The document may be closing.
+  }
+}
+
 /** Tell the offscreen document it can free the staged file and blob URL for this job. */
 export async function releaseInOffscreen(jobId: string): Promise<void> {
   if (!(await exists())) return;

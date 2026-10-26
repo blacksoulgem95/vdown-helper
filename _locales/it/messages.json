@@ -958,5 +958,17 @@
   },
   "optRecordMaxMb": {
     "message": "Registrazione più grande (MB)"
+  },
+  "reasonLiveRecordable": {
+    "message": "È uno stream live o evento, quindi non si può scaricare come file. Si può registrare: vdown-helper segue lo stream da ora finché premi Stop, lo stream termina o si raggiunge un limite (Impostazioni → Registrazione)."
+  },
+  "recordLiveHint": {
+    "message": "Segue lo stream da ora in poi e salva ciò che trasmette, senza ricodificare. Ferma e salva dalla coda in qualsiasi momento; Annulla scarta la registrazione."
+  },
+  "pipeLive": {
+    "message": "Registrazione live: lo stream viene seguito e ogni nuovo segmento è salvato appena appare, finché lo fermi, termina o si raggiunge un limite; poi le tracce sono unite con una copia dei flussi. Nulla viene ricodificato."
+  },
+  "jobGaps": {
+    "message": "$1 segmento/i non erano più disponibili al momento previsto e mancano nella registrazione."
   }
 }

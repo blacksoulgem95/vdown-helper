@@ -273,11 +273,21 @@ export function parseDash(text: string, url: string): DashParseResult {
     : undefined;
   const dur = total ?? summed;
   if (dur !== undefined) manifest.durationSec = dur;
+  if (type === 'dynamic') {
+    const ast = Date.parse(root.attrs['availabilityStartTime'] ?? '');
+    if (Number.isFinite(ast)) manifest.availabilityStartMs = ast;
+    const mup = parseIsoDuration(root.attrs['minimumUpdatePeriod']);
+    if (mup !== undefined) manifest.minimumUpdateSec = mup;
+    const tsb = parseIsoDuration(root.attrs['timeShiftBufferDepth']);
+    if (tsb !== undefined) manifest.timeShiftBufferSec = tsb;
+  }
   return { ok: true, manifest };
 }
 
 /** The period that holds the main content: the longest one (ads and bumpers are short periods). */
 export function mainPeriodIndex(m: DashManifest): number {
+  // A live stream has no durations: what is on now is the last period.
+  if (m.type === 'dynamic') return Math.max(0, m.periods.length - 1);
   let best = 0;
   let bestDur = -1;
   m.periods.forEach((p, i) => {
@@ -320,6 +330,8 @@ export function expandSegments(
   m: DashManifest,
   period: DashPeriod,
   rep: DashRepresentation,
+  /** The clock of a dynamic manifest (ms since the epoch); defaults to now. */
+  nowMs: number = Date.now(),
 ): ExpandedRepresentation {
   const a = rep.addressing;
   const segments: HlsSegment[] = [];
@@ -352,6 +364,9 @@ export function expandSegments(
       return u;
     };
     const pDur = periodDuration(m, period);
+    // A dynamic manifest has no period end: what exists is decided by the clock (ISO 23009-1 5.3.9.5.3).
+    const live = m.type === 'dynamic' && m.availabilityStartMs !== undefined;
+    const elapsedSec = live ? (nowMs - (m.availabilityStartMs as number)) / 1000 - period.startSec : 0;
     if (a.timeline) {
       let time = a.timeline[0]?.t ?? 0;
       let number = a.startNumber;
@@ -363,7 +378,12 @@ export function expandSegments(
           // "until the next S, or the end of the period"
           const next = a.timeline[idx + 1]?.t;
           const end =
-            next ?? (pDur !== undefined ? a.presentationTimeOffset + pDur * a.timescale : undefined);
+            next ??
+            (pDur !== undefined
+              ? a.presentationTimeOffset + pDur * a.timescale
+              : live
+                ? a.presentationTimeOffset + elapsedSec * a.timescale
+                : undefined);
           if (end === undefined)
             throw new DashExpandError('An open-ended timeline needs a known period duration');
           repeats = Math.max(0, Math.ceil((end - time) / s.d) - 1);
@@ -373,6 +393,15 @@ export function expandSegments(
           time += s.d;
           number++;
         }
+      }
+    } else if (a.duration && live && pDur === undefined) {
+      // Segment k is complete (available) once its end time has passed; only the time-shift window is kept.
+      const segSec = a.duration / a.timescale;
+      const latest = Math.floor(elapsedSec / segSec) - 1;
+      const depth = m.timeShiftBufferSec ?? 60;
+      const first = Math.max(0, latest - Math.ceil(depth / segSec) + 1);
+      for (let k = first; k <= latest; k++) {
+        push(url(a.startNumber + k, a.presentationTimeOffset + k * a.duration), segSec);
       }
     } else if (a.duration) {
       if (pDur === undefined)

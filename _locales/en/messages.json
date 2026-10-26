@@ -958,5 +958,17 @@
   },
   "optRecordMaxMb": {
     "message": "Largest recording (MB)"
+  },
+  "reasonLiveRecordable": {
+    "message": "This is a live or event stream, so it cannot be downloaded as a file. It can be recorded: vdown-helper follows the stream from now on until you press Stop, the stream ends, or a limit (Settings → Recording) is reached."
+  },
+  "recordLiveHint": {
+    "message": "Follows the stream from now on and saves what it plays, without re-encoding. Stop and save from the queue at any time; Cancel discards the recording."
+  },
+  "pipeLive": {
+    "message": "Live recording: the stream is followed and each new segment is saved as it appears, until you stop it, it ends, or a limit is reached; then the tracks are joined with a stream copy. Nothing is re-encoded."
+  },
+  "jobGaps": {
+    "message": "$1 segment(s) were no longer available when due and are missing from the recording."
   }
 }

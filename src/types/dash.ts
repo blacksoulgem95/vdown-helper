@@ -79,6 +79,12 @@ export interface DashManifest {
   url: string;
   type: 'static' | 'dynamic';
   durationSec?: number;
+  /** `availabilityStartTime` of a dynamic manifest, in ms since the epoch. */
+  availabilityStartMs?: number;
+  /** `minimumUpdatePeriod`: how often a dynamic manifest asks to be fetched again. */
+  minimumUpdateSec?: number;
+  /** `timeShiftBufferDepth`: how far back a dynamic manifest keeps segments. */
+  timeShiftBufferSec?: number;
   periods: DashPeriod[];
 }
 

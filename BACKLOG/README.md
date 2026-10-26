@@ -57,7 +57,7 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-037](VDH-037-file-types-tabs-zip.md) | Images, documents, archives and page assets with ZIP download | done | P1 | ui | VDH-033 |
 | [VDH-038](VDH-038-blob-mse-capture.md) | Blob files and MSE capture | done | P0 | content | VDH-033 |
 | [VDH-039](VDH-039-mediastream-recording.md) | MediaStream recording | done | P1 | content | VDH-038 |
-| [VDH-040](VDH-040-live-recording.md) | Live and event stream recording | todo | P1 | background | VDH-034 |
+| [VDH-040](VDH-040-live-recording.md) | Live and event stream recording | done | P1 | background | VDH-034 |
 | [VDH-041](VDH-041-open-site-metadata.md) | Metadata and open-site recognition | todo | P2 | lib | VDH-033 |
 | [VDH-042](VDH-042-tabbed-popup.md) | Tabbed popup with frame grouping | in-progress | P1 | ui | VDH-037 |
 | [VDH-043](VDH-043-test-players-fixtures.md) | Realistic test players and fixtures | in-progress | P1 | test | VDH-033 |

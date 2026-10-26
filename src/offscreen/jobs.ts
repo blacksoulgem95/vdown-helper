@@ -13,9 +13,12 @@ import { storageReady } from './startup';
 import { buildSubtitle } from './subtitle';
 import { buildZip } from './zip';
 import { assembleCapture } from './capture';
+import { dashLiveSource, hlsLiveSource, liveProgress, recordLiveTrack, type LiveTrackResult } from './live';
 
 interface Running {
   abort: AbortController;
+  /** Live recordings: aborted when the user presses Stop (the recording then ends normally). */
+  stop?: AbortController;
   blobUrl?: string;
 }
 const running = new Map<string, Running>();
@@ -54,6 +57,11 @@ export function startJob(jobId: string, request: DownloadRequest, plan: Offscree
   });
 }
 
+/** Finish a live recording and keep what it has (cancel would discard it). */
+export function stopJob(jobId: string): void {
+  running.get(jobId)?.stop?.abort();
+}
+
 export function cancelJob(jobId: string): void {
   running.get(jobId)?.abort.abort();
 }
@@ -64,6 +72,116 @@ export async function releaseJob(jobId: string): Promise<void> {
   if (r?.blobUrl) URL.revokeObjectURL(r.blobUrl);
   running.delete(jobId);
   await removeJobDir(jobId);
+}
+
+/**
+ * Record a live or event stream (HLS or DASH dynamic): one file per track (video, and a separate audio when there is
+ * one), then a stream copy into MP4 when the result fits the memory limit. Stop keeps what was recorded.
+ */
+async function recordLive(
+  jobId: string,
+  req: DownloadRequest,
+  plan: OffscreenPlan,
+  entry: Running,
+  send: (p: JobProgress, force?: boolean) => void,
+): Promise<void> {
+  const { signal } = entry.abort;
+  const stop = new AbortController();
+  entry.stop = stop;
+  const origins = req.credentialedOrigins ?? [];
+  const urls = [req.sourceUrl, ...(req.audioUrl ? [req.audioUrl] : [])];
+  const maxBytes = ((plan.recordMaxMb ?? 4096) * MB) / urls.length;
+  const maxSeconds = (plan.recordMaxMinutes ?? 120) * 60;
+  const seen = urls.map(() => ({ seconds: 0, bytes: 0, gaps: 0 }));
+  stage(jobId, 'recording');
+  const tracks = urls.map((url, i) =>
+    recordLiveTrack({
+      jobId,
+      fileName: (frag) => `${i === 0 ? 'video' : 'audio'}.${frag ? 'mp4' : 'ts'}`,
+      source: req.isDash ? dashLiveSource(url, signal, origins) : hlsLiveSource(url, signal, origins),
+      concurrency: plan.segmentConcurrency,
+      credentialedOrigins: origins,
+      signal,
+      stop: stop.signal,
+      onLimit: () => stop.abort(),
+      maxSeconds,
+      maxBytes,
+      onProgress: (p) => {
+        seen[i] = p;
+        send({ ...liveProgress(seen), elapsedSec: Math.max(...seen.map((t) => t.seconds)) });
+      },
+    }),
+  );
+  let results: LiveTrackResult[];
+  try {
+    results = await Promise.all(tracks);
+  } catch (e) {
+    stop.abort(); // the other track must not run on alone
+    await Promise.allSettled(tracks);
+    throw e;
+  }
+  stage(jobId, 'merging');
+  const [main, audio] = results as [LiveTrackResult, LiveTrackResult | undefined];
+  const gaps = results.reduce((n, r) => n + r.gaps, 0);
+  const total = results.reduce((n, r) => n + r.bytes, 0);
+  const hasVideo = req.hasVideo;
+  const extension = hasVideo ? 'mp4' : 'm4a';
+  let blob: Blob | undefined;
+  if (total <= (plan.maxMemoryMb * MB) / 2) {
+    try {
+      const output = `out.${extension}`;
+      const data = await runFfmpeg({
+        inputs: audio ? [main.file, audio.file] : [main.file],
+        output,
+        signal,
+        durationSec: Math.max(1, ...results.map((r) => r.seconds)),
+        onProgress: (fraction) => send(fraction === undefined ? {} : { fraction }),
+        args: (paths) =>
+          buildFfmpegArgs({
+            mode: hasVideo ? 'video-audio' : 'audio-only',
+            extension,
+            video: hasVideo ? 'copy' : 'none',
+            audio: 'copy',
+            videoPath: paths[0] as string,
+            ...(paths[1] ? { audioPath: paths[1] } : {}),
+            audioFormat: 'm4a',
+            audioBitrate: 192,
+            keepOffsets: paths.length > 1,
+            output,
+          }),
+      });
+      if (data.byteLength > 0)
+        blob = new Blob([data as Uint8Array<ArrayBuffer>], {
+          type: MIME_BY_EXTENSION[extension] ?? 'application/octet-stream',
+        });
+    } catch (e) {
+      if (asPipelineError(e) instanceof CancelledError) throw e;
+      if (audio) throw e; // two tracks cannot be saved as one without the join
+      log.warn('could not convert the recording, keeping it as recorded:', asPipelineError(e).message);
+    }
+  } else if (audio) {
+    throw new PipelineError(
+      'too-large',
+      'The recording is too large to join its video and audio in memory: raise the memory limit in Settings',
+    );
+  }
+  let outExtension = extension;
+  if (!blob) {
+    // The recording as the stream delivered it: TS, or fragmented MP4.
+    outExtension = main.fragmented ? (hasVideo ? 'mp4' : 'm4a') : 'ts';
+    blob = new Blob([main.file], { type: MIME_BY_EXTENSION[outExtension] ?? 'application/octet-stream' });
+  }
+  if (signal.aborted) throw new CancelledError();
+  entry.blobUrl = URL.createObjectURL(blob);
+  emit({
+    channel: 'vdown-offscreen-event',
+    type: 'ready',
+    jobId,
+    blobUrl: entry.blobUrl,
+    bytes: blob.size,
+    extension: outExtension,
+    ...(gaps > 0 ? { gaps } : {}),
+  });
 }
 
 /** The file extension of a recorder's output type. */
@@ -95,7 +213,7 @@ async function execute(
   const maxBytes = plan.requiresFfmpeg ? plan.maxMemoryMb * MB : undefined;
   const credentialedOrigins = req.credentialedOrigins ?? [];
   // A recording is not a download: its stage (RECORDING) starts when the page has begun to record.
-  if (plan.pipeline !== 'record') stage(jobId, 'downloading');
+  if (plan.pipeline !== 'record' && plan.pipeline !== 'live') stage(jobId, 'downloading');
 
   // A recording of a MediaStream: the page connects and streams the recorder's output as it is made.
   const recordStarted = Date.now();
@@ -146,6 +264,12 @@ async function execute(
       : undefined;
   heldBytes?.catch(() => undefined); // reported where it is awaited
   await storageReady;
+
+  // Recording of a live stream: look at it until Stop, its end or a limit, then join the tracks with a stream copy.
+  if (plan.pipeline === 'live') {
+    await recordLive(jobId, req, plan, entry, send);
+    return;
+  }
 
   // Recording of a MediaStream: tidy the recorder's output with a stream copy (duration, index), within the memory limit.
   if (recorded) {

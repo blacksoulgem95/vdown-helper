@@ -41,7 +41,9 @@ export type Pipeline =
   /** A MediaSource player recorded in the page, assembled into one or more files by copying streams (no re-encode). */
   | 'capture'
   /** A MediaStream recorded in the page until Stop, saved as WebM or MP4 (no re-encode of what the recorder wrote). */
-  | 'record';
+  | 'record'
+  /** A live or event stream (HLS, DASH dynamic) recorded by the extension until Stop, the end of the stream or a limit. */
+  | 'live';
 
 export type StreamHandling = 'copy' | 'transcode';
 

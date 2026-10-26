@@ -9,7 +9,7 @@ const ff = (args) =>
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...args], { stdio: 'inherit' });
 
 export function ensureFixtures(dir) {
-  if (existsSync(join(dir, '.complete12'))) return;
+  if (existsSync(join(dir, '.complete14'))) return;
   mkdirSync(dir, { recursive: true });
   for (const d of [
     'media',
@@ -38,6 +38,10 @@ export function ensureFixtures(dir) {
     'gen',
     'hls-subs/sub-en',
     'dash-vod/t',
+    'live/hls',
+    'live/hlsv',
+    'live/hlsa',
+    'live/dash',
   ]) {
     mkdirSync(join(dir, d), { recursive: true });
   }
@@ -605,5 +609,57 @@ video/index.m3u8
     join(dir, 'big/index.m3u8'),
     '#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:10.0,\nseg0.ts\n#EXTINF:10.0,\nseg1.ts\n#EXT-X-ENDLIST\n',
   );
-  writeFileSync(join(dir, '.complete12'), 'ok');
+  // ---- Live streams: 70 s of media cut into 2 s segments. The server (server.mjs, /__live/) shows them one after the
+  // other as time passes, like a live encoder would; nothing here is a playlist.
+  const liveSrc = [
+    '-f',
+    'lavfi',
+    '-i',
+    'testsrc2=size=160x90:rate=5',
+    '-f',
+    'lavfi',
+    '-i',
+    'sine=frequency=523:sample_rate=44100',
+    '-t',
+    '70',
+  ];
+  const liveEnc = ['-g', '10', '-keyint_min', '10', '-sc_threshold', '0'];
+  const x264 = ['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'ultrafast', ...liveEnc];
+  const hlsOut = (outDir, extra) =>
+    ff([
+      ...liveSrc,
+      ...extra,
+      '-f',
+      'hls',
+      '-hls_time',
+      '2',
+      '-hls_playlist_type',
+      'vod',
+      '-hls_segment_filename',
+      join(dir, outDir, 'seg%d.ts'),
+      join(dir, outDir, 'index.m3u8'),
+    ]);
+  hlsOut('live/hls', [...x264, '-c:a', 'aac', '-b:a', '64k']);
+  hlsOut('live/hlsv', [...x264, '-an']);
+  hlsOut('live/hlsa', ['-vn', '-c:a', 'aac', '-b:a', '64k']);
+  ff([
+    ...liveSrc,
+    ...x264,
+    '-c:a',
+    'aac',
+    '-b:a',
+    '64k',
+    '-f',
+    'dash',
+    '-seg_duration',
+    '2',
+    '-use_template',
+    '1',
+    '-use_timeline',
+    '0',
+    '-adaptation_sets',
+    'id=0,streams=v id=1,streams=a',
+    join(dir, 'live/dash/manifest.mpd'),
+  ]);
+  writeFileSync(join(dir, '.complete14'), 'ok');
 }

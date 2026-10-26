@@ -78,6 +78,8 @@ export type OffscreenCommand =
       plan: OffscreenPlan;
     }
   | { channel: 'vdown-offscreen'; type: 'cancel-job'; jobId: string }
+  /** Finish a live recording and save what it has. */
+  | { channel: 'vdown-offscreen'; type: 'stop-job'; jobId: string }
   | { channel: 'vdown-offscreen'; type: 'release-job'; jobId: string };
 
 export interface OffscreenPlan {
@@ -90,7 +92,8 @@ export interface OffscreenPlan {
     | 'subtitle'
     | 'zip'
     | 'capture'
-    | 'record';
+    | 'record'
+    | 'live';
   extension: string;
   requiresFfmpeg: boolean;
   video: 'copy' | 'transcode' | 'none';
@@ -99,6 +102,7 @@ export interface OffscreenPlan {
   segmentConcurrency: number;
   /** Largest recording (MB) a MediaStream or live recording may reach. */
   recordMaxMb?: number;
+  recordMaxMinutes?: number;
 }
 
 /** Offscreen document -> background events. */
@@ -113,6 +117,8 @@ export type OffscreenEvent =
       bytes: number;
       /** Files left out of the result (a ZIP). */
       skipped?: number;
+      /** A live recording: segments that were gone when they were due. */
+      gaps?: number;
       /** Extension of the produced file when the pipeline decides it late (a capture). */
       extension?: string;
       /** A capture split into parts at a quality switch: the other parts, each its own download. */

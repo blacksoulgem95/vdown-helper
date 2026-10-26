@@ -204,6 +204,8 @@ export async function loadMediaPlaylist(
   url: string,
   signal: AbortSignal,
   creds: Creds,
+  /** A live recording reads playlists that have no end yet. */
+  allowLive = false,
 ): Promise<HlsMediaPlaylist> {
   check(signal);
   const res = await fetchText(url, fetch, creds(url));
@@ -222,7 +224,7 @@ export async function loadMediaPlaylist(
       'protected',
       'This stream uses DRM or SAMPLE-AES encryption, which is not supported',
     );
-  if (!p.endList) throw new PipelineError('invalid', 'Live streams cannot be downloaded');
+  if (!p.endList && !allowLive) throw new PipelineError('invalid', 'Live streams cannot be downloaded');
   if (p.segments.length > MAX_SEGMENTS)
     throw new PipelineError('invalid', 'The playlist has too many segments');
   return p;
@@ -282,6 +284,46 @@ export type SegmentListOptions = Omit<StageOptions, 'playlistUrl'> & {
  * decrypting AES-128 where a key applies, writing each init section once, with caps, retries and cancellation.
  */
 export async function stageSegmentList(opts: SegmentListOptions): Promise<StagedMedia> {
+  const out = await createStageFile(
+    opts.jobId,
+    typeof opts.fileName === 'function' ? opts.fileName(opts.fragmented) : opts.fileName,
+  );
+  try {
+    await writeSegments(opts, out, { mapKey: '', skipped: 0 });
+    const file = await out.finish();
+    return { file, bytes: out.bytes, fragmented: opts.fragmented, durationSec: opts.durationSec };
+  } catch (e) {
+    await out.abort();
+    throw e;
+  }
+}
+
+/** Where segments are appended, and what is remembered between calls (a live recording appends in batches). */
+export interface SegmentSink {
+  write(data: Uint8Array): Promise<void>;
+  readonly bytes: number;
+}
+export interface SegmentSinkState {
+  /** The initialisation section last written, so a later batch does not repeat it. */
+  mapKey: string;
+  /** Segments the server no longer had (HTTP 404/410) and that were left out. */
+  skipped: number;
+  /** Seconds of media written. */
+  seconds?: number;
+}
+
+/**
+ * Fetch `opts.segs` (in parallel, written in order) and append them to `out`. With `tolerateMissing`, a segment that
+ * the server no longer has is skipped (and counted) instead of failing the whole recording.
+ */
+export async function writeSegments(
+  opts: Omit<SegmentListOptions, 'fileName'> & {
+    fileName?: SegmentListOptions['fileName'];
+    tolerateMissing?: boolean;
+  },
+  out: SegmentSink,
+  state: SegmentSinkState,
+): Promise<void> {
   const { signal, segs } = opts;
   const creds = credentialsFor(opts.credentialedOrigins);
   if (segs.length > MAX_SEGMENTS) throw new PipelineError('invalid', 'The stream has too many segments');
@@ -308,19 +350,15 @@ export async function stageSegmentList(opts: SegmentListOptions): Promise<Staged
     return p;
   };
 
-  const out = await createStageFile(
-    opts.jobId,
-    typeof opts.fileName === 'function' ? opts.fileName(opts.fragmented) : opts.fileName,
-  );
   const meter = new SpeedMeter();
   const started = Date.now();
   let downloadedBytes = 0;
   let writeIdx = 0;
   let nextIdx = 0;
   const window = Math.max(2, opts.concurrency * 3);
-  const done = new Map<number, Uint8Array>();
+  const done = new Map<number, Uint8Array | null>();
   const waiters: Array<() => void> = [];
-  let lastMapKey = '';
+  let lastMapKey = state.mapKey;
   let writing: Promise<void> = Promise.resolve();
 
   const report = () => {
@@ -354,8 +392,16 @@ export async function stageSegmentList(opts: SegmentListOptions): Promise<Staged
     }
   };
 
-  const fetchSegment = async (seg: HlsSegment): Promise<Uint8Array> => {
-    let data = await getBytes(seg.uri, signal, creds, seg.byteRange);
+  const fetchSegment = async (seg: HlsSegment): Promise<Uint8Array | null> => {
+    let data: Uint8Array;
+    try {
+      data = await getBytes(seg.uri, signal, creds, seg.byteRange);
+    } catch (e) {
+      // a live stream drops old segments: one that is gone is a gap in the recording, not the end of it
+      if (opts.tolerateMissing && e instanceof PipelineError && /^HTTP (404|410)$/.test(e.message))
+        return null;
+      throw e;
+    }
     downloadedBytes += data.byteLength;
     const key = seg.key;
     if (key && key.method === 'AES-128') data = await decryptBytes(key, data, seg.sequence);
@@ -365,10 +411,16 @@ export async function stageSegmentList(opts: SegmentListOptions): Promise<Staged
   const flush = (): Promise<void> => {
     writing = writing.then(async () => {
       for (;;) {
-        const data = done.get(writeIdx);
-        if (!data) break;
+        if (!done.has(writeIdx)) break;
+        const data = done.get(writeIdx) ?? null;
         done.delete(writeIdx);
         const seg = segs[writeIdx] as HlsSegment;
+        if (data === null) {
+          state.skipped++;
+          writeIdx++;
+          for (const w of waiters.splice(0)) w();
+          continue;
+        }
         if (seg.map) {
           const mapKey = `${seg.map.uri}|${seg.map.byteRange?.offset ?? ''}`;
           if (mapKey !== lastMapKey) {
@@ -378,9 +430,11 @@ export async function stageSegmentList(opts: SegmentListOptions): Promise<Staged
               init = await decryptBytes(seg.map.key, init, seg.sequence);
             await out.write(init);
             lastMapKey = mapKey;
+            state.mapKey = mapKey;
           }
         }
         await out.write(data);
+        state.seconds = (state.seconds ?? 0) + seg.duration;
         writeIdx++;
         if (out.bytes > (opts.maxBytes ?? MAX_TOTAL_BYTES)) {
           throw new PipelineError('too-large', 'The download exceeds the configured size limit');
@@ -411,11 +465,6 @@ export async function stageSegmentList(opts: SegmentListOptions): Promise<Staged
     const n = Math.max(1, Math.min(opts.concurrency, segs.length));
     await Promise.all(Array.from({ length: n }, worker));
     await flush();
-    const file = await out.finish();
-    return { file, bytes: out.bytes, fragmented: opts.fragmented, durationSec: opts.durationSec };
-  } catch (e) {
-    await out.abort();
-    throw e;
   } finally {
     // Wake anything still parked so a failed job does not leave dangling promises.
     for (const w of waiters.splice(0)) w();

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS } from '@/lib/settings';
 import {
   audioOptions,
+  buildLiveRequest,
   buildRecordRequest,
   buildRequest,
   defaultChoices,
@@ -455,5 +456,59 @@ describe('recording a MediaStream', () => {
     expect(sanitizeRequest(base)?.held).toBeUndefined();
     const forged = { ...base, record: { prefer: 'avi' } } as unknown as typeof base;
     expect(sanitizeRequest(forged)?.record).toBeUndefined();
+  });
+});
+
+describe('recording a live stream', () => {
+  const live = makeResource('https://a.com/live/master.m3u8', {
+    title: 'Concert',
+    kind: 'hls-master',
+    format: 'hls',
+    variants: [
+      {
+        uri: 'https://a.com/live/720.m3u8',
+        bandwidth: 3_000_000,
+        width: 1280,
+        height: 720,
+        codecs: 'avc1.4d401e,mp4a.40.2',
+      },
+    ],
+    playlist: { playlistClass: 'hls-master', encryption: [], live: true, fragmented: false },
+    downloadability: { status: 'downloadable', reason: 'ok', detail: 'live-recordable' },
+  });
+
+  it('builds a request that records the preferred variant and is flagged live', () => {
+    const req = buildLiveRequest(live, DEFAULT_SETTINGS);
+    expect(req).toMatchObject({
+      sourceUrl: 'https://a.com/live/720.m3u8',
+      isHls: true,
+      live: true,
+      liveRecord: true,
+      qualityLabel: 'LIVE',
+    });
+    expect(req.filename).toMatch(/^Concert.*\.mp4$/);
+  });
+
+  it('plans the live pipeline (a stream copy), where an ordinary download of a live stream is refused', () => {
+    const req = buildLiveRequest(live, DEFAULT_SETTINGS);
+    const limits = { maxMemoryMb: 2048, maxEncodeDurationSec: 0 };
+    expect(planFromRequest(req, limits)).toMatchObject({
+      valid: true,
+      pipeline: 'live',
+      video: 'copy',
+      audio: 'copy',
+    });
+    const { liveRecord: _l, ...download } = req;
+    void _l;
+    expect(planFromRequest(download, limits)).toMatchObject({ valid: false, issues: ['live-stream'] });
+  });
+
+  it('only a segmented stream can be recorded live', () => {
+    const req = buildLiveRequest(live, DEFAULT_SETTINGS);
+    expect(sanitizeRequest(req)?.liveRecord).toBe(true);
+    expect(sanitizeRequest({ ...req, isHls: false, isDash: false })?.liveRecord).toBeUndefined();
+    expect(planFromRequest({ ...req, isHls: false }, { maxMemoryMb: 1, maxEncodeDurationSec: 0 }).valid).toBe(
+      false,
+    );
   });
 });
