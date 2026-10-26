@@ -2,17 +2,24 @@ import { registerHandlers } from '@/lib/messaging';
 import { SETTINGS_KEY, loadSettings, runMigrations } from '@/lib/settings';
 import { isExtensionPage, isSafeFetchUrl, log } from '@/lib/security';
 import type { OffscreenEvent } from '@/types/messages';
-import { inspectVariant, scanTab } from './detect';
+import { inspectVariant, rescanTab, scanTab } from './detect';
+import { addManual, manualUrl } from './manual';
 import { listJobs } from './jobStore';
 import { syncHook } from './hooks';
 import { hasHostAccess } from './pageFetch';
-import { setObserverEnabled } from './observer';
+import { initObserver, setObserverEnabled } from './observer';
 import { clearHistory, handleOffscreenEvent, jobAction, reconcile, submit, syncById } from './runner';
 import { clearTabState, getTabState } from './tabState';
 
 registerHandlers({
   scan: async ({ tabId }) => ({ ok: true, state: await scanTab(tabId) }),
   'get-state': async ({ tabId }) => ({ ok: true, state: await getTabState(tabId) }),
+  'add-url': async ({ tabId, url }) => {
+    const link = manualUrl(url);
+    if (!link) return { ok: false, error: 'unsafe-url' };
+    await addManual(tabId, link);
+    return { ok: true, state: await rescanTab(tabId) };
+  },
   'inspect-variant': async ({ tabId, url, frameId }) => {
     try {
       return { ok: true, inspection: await inspectVariant(tabId, url, frameId) };
@@ -88,5 +95,6 @@ chrome.runtime.onInstalled.addListener(({ reason }) => {
 chrome.runtime.onStartup.addListener(() => void reconcile());
 
 // Runs on every service-worker start (listeners above must be registered synchronously at top level).
+initObserver();
 void syncObserver();
 void reconcile();

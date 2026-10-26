@@ -65,7 +65,8 @@ export function OptionsApp() {
     } else {
       await update({ autoScan: false, networkObserver: false });
       await send('set-observer', { enabled: false });
-      // Header replay stays: sites allowed one by one still use it.
+      // Header replay stays: sites allowed one by one still use it. The observer goes with all-sites access.
+      await chrome.permissions.remove({ permissions: ['webRequest'] }).catch(() => false);
       await chrome.permissions.remove(ALL_SITES).catch(() => false);
     }
     await refreshPermissions();
@@ -77,6 +78,8 @@ export function OptionsApp() {
     }
     await update({ networkObserver: on });
     await send('set-observer', { enabled: on });
+    // The webRequest permission is held only while the observer is on, so a sleeping worker is never woken for nothing.
+    if (!on) await chrome.permissions.remove({ permissions: ['webRequest'] }).catch(() => false);
     await refreshPermissions();
   };
   const revokeAll = async () => {
