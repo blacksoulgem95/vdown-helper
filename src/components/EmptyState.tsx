@@ -33,7 +33,7 @@ export function EmptyState({
     cause === 'error'
       ? (errorText ?? '')
       : cause === 'blocked-frames'
-        ? `${t('noteFramesBlocked', blockedHosts ?? '')} ${t('allowEmbeddedHint')}`
+        ? `${t('noteFramesBlocked', blockedHosts ?? '')}. ${t('allowEmbeddedHint')}`
         : cause === 'reload'
           ? t('reloadForHook')
           : t('emptyBody');
