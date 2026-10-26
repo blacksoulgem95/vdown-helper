@@ -748,5 +748,14 @@
   },
   "subtitleLang": {
     "message": "Language: $1"
+  },
+  "reasonTooLarge": {
+    "message": "This embedded file is larger than the 32 MB limit for data: URLs."
+  },
+  "reasonInPageData": {
+    "message": "The file is embedded in the page itself (a data: URL). The page hands it over; the extension never fetches it."
+  },
+  "sourceInline": {
+    "message": "embedded in the page (data:)"
   }
 }

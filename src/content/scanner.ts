@@ -6,12 +6,18 @@
  * Fetches made here use the page's origin and cookies, exactly like the page's own player, so no extra host
  * permission is needed to read media the page itself can read.
  */
+import { dataHandle, dataLabel, inspectDataUrl } from '@/lib/dataUrl';
 import { fetchText, probeHeaders } from '@/lib/netprobe';
+import { pumpData, type PumpResult } from './ingest';
 import type { DetectionMethod, RawCandidate, ScanReport } from '@/types/media';
 
 const MEDIA_EXT =
-  /\.(mp4|m4v|webm|mkv|mov|ogv|ts|mp3|m4a|aac|wav|ogg|oga|opus|flac|m3u8|m3u|mpd|vtt|srt|ttml|dfxp)(?:$|[?#])/i;
+  /\.(mp4|m4v|webm|mkv|mov|ogv|ts|mp3|m4a|aac|wav|ogg|oga|opus|flac|aif|aiff|aifc|wma|flv|avi|wmv|asf|3gp|3g2|mpg|mpeg|mpe|m3u8|m3u|mpd|vtt|srt|ttml|dfxp)(?:$|[?#])/i;
 const MAX_CANDIDATES = 200;
+const MAX_HELD = 20;
+
+/** data: URLs found by the last scan, by handle. They stay in the page; only a label leaves it (see ingest.ts). */
+export const heldData = new Map<string, string>();
 const MAX_BLOCKED_FRAMES = 20;
 
 function abs(url: string | null | undefined, base: string): string | undefined {
@@ -58,6 +64,21 @@ function add(c: Collector, candidate: RawCandidate): void {
   c.candidates.push(candidate);
 }
 
+/** A data: media source: report a small label and its size, keep the data here. */
+function addData(c: Collector, raw: string, method: DetectionMethod, extra: Partial<RawCandidate>): void {
+  const info = inspectDataUrl(raw);
+  if (!info || !/^(video|audio)\//.test(info.mime) || heldData.size >= MAX_HELD) return;
+  const id = dataHandle(raw);
+  if (!heldData.has(id)) heldData.set(id, raw);
+  add(c, {
+    ...extra,
+    url: dataLabel(info.mime, id),
+    method,
+    mimeType: info.mime,
+    held: { kind: 'data', id, bytes: info.bytes },
+  });
+}
+
 function addUrl(
   c: Collector,
   raw: string | null | undefined,
@@ -65,6 +86,10 @@ function addUrl(
   method: DetectionMethod,
   extra: Partial<RawCandidate> = {},
 ): void {
+  if (raw && /^data:/i.test(raw)) {
+    addData(c, raw, method, extra);
+    return;
+  }
   const url = abs(raw, base);
   if (!url) return;
   if (url.startsWith('blob:')) {
@@ -114,7 +139,7 @@ function scanElements(c: Collector, doc: Document): void {
     // Standalone <source> not inside media elements (e.g. inside <picture> is irrelevant; keep only media-looking ones).
     for (const a of root.querySelectorAll<HTMLAnchorElement>('a[href]')) {
       const href = a.getAttribute('href');
-      if (href && MEDIA_EXT.test(href))
+      if (href && (MEDIA_EXT.test(href) || /^data:(video|audio)\//i.test(href)))
         addUrl(
           c,
           href,
@@ -141,6 +166,7 @@ function scanPerformance(c: Collector, base: string): void {
 }
 
 export function scan(): ScanReport {
+  heldData.clear();
   const c: Collector = {
     candidates: [],
     notes: { blobSources: 0, inaccessibleFrames: 0, blockedFrameOrigins: [] },
@@ -179,11 +205,21 @@ export interface VdhApi {
   scan: typeof scan;
   probeHeaders: (url: string) => ReturnType<typeof probeHeaders>;
   fetchText: (url: string) => ReturnType<typeof fetchText>;
+  /** Send the page-held bytes behind `handle` to the offscreen document of `jobId`. */
+  pumpHeld: (jobId: string, handle: string) => Promise<PumpResult>;
 }
 
 const api: VdhApi = {
   scan,
   probeHeaders: (url) => probeHeaders(url),
   fetchText: (url) => fetchText(url),
+  pumpHeld: async (jobId, handle) => {
+    // The handle is only known after a scan of this document: look again if the page changed since.
+    if (!heldData.has(handle)) scan();
+    const data = heldData.get(handle);
+    return data === undefined
+      ? { ok: false, error: 'The page no longer holds this data' }
+      : pumpData(jobId, data);
+  },
 };
 (globalThis as unknown as { __vdh?: VdhApi }).__vdh = api;

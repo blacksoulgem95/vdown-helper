@@ -20,6 +20,7 @@ import { Badge, Button, Notice, cx } from './ui';
 
 /** Short, token-free hint of where a resource lives, to tell apart cards that share a page title. */
 function sourceHint(r: MediaResource): string {
+  if (r.held) return t('sourceInline');
   const u = parseUrl(r.url);
   if (!u) return '';
   const tail = u.pathname.split('/').filter(Boolean).slice(-2).join('/');
@@ -202,14 +203,18 @@ export function MediaCard({
           )}
           <dt className="text-muted">URL</dt>
           <dd>
-            <button
-              type="button"
-              className="inline-flex items-center gap-1 text-neon hover:underline"
-              onClick={() => void navigator.clipboard.writeText(r.url)}
-            >
-              <Copy size={11} aria-hidden="true" />
-              {t('copyUrl')}
-            </button>
+            {r.held ? (
+              <span className="text-fg/85">{t('sourceInline')}</span>
+            ) : (
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 text-neon hover:underline"
+                onClick={() => void navigator.clipboard.writeText(r.url)}
+              >
+                <Copy size={11} aria-hidden="true" />
+                {t('copyUrl')}
+              </button>
+            )}
           </dd>
         </dl>
       )}

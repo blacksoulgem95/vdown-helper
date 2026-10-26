@@ -3,11 +3,14 @@ import type {
   Downloadability,
   MediaFormat,
   MediaResource,
+  PageHeld,
   PlaylistSummary,
   RawCandidate,
 } from '@/types/media';
 import { classifyPlaylist, parseHls } from './hls/parser';
 import { dashRef } from './dash/ref';
+import { exceedsHeldLimit, isDataLabel } from './dataUrl';
+import { MAX_HELD_BYTES } from '@/types/ingest';
 import {
   DashExpandError,
   expandSegments,
@@ -50,6 +53,7 @@ export interface AnalyzeOptions {
 
 interface Entry {
   url: string;
+  held?: PageHeld;
   methods: RawCandidate['method'][];
   frameId?: number;
   frameUrl?: string;
@@ -70,7 +74,8 @@ const clip = (s: string): string => (s.length > MAX_TEXT ? `${s.slice(0, MAX_TEX
 function collectEntries(cands: RawCandidate[]): Entry[] {
   const map = new Map<string, Entry>();
   for (const c of cands) {
-    if (!isSafeFetchUrl(c.url)) continue;
+    // A page-held source is only a label; the extension never fetches it, so it needs no fetchable URL.
+    if (c.held ? !isDataLabel(c.url) : !isSafeFetchUrl(c.url)) continue;
     const key = normalizeUrl(c.url);
     const prev = map.get(key);
     const hints = {
@@ -89,6 +94,7 @@ function collectEntries(cands: RawCandidate[]): Entry[] {
     } else {
       map.set(key, {
         url: c.url,
+        ...(c.held ? { held: c.held } : {}),
         methods: [c.method],
         hints,
         ...(c.frameId !== undefined ? { frameId: c.frameId } : {}),
@@ -157,6 +163,7 @@ function skeleton(e: Entry, ctx: AnalyzeContext, format: MediaFormat): MediaReso
   }
   if (e.hints.poster) r.poster = e.hints.poster;
   if (e.hints.language) r.language = e.hints.language;
+  if (e.held) r.held = e.held;
   if (e.frameId !== undefined) r.frameId = e.frameId;
   if (e.frameUrl) r.frameUrl = e.frameUrl;
   return r;
@@ -390,6 +397,17 @@ async function analyzeSubtitleFile(r: MediaResource, e: Entry, fetcher: Fetcher)
   return r;
 }
 
+/** Media embedded in the page as a data: URL: nothing to probe, its size is known and the page hands it over. */
+function analyzeHeld(r: MediaResource, e: Entry, ctx: AnalyzeContext): MediaResource {
+  const held = e.held as PageHeld;
+  r.sizeBytes = held.bytes;
+  if (!e.hints.title) r.title = clip(ctx.pageTitle) || r.host;
+  r.downloadability = exceedsHeldLimit(held.bytes)
+    ? verdict('unsupported', 'too-large', `${MAX_HELD_BYTES}`)
+    : verdict('downloadable', 'ok', 'in-page-data');
+  return r;
+}
+
 async function analyzeOne(
   e: Entry,
   ctx: AnalyzeContext,
@@ -398,6 +416,7 @@ async function analyzeOne(
 ): Promise<MediaResource> {
   const format = formatFromMime(e.hints.mimeType) ?? formatFromUrl(e.url) ?? 'unknown';
   const r = skeleton(e, ctx, format);
+  if (e.held) return analyzeHeld(r, e, ctx);
   if (e.hints.role === 'subtitle' || SUBTITLE_FILE_FORMATS.has(format))
     return analyzeSubtitleFile(r, e, fetcher);
   if (PLAYLIST_FORMATS.has(format)) return analyzePlaylist(r, fetcher, covered);

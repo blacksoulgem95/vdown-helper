@@ -8,7 +8,7 @@ const ff = (args) =>
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...args], { stdio: 'inherit' });
 
 export function ensureFixtures(dir) {
-  if (existsSync(join(dir, '.complete6'))) return;
+  if (existsSync(join(dir, '.complete8'))) return;
   mkdirSync(dir, { recursive: true });
   for (const d of [
     'media',
@@ -30,6 +30,8 @@ export function ensureFixtures(dir) {
     'dash-drm',
     'dash-live',
     'subs',
+    'formats',
+    'gen',
     'hls-subs/sub-en',
     'dash-vod/t',
   ]) {
@@ -341,6 +343,73 @@ video/index.m3u8
     vodMpd.replace('type="static"', 'type="dynamic" minimumUpdatePeriod="PT2S"'),
   );
 
+  // ---- Other container/audio formats: 2 s clips, each encoded with a codec typical of the format.
+  const clip = (name, args) => ff(['-i', sample, '-t', '2', ...args, join(dir, 'formats', name)]);
+  const v264 = ['-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'ultrafast'];
+  clip('clip.flv', [...v264, '-c:a', 'aac', '-f', 'flv']);
+  clip('clip.avi', ['-c:v', 'mpeg4', '-c:a', 'libmp3lame', '-f', 'avi']);
+  clip('clip.wmv', ['-c:v', 'wmv2', '-c:a', 'wmav2', '-f', 'asf']);
+  clip('clip.asf', ['-c:v', 'wmv2', '-c:a', 'wmav2', '-f', 'asf']);
+  clip('clip.3gp', [...v264, '-c:a', 'aac', '-f', '3gp']);
+  clip('clip.mpg', ['-c:v', 'mpeg2video', '-c:a', 'mp2', '-f', 'mpeg']);
+  clip('clip.aiff', ['-vn', '-c:a', 'pcm_s16be', '-f', 'aiff']);
+  clip('clip.wma', ['-vn', '-c:a', 'wmav2', '-f', 'asf']);
+  clip('clip.opus', ['-vn', '-c:a', 'libopus', '-f', 'opus']);
+
+  // ---- data: URLs: a tiny MP4 and MP3 embedded in a page (generated, so the page and the expected bytes agree)
+  const inlineMp4 = join(dir, 'gen/inline.mp4');
+  ff([
+    '-f',
+    'lavfi',
+    '-i',
+    'testsrc2=size=320x180:rate=10',
+    '-f',
+    'lavfi',
+    '-i',
+    'sine=frequency=330:sample_rate=44100',
+    '-t',
+    '1',
+    '-c:v',
+    'libx264',
+    '-pix_fmt',
+    'yuv420p',
+    '-preset',
+    'ultrafast',
+    '-c:a',
+    'aac',
+    '-b:a',
+    '48k',
+    '-movflags',
+    '+faststart',
+    inlineMp4,
+  ]);
+  const inlineMp3 = join(dir, 'gen/inline.mp3');
+  ff([
+    '-f',
+    'lavfi',
+    '-i',
+    'sine=frequency=550:sample_rate=44100',
+    '-t',
+    '1',
+    '-c:a',
+    'libmp3lame',
+    '-b:a',
+    '64k',
+    inlineMp3,
+  ]);
+  const b64 = (f) => readFileSync(f).toString('base64');
+  writeFileSync(
+    join(dir, 'gen/data.html'),
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Inline media page</title></head><body>
+<video id="v" controls muted title="Inline clip" src="data:video/mp4;base64,${b64(inlineMp4)}"></video>
+<audio id="a" controls><source src="data:audio/mpeg;base64,${b64(inlineMp3)}"></audio>
+<audio id="big"></audio>
+<script>
+  // 34.5 MB once decoded: over the 32 MB limit for data: URLs, so it must be reported as too large.
+  document.getElementById('big').setAttribute('src', 'data:audio/wav;base64,' + 'A'.repeat(46000000));
+</script></body></html>`,
+  );
+
   // ---- Subtitles (all hand-written text; nothing here needs ffmpeg)
   writeFileSync(
     join(dir, 'subs/en.vtt'),
@@ -416,5 +485,5 @@ video/index.m3u8
     join(dir, 'big/index.m3u8'),
     '#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:10.0,\nseg0.ts\n#EXTINF:10.0,\nseg1.ts\n#EXT-X-ENDLIST\n',
   );
-  writeFileSync(join(dir, '.complete6'), 'ok');
+  writeFileSync(join(dir, '.complete8'), 'ok');
 }

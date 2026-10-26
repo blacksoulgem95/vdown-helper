@@ -1,4 +1,4 @@
-import type { MediaFormat } from './media';
+import type { MediaFormat, PageHeld } from './media';
 
 export type OutputMode = 'video-audio' | 'audio-only' | 'video-only' | 'original';
 export type AudioFormat = 'mp3' | 'm4a' | 'aac' | 'wav';
@@ -63,6 +63,11 @@ export interface DownloadRequest {
    * stitched. `output`: keep the format found (WebVTT for stitched streams) or convert to SRT.
    */
   subtitle?: { output: 'srt' | 'original' };
+  /**
+   * The bytes are held by the page (data: URL). Set by the background from its own scan, never trusted from the UI;
+   * `sourceUrl` is then only a label and is never fetched.
+   */
+  held?: PageHeld;
   /** Source description for the queue display. */
   qualityLabel: string;
   sourceFormat: MediaFormat;

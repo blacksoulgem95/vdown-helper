@@ -12,6 +12,23 @@ const base: FfmpegArgsInput = {
   output: 'out.mp4',
 };
 
+describe('legacy containers', () => {
+  it('generates missing timestamps for every input (MPEG-PS, AVI and ASF copies need them)', () => {
+    const args = buildFfmpegArgs({
+      mode: 'original',
+      extension: 'mkv',
+      video: 'copy',
+      audio: 'copy',
+      videoPath: 'in.mpg',
+      audioFormat: 'mp3',
+      audioBitrate: 192,
+      output: 'out.mkv',
+    });
+    expect(args.slice(0, 4)).toEqual(['-hide_banner', '-y', '-fflags', '+genpts']);
+    expect(args.indexOf('+genpts')).toBeLessThan(args.indexOf('-i'));
+  });
+});
+
 describe('buildFfmpegArgs', () => {
   it('remuxes with stream copy only', () => {
     const a = buildFfmpegArgs(base);

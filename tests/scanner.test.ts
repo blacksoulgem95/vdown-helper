@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { scan } from '@/content/scanner';
+import { heldData, scan } from '@/content/scanner';
 
 function setBody(html: string) {
   document.body.innerHTML = html;
@@ -59,9 +59,45 @@ describe('content scanner', () => {
   it('ignores dangerous and non-http schemes', () => {
     setBody(`
       <video src="javascript:alert(1)"></video>
-      <a href="data:video/mp4;base64,AAAA.mp4">x</a>
+      <a href="data:text/html;base64,PHNjcmlwdD4=">x</a>
+      <a href="data:application/octet-stream;base64,AAAA.mp4">x</a>
       <a href="file:///tmp/x.mp4">y</a>`);
     expect(scan().candidates).toHaveLength(0);
+  });
+
+  it('reports data: media as a label and a size, and keeps the data in the page', () => {
+    const payload = 'A'.repeat(400);
+    const url = `data:video/mp4;base64,${payload}`;
+    setBody(
+      `<video src="${url}" title="Inline"></video><audio><source src="data:audio/mpeg,%FF%FB%90"></audio>`,
+    );
+    const r = scan();
+    expect(r.candidates).toHaveLength(2);
+    const [video, audio] = r.candidates;
+    expect(video).toMatchObject({
+      method: 'dom-element',
+      mimeType: 'video/mp4',
+      title: 'Inline',
+      held: { kind: 'data', bytes: 300 },
+    });
+    expect(video!.url).toMatch(/^data:video\/mp4;vdh=[0-9a-f]{8}$/);
+    expect(audio).toMatchObject({ method: 'dom-source', held: { kind: 'data', bytes: 3 } });
+    // nothing that leaves the page contains the payload
+    expect(JSON.stringify(r)).not.toContain(payload);
+    expect(heldData.get(video!.held!.id)).toBe(url);
+  });
+
+  it('ignores data: that is not media, is malformed, or comes in too large a number', () => {
+    setBody(
+      `<video src="data:image/png;base64,AAAA"></video><video src="data:video/mp4"></video>` +
+        Array.from(
+          { length: 30 },
+          (_, i) => `<video src="data:video/mp4;base64,${'QUJD'.repeat(i + 1)}"></video>`,
+        ).join(''),
+    );
+    const r = scan();
+    expect(r.candidates.every((c) => c.held)).toBe(true);
+    expect(r.candidates.length).toBe(20);
   });
 
   it('reads inside open shadow roots', () => {

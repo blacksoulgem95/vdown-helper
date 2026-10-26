@@ -33,7 +33,9 @@ function audioCodecArgs(i: FfmpegArgsInput): string[] {
  * the plan says otherwise. The planner (lib/compat) decides copy vs transcode; this just expresses it.
  */
 export function buildFfmpegArgs(i: FfmpegArgsInput): string[] {
-  const args = ['-hide_banner', '-y'];
+  // +genpts: legacy containers (MPEG program streams, some AVI/ASF) often carry no timestamps for copied packets,
+  // which Matroska/MP4 muxers refuse. Generating them changes nothing for files that already have them.
+  const args = ['-hide_banner', '-y', '-fflags', '+genpts'];
   if (i.mode === 'audio-only') {
     args.push('-i', i.audioPath ?? i.videoPath, '-vn', '-map', '0:a:0', ...audioCodecArgs(i));
     args.push(i.output);

@@ -1,10 +1,12 @@
 import { buildFfmpegArgs, MIME_BY_EXTENSION } from '@/lib/ffmpegArgs';
 import { log } from '@/lib/security';
+import { MAX_HELD_BYTES } from '@/types/ingest';
 import type { DownloadRequest, JobProgress, JobStage } from '@/types/download';
 import type { OffscreenEvent, OffscreenPlan } from '@/types/messages';
 import { CancelledError, PipelineError, asPipelineError } from './errors';
 import { runFfmpeg } from './ffmpeg';
 import { stageDashRepresentation } from './dash';
+import { expectIngest } from './ingest';
 import { stageDirectFile, stageHlsPlaylist, type StageOptions } from './hls';
 import { removeJobDir } from './opfs';
 import { buildSubtitle } from './subtitle';
@@ -140,6 +142,19 @@ async function execute(
       );
       audioFile = audio.file;
     }
+  } else if (req.held) {
+    // Bytes only the page has (a data: URL): the page sends them to us; we never fetch the URL.
+    const ingested = await expectIngest({
+      jobId,
+      tabId: req.tabId,
+      frameId: req.held.frameId ?? 0,
+      fileName: `source.${req.sourceFormat === 'unknown' ? 'bin' : req.sourceFormat}`,
+      maxBytes: maxBytes === undefined ? MAX_HELD_BYTES : Math.min(maxBytes, MAX_HELD_BYTES),
+      signal,
+      onProgress: (bytes, total) =>
+        send({ bytesDone: bytes, bytesTotal: total, fraction: total ? bytes / total : 1 }),
+    });
+    videoFile = ingested.file;
   } else {
     const staged = await stageDirectFile({
       jobId,

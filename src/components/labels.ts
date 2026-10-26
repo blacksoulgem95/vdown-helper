@@ -28,6 +28,7 @@ const REASONS: Record<ReasonCode, MessageKey> = {
   eme: 'reasonEme',
   'dash-clearkey': 'reasonDashClearKey',
   'subtitle-unsupported': 'reasonSubtitleUnsupported',
+  'too-large': 'reasonTooLarge',
   cors: 'reasonCors',
   'http-error': 'reasonHttp',
   network: 'reasonNetwork',
@@ -46,6 +47,7 @@ export function reasonText(d: Downloadability): string {
   if (d.reason === 'http-error' && d.detail) return `${base} (${d.detail})`;
   if (d.status === 'downloadable' && d.detail === 'aes-128') return t('reasonAes128');
   if (d.status === 'downloadable' && d.detail === 'headers-unreadable') return t('reasonHeadersUnreadable');
+  if (d.status === 'downloadable' && d.detail === 'in-page-data') return t('reasonInPageData');
   return base;
 }
 

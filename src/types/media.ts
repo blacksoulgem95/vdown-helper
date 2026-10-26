@@ -13,6 +13,15 @@ export type MediaFormat =
   | 'wav'
   | 'ogg'
   | 'flac'
+  | 'opus'
+  | 'aiff'
+  | 'wma'
+  | 'flv'
+  | 'avi'
+  | 'wmv'
+  | 'asf'
+  | '3gp'
+  | 'mpg'
   | 'hls'
   | 'm3u'
   | 'dash'
@@ -62,7 +71,8 @@ export type ReasonCode =
   | 'aes-key-inaccessible'
   | 'no-segments'
   | 'dash-clearkey'
-  | 'subtitle-unsupported';
+  | 'subtitle-unsupported'
+  | 'too-large';
 
 export type DownloadabilityStatus = 'downloadable' | 'protected' | 'inaccessible' | 'unsupported' | 'unknown';
 
@@ -82,6 +92,21 @@ export interface PlaylistSummary {
   fragmented?: boolean;
   /** DASH: number of periods in the manifest (only the longest, the main content, is downloaded). */
   periods?: number;
+}
+
+/**
+ * Bytes that only the page holds: a `data:` URL (later also a `blob:` URL). The extension never fetches these; the
+ * content script of the owning frame reads them and hands them over (src/content/ingest.ts), so the resource carries
+ * a small handle instead of the data.
+ */
+export interface PageHeld {
+  kind: 'data';
+  /** Handle inside the owning frame's scanner (a hash of the data), not a URL. */
+  id: string;
+  /** Decoded size in bytes. */
+  bytes: number;
+  /** Frame that holds it; set by the background from its own scan. */
+  frameId?: number;
 }
 
 export interface MediaResource {
@@ -119,6 +144,8 @@ export interface MediaResource {
   /** Frame the resource was found in (0 = top frame) and that frame's document URL. */
   frameId?: number;
   frameUrl?: string;
+  /** Set when the bytes live in the page (data: URL): `url` is then only a label, never fetched. */
+  held?: PageHeld;
   detectedAt: number;
 }
 
@@ -133,6 +160,8 @@ export interface RawCandidate {
   width?: number;
   height?: number;
   poster?: string;
+  /** Bytes held by the page (a data: URL); `url` is then a harmless label. */
+  held?: PageHeld;
   /** `<track>` elements: a subtitle, with its declared language and label. */
   role?: 'subtitle';
   language?: string;

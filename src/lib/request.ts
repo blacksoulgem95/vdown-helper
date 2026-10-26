@@ -19,6 +19,7 @@ import {
   type AudioFamily,
   type VideoFamily,
 } from './media';
+import { isDataLabel } from './dataUrl';
 import { pickVariantIndex } from './settings';
 import {
   isSafeFetchUrl,
@@ -234,6 +235,7 @@ export function buildRequest(
     hasVideo,
   };
   if (audioUrl) req.audioUrl = audioUrl;
+  if (resource.held) req.held = resource.held;
   if (isDash) req.isDash = true;
   if (isMaster && (isHls || isDash)) req.masterUrl = resource.url;
   if (isDash) req.fragmented = true; // DASH segments are fragmented MP4
@@ -332,7 +334,11 @@ function planSubtitle(req: DownloadRequest): Plan {
  * Returns undefined when a URL is unsafe.
  */
 export function sanitizeRequest(req: DownloadRequest): DownloadRequest | undefined {
-  if (!isSafeFetchUrl(req.sourceUrl)) return undefined;
+  // A page-held source (data: URL) is only a label here; the background matches it to its own scan, never fetches it.
+  const heldSource = isDataLabel(req.sourceUrl);
+  if (heldSource) {
+    if (req.audioUrl !== undefined || req.isHls || req.isDash === true) return undefined;
+  } else if (!isSafeFetchUrl(req.sourceUrl)) return undefined;
   if (req.audioUrl !== undefined && !isSafeFetchUrl(req.audioUrl)) return undefined;
   const dot = req.filename.lastIndexOf('.');
   const ext =
@@ -354,7 +360,8 @@ export function sanitizeRequest(req: DownloadRequest): DownloadRequest | undefin
     filename: ext ? `${base}.${ext}` : base,
     subfolder: sanitizeSubfolder(req.subfolder),
     credentialedOrigins: origins,
-    // Only the background may decide which frame's headers a job replays.
+    // Only the background may decide which frame's headers a job replays, and what the page holds.
     replay: undefined,
+    held: undefined,
   };
 }

@@ -20,7 +20,9 @@ import type { Plan } from '@/lib/compat';
 import type { DownloadJob, DownloadRequest, JobErrorCode } from '@/types/download';
 import type { MediaResource } from '@/types/media';
 import type { OffscreenEvent, OffscreenPlan, Result } from '@/types/messages';
+import { isDataLabel } from '@/lib/dataUrl';
 import { inspectVariant } from './detect';
+import { pumpHeld } from './pageFetch';
 import { getJob, listJobs, mutateJobs, putJob, removeJobs, updateJob } from './jobStore';
 import { notifyJob } from './notify';
 import { getTabState } from './tabState';
@@ -111,7 +113,11 @@ export async function submit(raw: DownloadRequest): Promise<Result<{ jobId: stri
       return fail(`inspect:${e instanceof Error ? e.message : 'failed'}`);
     }
   }
-  if (resource?.frameUrl) {
+  if (isDataLabel(req.sourceUrl)) {
+    // Page-held bytes: only for a resource this background saw in its own scan of the tab.
+    if (!resource?.held || resource.url !== req.sourceUrl) return fail('unsafe-url');
+    req = { ...req, held: { ...resource.held, frameId: resource.frameId ?? 0 } };
+  } else if (resource?.frameUrl) {
     req = {
       ...req,
       replay: {
@@ -124,7 +130,7 @@ export async function submit(raw: DownloadRequest): Promise<Result<{ jobId: stri
   if (!plan.valid) return fail(`plan:${plan.issues.join(',')}`);
 
   const job = createJob(crypto.randomUUID(), req, plan, Date.now());
-  if (plan.pipeline !== 'native') job.viaOffscreen = true;
+  if (plan.pipeline !== 'native' || req.held) job.viaOffscreen = true;
   await putJob(job);
   void pump();
   return { ok: true, jobId: job.id };
@@ -188,12 +194,29 @@ async function runJob(id: string): Promise<void> {
       await installReplay(job.id, job.request.replay.frameUrl, job.request.replay.urls);
     }
     // A native download that Chrome's download manager could not make (no Referer) is run by the extension itself.
-    if (job.staged && plan.pipeline === 'native') plan.pipeline = 'file-staged';
+    if ((job.staged || job.request.held) && plan.pipeline === 'native') plan.pipeline = 'file-staged';
     if (plan.pipeline === 'native') await runNative(job);
-    else await runInOffscreenDoc(job, plan, settings.maxMemoryMb, settings.segmentConcurrency);
+    else {
+      await runInOffscreenDoc(job, plan, settings.maxMemoryMb, settings.segmentConcurrency);
+      if (job.request.held) void sendHeldBytes(job);
+    }
   } catch (e) {
     log.error('job start failed:', e);
     await settle(id, 'unknown', e instanceof Error ? e.message : 'Failed to start');
+  }
+}
+
+/** The offscreen document is waiting for the bytes: tell the page that holds them to send them now. */
+async function sendHeldBytes(job: DownloadJob): Promise<void> {
+  const held = job.request.held;
+  if (!held) return;
+  const res = await pumpHeld(job.request.tabId, held.frameId ?? 0, job.id, held.id);
+  if (res.ok) return;
+  // The offscreen side fails on its own after a timeout; this just reports the real reason straight away.
+  const now = await getJob(job.id);
+  if (now && isActive(now)) {
+    await cancelInOffscreen(job.id);
+    await settle(job.id, 'network', res.error);
   }
 }
 

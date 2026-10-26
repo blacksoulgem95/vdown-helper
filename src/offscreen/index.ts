@@ -1,4 +1,5 @@
 import type { OffscreenCommand } from '@/types/messages';
+import { handleIngestPort } from './ingest';
 import { cancelJob, releaseJob, startJob } from './jobs';
 import { purgeAll } from './opfs';
 
@@ -21,3 +22,5 @@ chrome.runtime.onMessage.addListener((raw: unknown, sender) => {
   }
   return false;
 });
+
+chrome.runtime.onConnect.addListener(handleIngestPort);

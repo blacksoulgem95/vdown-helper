@@ -129,3 +129,30 @@ export function combinedFetcher(
 }
 
 export type { VdhApi };
+
+/**
+ * Ask the owning frame to send the bytes it holds (a data: URL) to the offscreen document of `jobId`. The offscreen
+ * document must already be expecting them. Resolves when the page has finished sending, or with the reason it could not.
+ */
+export async function pumpHeld(
+  tabId: number,
+  frameId: number,
+  jobId: string,
+  handle: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const [res] = await chrome.scripting.executeScript({
+      target: { tabId, frameIds: [frameId] },
+      func: (j: string, h: string) => {
+        const api = (globalThis as unknown as { __vdh?: { pumpHeld?: (a: string, b: string) => unknown } })
+          .__vdh;
+        return api?.pumpHeld ? api.pumpHeld(j, h) : { ok: false, error: 'The page scanner is not available' };
+      },
+      args: [jobId, handle],
+    });
+    const r = res?.result as { ok?: boolean; error?: string } | undefined;
+    return r?.ok ? { ok: true } : { ok: false, error: r?.error ?? 'The page could not send the data' };
+  } catch {
+    return { ok: false, error: 'The page is no longer available' };
+  }
+}

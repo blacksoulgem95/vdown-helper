@@ -356,3 +356,45 @@ describe('buildRequest: MPEG-DASH', () => {
     expect(canRestage(job, 'SERVER_FORBIDDEN')).toBe(false);
   });
 });
+
+describe('sanitizeRequest: page-held sources', () => {
+  const base = {
+    resourceId: 'r',
+    tabId: 1,
+    pageUrl: 'https://a.com/p',
+    host: 'a.com',
+    mode: 'original',
+    container: 'original',
+    audioFormat: 'mp3',
+    audioBitrate: 192,
+    filename: 'x.mp4',
+    subfolder: '',
+    qualityLabel: '',
+    sourceFormat: 'mp4',
+    isHls: false,
+    hasMuxedAudio: true,
+    hasVideo: true,
+  } as const;
+  const label = 'data:video/mp4;vdh=0123abcd';
+
+  it('accepts only the label, never a data: URL with a payload', () => {
+    expect(sanitizeRequest({ ...base, sourceUrl: label })?.sourceUrl).toBe(label);
+    expect(sanitizeRequest({ ...base, sourceUrl: 'data:video/mp4;base64,AAAA' })).toBeUndefined();
+    expect(sanitizeRequest({ ...base, sourceUrl: 'blob:https://a.com/uuid' })).toBeUndefined();
+  });
+  it('does not combine a label with network sources', () => {
+    expect(sanitizeRequest({ ...base, sourceUrl: label, isHls: true })).toBeUndefined();
+    expect(sanitizeRequest({ ...base, sourceUrl: label, isDash: true })).toBeUndefined();
+    expect(sanitizeRequest({ ...base, sourceUrl: label, audioUrl: 'https://a.com/a.m4a' })).toBeUndefined();
+  });
+  it('drops what only the background may decide', () => {
+    const out = sanitizeRequest({
+      ...base,
+      sourceUrl: label,
+      held: { kind: 'data', id: '0123abcd', bytes: 1, frameId: 9 },
+      replay: { frameUrl: 'https://evil/', urls: [] },
+    });
+    expect(out?.held).toBeUndefined();
+    expect(out?.replay).toBeUndefined();
+  });
+});

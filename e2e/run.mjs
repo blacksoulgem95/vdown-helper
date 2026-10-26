@@ -4,6 +4,7 @@
 //
 //   npm run test:e2e            (builds first)
 //   E2E_SAVE_SCREENS=1 npm run test:e2e   (also copies screenshots to docs/screenshots)
+//   E2E_ONLY='more formats' npm run test:e2e   (only the steps whose name matches)
 import { execFileSync } from 'node:child_process';
 import {
   cpSync,
@@ -123,7 +124,10 @@ const stagesOf = (id) => ext((i) => window.__stages[i] ?? [], id);
 // ---- tiny test runner
 const results = [];
 class Skip extends Error {}
+// E2E_ONLY=<regex> runs just the matching steps (plus the two that set up the main page): a fast loop while developing.
+const only = process.env.E2E_ONLY ? new RegExp(process.env.E2E_ONLY, 'i') : undefined;
 async function step(name, fn) {
+  if (only && !only.test(name) && !/^(service worker is running|popup scans the page)/.test(name)) return;
   const t0 = Date.now();
   try {
     await fn();
@@ -470,9 +474,9 @@ await step('popup controls: RESCAN PAGE, Settings gear, Copy URL and CONFIGURE a
 const studio = await ctx.newPage();
 await studio.setViewportSize({ width: 460, height: 1000 });
 await studio.goto(extUrl('sidepanel/sidepanel.html'));
-async function select(resource) {
+async function select(resource, forTab = tabId) {
   await studio.evaluate((sel) => chrome.storage.session.set({ 'studio:selection': sel }), {
-    tabId,
+    tabId: forTab,
     resourceId: resource.id,
     at: Date.now(),
   });
@@ -1227,6 +1231,288 @@ await step('unsafe URLs and hostile file names are rejected / neutralised by the
   );
   assert(existsSync(fileOf(job)), 'file missing');
 });
+
+// ---- more container / audio formats (plain files, generated with ffmpeg codecs typical of each format)
+const FORMAT_CASES = [
+  // [extension, expected format, video?, stream codecs probed back]
+  ['flv', 'flv', true],
+  ['avi', 'avi', true],
+  ['wmv', 'wmv', true],
+  ['asf', 'asf', true],
+  ['3gp', '3gp', true],
+  ['mpg', 'mpg', true],
+  ['aiff', 'aiff', false],
+  ['wma', 'wma', false],
+  ['opus', 'opus', false],
+];
+let fmtTab;
+let fmtState;
+const fmtRes = (ext) => fmtState.resources.find((r) => r.url.endsWith(`/formats/clip.${ext}`));
+const fmtPage = await ctx.newPage();
+await fmtPage.goto(`${A}/pages/formats.html`);
+fmtTab = await ext(
+  async (u) => (await chrome.tabs.query({})).find((t) => t.url?.startsWith(u))?.id,
+  `${A}/pages/formats.html`,
+);
+
+await step(
+  'more formats: FLV, AVI, WMV, ASF, 3GP, MPG, AIFF, WMA and Opus are detected with the right type',
+  async () => {
+    const res = await ext(
+      (id) => chrome.runtime.sendMessage({ channel: 'vdown', type: 'scan', payload: { tabId: id } }),
+      fmtTab,
+    );
+    assert(res.ok, JSON.stringify(res));
+    fmtState = res.state;
+    for (const [e, format, video] of FORMAT_CASES) {
+      const r = fmtRes(e);
+      assert(r, `${e} not detected`);
+      assert(r.kind === 'file' && r.format === format, `${e}: ${r.kind}/${r.format}`);
+      assert(r.mediaType === (video ? 'video' : 'audio'), `${e}: mediaType ${r.mediaType}`);
+      assert(r.downloadability.status === 'downloadable' && r.sizeBytes > 1000, `${e}: ${JSON.stringify(r)}`);
+    }
+  },
+);
+
+await step(
+  'more formats: each is saved as it is, with the right extension and a readable stream',
+  async () => {
+    for (const [e, , video] of FORMAT_CASES) {
+      const r = fmtRes(e);
+      await select(r, fmtTab);
+      const start = studio.getByRole('button', { name: 'START DOWNLOAD' });
+      await until(() => start.isEnabled(), 'start enabled');
+      if (!video)
+        await studio
+          .getByRole('radio', { name: /Original quality/ })
+          .click()
+          .catch(() => {});
+      await start.click();
+      const job = await jobFinished((j) => j.request.resourceId === r.id && j.createdAt > Date.now() - 60000);
+      assert(job.stage === 'completed', `${e}: ${job.stage} ${JSON.stringify(job.error)}`);
+      assert(job.request.filename.endsWith(`.${e}`), `${e}: name ${job.request.filename}`);
+      const p = probe(fileOf(job));
+      assert(p.types.includes(video ? 'video' : 'audio'), `${e}: ${p.types}`);
+    }
+  },
+);
+
+await step(
+  'more formats: only containers that can hold the video without re-encoding are offered',
+  async () => {
+    const r = fmtRes('wmv');
+    await select(r, fmtTab);
+    await studio.getByRole('radio', { name: /Video \+ Audio/ }).click();
+    const container = studio.getByLabel('Output container');
+    const enabled = async (v) => !(await container.locator(`option[value="${v}"]`).isDisabled());
+    assert(!(await enabled('mp4')) && (await enabled('mkv')), 'WMV must only offer MKV');
+    const flv = fmtRes('flv');
+    await select(flv, fmtTab);
+    await studio.getByRole('radio', { name: /Video \+ Audio/ }).click();
+    assert((await enabled('mp4')) && (await enabled('mkv')), 'FLV offers MP4 and MKV');
+    await select(fmtRes('avi'), fmtTab);
+    await studio.getByRole('radio', { name: /Video \+ Audio/ }).click();
+    assert(!(await enabled('mp4')) && (await enabled('mkv')), 'AVI must only offer MKV');
+  },
+);
+
+await step(
+  'more formats: FFmpeg.wasm copies FLV to MP4 and AVI/WMV/MPG to MKV (video stream copy, decodable)',
+  async () => {
+    const cases = [
+      ['flv', 'mp4', 'h264'],
+      ['avi', 'mkv', 'mpeg4'],
+      ['wmv', 'mkv', 'wmv2'],
+      ['mpg', 'mkv', 'mpeg2video'],
+    ];
+    for (const [e, container, codec] of cases) {
+      const r = fmtRes(e);
+      await select(r, fmtTab);
+      await studio.getByRole('radio', { name: /Video \+ Audio/ }).click();
+      await studio.getByLabel('Output container').selectOption(container);
+      const start = studio.getByRole('button', { name: 'START DOWNLOAD' });
+      await until(() => start.isEnabled(), 'start enabled');
+      await start.click();
+      const job = await jobFinished(
+        (j) =>
+          j.request.resourceId === r.id &&
+          j.request.container === container &&
+          j.createdAt > Date.now() - 120000,
+        120000,
+      );
+      assert(job.stage === 'completed', `${e}->${container}: ${job.stage} ${JSON.stringify(job.error)}`);
+      assert(!(await stagesOf(job.id)).includes('encoding'), `${e}: video must not be re-encoded`);
+      const file = fileOf(job);
+      const p = probe(file);
+      assert(p.codecs.includes(codec), `${e}->${container}: codecs ${p.codecs}`);
+      assert(decodeErrors(file) === '', `${e}->${container}: decode errors`);
+    }
+  },
+);
+
+await step(
+  'more formats: AIFF, WMA and Opus convert to MP3 (audio re-encode through FFmpeg.wasm)',
+  async () => {
+    for (const e of ['aiff', 'wma', 'opus']) {
+      const r = fmtRes(e);
+      await select(r, fmtTab);
+      await studio.getByRole('radio', { name: /Audio only/ }).click();
+      await studio.getByLabel('Audio format').selectOption('mp3');
+      const start = studio.getByRole('button', { name: 'START DOWNLOAD' });
+      await until(() => start.isEnabled(), 'start enabled');
+      await start.click();
+      const job = await jobFinished(
+        (j) =>
+          j.request.resourceId === r.id &&
+          j.request.mode === 'audio-only' &&
+          j.createdAt > Date.now() - 120000,
+        120000,
+      );
+      assert(job.stage === 'completed', `${e}: ${job.stage} ${JSON.stringify(job.error)}`);
+      const p = probe(fileOf(job));
+      assert(p.codecs.join() === 'mp3' && p.types.join() === 'audio', `${e}: ${p.codecs}`);
+    }
+  },
+);
+
+await fmtPage.close();
+
+// ---- data: URLs: the page holds the bytes and hands them over; the extension never fetches a data: URL
+let dataTab;
+let dataState;
+const dataPage = await ctx.newPage();
+await dataPage.goto(`${A}/gen/data.html`);
+dataTab = await ext(
+  async (u) => (await chrome.tabs.query({})).find((t) => t.url?.startsWith(u))?.id,
+  `${A}/gen/data.html`,
+);
+const dataRes = (mime) => dataState.resources.find((r) => r.held && r.mimeType === mime);
+
+await step(
+  'data: URLs are listed as page-held media with their exact size; nothing but a label is stored',
+  async () => {
+    const res = await ext(
+      (id) => chrome.runtime.sendMessage({ channel: 'vdown', type: 'scan', payload: { tabId: id } }),
+      dataTab,
+    );
+    assert(res.ok, JSON.stringify(res));
+    dataState = res.state;
+    const video = dataRes('video/mp4');
+    const audio = dataRes('audio/mpeg');
+    const big = dataRes('audio/wav');
+    const size = (f) => statSync(join(fixtures, 'gen', f)).size;
+    assert(
+      video?.sizeBytes === size('inline.mp4'),
+      `video size ${video?.sizeBytes} vs ${size('inline.mp4')}`,
+    );
+    assert(
+      audio?.sizeBytes === size('inline.mp3'),
+      `audio size ${audio?.sizeBytes} vs ${size('inline.mp3')}`,
+    );
+    assert(
+      video.downloadability.status === 'downloadable' && audio.downloadability.status === 'downloadable',
+      'downloadable',
+    );
+    assert(video.title === 'Inline clip', `title ${video.title}`);
+    assert(
+      big?.downloadability.status === 'unsupported' && big.downloadability.reason === 'too-large',
+      `big ${JSON.stringify(big?.downloadability)}`,
+    );
+    const stored = JSON.stringify(
+      (await ext((id) => chrome.storage.session.get(`tab:${id}`), dataTab))[`tab:${dataTab}`],
+    );
+    assert(!stored.includes('base64,'), 'the data: payload must never be copied into extension storage');
+    assert(stored.length < 20_000, `stored state is ${stored.length} bytes`);
+  },
+);
+
+await step('data: video: the page hands the bytes over and the saved file is identical', async () => {
+  const pop = await openPopup(dataTab);
+  await pop.getByRole('status').filter({ hasText: 'READY' }).waitFor({ timeout: 45000 });
+  const r = dataRes('video/mp4');
+  await pop.locator(`[data-resource-id="${r.id}"]`).getByRole('button', { name: 'DOWNLOAD' }).click();
+  const job = await jobFinished((j) => j.request.resourceId === r.id);
+  assert(job.stage === 'completed', `stage ${job.stage}: ${JSON.stringify(job.error)}`);
+  assert(job.viaOffscreen === true && job.request.filename.endsWith('.mp4'), `name ${job.request.filename}`);
+  assert(
+    readFileSync(fileOf(job)).equals(readFileSync(join(fixtures, 'gen/inline.mp4'))),
+    'saved file differs from the embedded data',
+  );
+  assert(decodeErrors(fileOf(job)) === '', 'decode errors');
+  const card = await pop.locator(`[data-resource-id="${dataRes('audio/wav').id}"]`).innerText();
+  assert(/32 MB/.test(card), `too-large card: ${card}`);
+  assert(
+    await pop
+      .locator(`[data-resource-id="${dataRes('audio/wav').id}"]`)
+      .getByRole('button', { name: 'DOWNLOAD' })
+      .isDisabled(),
+    'too-large DOWNLOAD must be disabled',
+  );
+  await shot(pop, 'popup-data-urls');
+  await pop.close();
+});
+
+await step('data: audio can be converted: embedded MP3 to WAV through FFmpeg.wasm', async () => {
+  const r = dataRes('audio/mpeg');
+  await select(r, dataTab);
+  await studio.getByRole('radio', { name: /Audio only/ }).click();
+  await studio.getByLabel('Audio format').selectOption('wav');
+  const start = studio.getByRole('button', { name: 'START DOWNLOAD' });
+  await until(() => start.isEnabled(), 'start enabled');
+  await start.click();
+  const job = await jobFinished(
+    (j) => j.request.resourceId === r.id && j.request.mode === 'audio-only',
+    90000,
+  );
+  assert(job.stage === 'completed', `stage ${job.stage}: ${JSON.stringify(job.error)}`);
+  const p = probe(fileOf(job));
+  assert(p.codecs.join() === 'pcm_s16le' && Math.abs(p.duration - 1) < 0.2, `${p.codecs} ${p.duration}`);
+});
+
+await step('data: URLs cannot be forged: the background only accepts what its own scan saw', async () => {
+  const base = {
+    tabId: dataTab,
+    pageUrl: `${A}/gen/data.html`,
+    host: '127.0.0.1',
+    mode: 'original',
+    container: 'original',
+    audioFormat: 'mp3',
+    audioBitrate: 192,
+    filename: 'x.mp4',
+    subfolder: '',
+    qualityLabel: 'x',
+    sourceFormat: 'mp4',
+    isHls: false,
+    hasMuxedAudio: true,
+    hasVideo: true,
+  };
+  const send = (request) =>
+    ext(
+      (req) =>
+        chrome.runtime.sendMessage({ channel: 'vdown', type: 'start-download', payload: { request: req } }),
+      request,
+    );
+  const real = dataRes('video/mp4');
+  const attempts = [
+    // a data: URL with a payload: the extension never fetches those
+    { ...base, resourceId: real.id, sourceUrl: 'data:video/mp4;base64,AAAA' },
+    // a well-formed label for something the page does not hold
+    { ...base, resourceId: real.id, sourceUrl: 'data:video/mp4;vdh=deadbeef' },
+    // a label with no matching resource at all
+    { ...base, resourceId: 'nope', sourceUrl: real.url },
+    // a label combined with a network source
+    { ...base, resourceId: real.id, sourceUrl: real.url, audioUrl: 'data:audio/mpeg;vdh=deadbeef' },
+    { ...base, resourceId: real.id, sourceUrl: real.url, isHls: true },
+  ];
+  const before = (await jobs()).length;
+  for (const a of attempts) {
+    const res = await send(a);
+    assert(res.ok === false, `accepted a forged request: ${JSON.stringify(a)} -> ${JSON.stringify(res)}`);
+  }
+  assert((await jobs()).length === before, 'a forged request created a job');
+});
+
+await dataPage.close();
 
 await step('empty page shows the empty state and SCAN AGAIN', async () => {
   const p2 = await ctx.newPage();

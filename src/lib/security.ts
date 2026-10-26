@@ -91,6 +91,8 @@ export function normalizeUrl(input: string): string {
 
 /** Never log full URLs: query strings and fragments often carry signed tokens. */
 export function redactUrl(input: string): string {
+  // A data: URL is its own payload: show only the media type.
+  if (/^data:/i.test(input)) return `data:${input.slice(5).split(/[;,]/)[0]?.slice(0, 100) ?? ''}`;
   const url = parseUrl(input);
   if (!url) return '[invalid-url]';
   const query = url.search ? '?…' : '';

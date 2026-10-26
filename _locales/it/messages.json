@@ -748,5 +748,14 @@
   },
   "subtitleLang": {
     "message": "Lingua: $1"
+  },
+  "reasonTooLarge": {
+    "message": "Questo file incorporato supera il limite di 32 MB per gli URL data:."
+  },
+  "reasonInPageData": {
+    "message": "Il file è incorporato nella pagina stessa (URL data:). È la pagina a consegnarlo; l'estensione non lo scarica mai da sola."
+  },
+  "sourceInline": {
+    "message": "incorporato nella pagina (data:)"
   }
 }
