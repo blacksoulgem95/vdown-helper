@@ -1,16 +1,34 @@
 name: Release
 
-# On every push to main: verify, build and package the extension. If the version in package.json has not been
-# released yet, tag it (v<version>) and publish a GitHub Release with the Chrome package attached.
-# To ship a new version: bump "version" in package.json (the manifest version follows it) and merge to main.
+# On every push to main that changes the project: verify, build and package the extension, pick the NEXT version
+# automatically, then tag it (v<version>) and publish a GitHub Release with the Chrome package attached.
+#
+# Version rule (scripts/next-version.mjs, tested in tests/version.test.ts):
+#   - no release yet                      -> the version in package.json (first release)
+#   - otherwise                           -> latest v* tag + patch
+#   - "#minor" / "#major" in a commit message since the last release raises the bump
+#   - manual run: choose the bump in the "Run workflow" dialog
+#   - package.json ahead of the result    -> package.json wins (a human can still jump versions)
+# Nothing is committed back to main; the released version lives in the tag, the manifest and the zip.
 on:
   push:
     branches: [main]
+    paths-ignore: # nothing to ship for documentation / tracking-only changes
+      - '**.md'
+      - 'BACKLOG/**'
+      - 'docs/**'
+      - '.claude/**'
   workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump for this release
+        type: choice
+        options: [auto, patch, minor, major]
+        default: auto
 
 concurrency:
   group: release
-  cancel-in-progress: false
+  cancel-in-progress: false # never cancel a half-finished release
 
 permissions:
   contents: read
@@ -19,17 +37,28 @@ jobs:
   package:
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.meta.outputs.version }}
-      released: ${{ steps.meta.outputs.released }}
+      version: ${{ steps.version.outputs.version }}
+      tagged: ${{ steps.version.outputs.tagged }}
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # tags are needed to know whether this version was already released
+          fetch-depth: 0 # full history and tags: needed to pick the next version
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+
+      - name: Pick the version
+        id: version
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          node scripts/next-version.mjs | tee -a "$GITHUB_OUTPUT"
+          {
+            echo "### Release version"
+            node scripts/next-version.mjs | sed 's/^/- /'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - run: npm ci
       - run: npm run typecheck
@@ -37,39 +66,36 @@ jobs:
       - run: npm run format:check
       - run: npm test
 
-      # build + dist checks (manifest, assets, locales, CSP, no remote code) + zip + sha256
+      # build (version injected into the manifest) + dist checks (manifest, assets, locales, CSP, no remote code)
+      # + zip + sha256
       - name: Build and package
+        env:
+          VDH_VERSION: ${{ steps.version.outputs.version }}
         run: npm run package
 
-      - name: Work out the version
-        id: meta
-        run: |
-          version=$(node -p "require('./package.json').version")
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          if git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
-            echo "released=true" >> "$GITHUB_OUTPUT"
-            echo "::notice title=No new release::v$version already exists. Bump the version in package.json to publish a new release."
-          else
-            echo "released=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Verify the zip
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           cd release
-          sha256sum -c "vdown-helper-${{ steps.meta.outputs.version }}.zip.sha256"
-          unzip -tq "vdown-helper-${{ steps.meta.outputs.version }}.zip"
-          unzip -l "vdown-helper-${{ steps.meta.outputs.version }}.zip" | awk '{print $4}' | grep -qx manifest.json
+          sha256sum -c "vdown-helper-$VERSION.zip.sha256"
+          unzip -tq "vdown-helper-$VERSION.zip"
+          unzip -l "vdown-helper-$VERSION.zip" | awk '{print $4}' | grep -qx manifest.json
+          unzip -p "vdown-helper-$VERSION.zip" manifest.json | node -e "
+            const m = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+            if (m.version !== process.env.VERSION) { console.error('manifest version', m.version, '!=', process.env.VERSION); process.exit(1); }
+            console.log('manifest version', m.version);"
 
-      # Always keep the package of this commit, release or not.
+      # Always keep the package of this commit, released or not.
       - uses: actions/upload-artifact@v4
         with:
-          name: vdown-helper-${{ steps.meta.outputs.version }}-${{ github.sha }}
+          name: vdown-helper-${{ steps.version.outputs.version }}-${{ github.sha }}
           path: release/*
           if-no-files-found: error
 
   release:
     needs: package
-    if: needs.package.outputs.released == 'false'
+    if: needs.package.outputs.tagged == 'false' # a re-run of an already released commit publishes nothing new
     runs-on: ubuntu-latest
     permissions:
       contents: write # create the tag and the release
@@ -86,7 +112,7 @@ jobs:
           VERSION: ${{ needs.package.outputs.version }}
         run: |
           set -euo pipefail
-          # Creates the tag v$VERSION on this commit if it does not exist yet. Never touches an existing release.
+          # Creates the tag v$VERSION on this exact commit. Fails (rather than overwrite) if the release exists.
           gh release create "v$VERSION" \
             "release/vdown-helper-$VERSION.zip" \
             "release/vdown-helper-$VERSION.zip.sha256" \

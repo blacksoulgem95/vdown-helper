@@ -21,7 +21,10 @@ await build(contentConfig());
 // Manifest (version is sourced from package.json so there is a single source of truth).
 const pkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'));
 const manifest = JSON.parse(readFileSync(resolve(root, 'manifest.json'), 'utf8'));
-manifest.version = pkg.version;
+// CI sets VDH_VERSION to the version it is releasing; otherwise package.json decides (local builds).
+const version = process.env.VDH_VERSION ?? pkg.version;
+if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error(`Invalid version "${version}": expected x.y.z`);
+manifest.version = version;
 writeFileSync(resolve(DIST, 'manifest.json'), JSON.stringify(manifest, null, 2));
 
 cpSync(resolve(root, '_locales'), resolve(DIST, '_locales'), { recursive: true });

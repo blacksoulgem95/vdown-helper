@@ -16,8 +16,9 @@ if (!existsSync(join(dist, 'manifest.json'))) {
 }
 const manifest = JSON.parse(readFileSync(join(dist, 'manifest.json'), 'utf8'));
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
-if (manifest.version !== pkg.version) {
-  console.error(`dist/manifest.json is ${manifest.version} but package.json is ${pkg.version}: rebuild.`);
+const version = process.env.VDH_VERSION ?? pkg.version;
+if (manifest.version !== version) {
+  console.error(`dist/manifest.json is ${manifest.version} but the release version is ${version}: rebuild.`);
   process.exit(1);
 }
 
@@ -38,10 +39,10 @@ for (const file of walk(dist)) {
 if (!('manifest.json' in files)) throw new Error('manifest.json would not be at the zip root');
 
 mkdirSync(outDir, { recursive: true });
-const zipPath = join(outDir, `vdown-helper-${pkg.version}.zip`);
+const zipPath = join(outDir, `vdown-helper-${version}.zip`);
 writeFileSync(zipPath, zipSync(files));
 const sha = createHash('sha256').update(readFileSync(zipPath)).digest('hex');
-writeFileSync(`${zipPath}.sha256`, `${sha}  vdown-helper-${pkg.version}.zip\n`);
+writeFileSync(`${zipPath}.sha256`, `${sha}  vdown-helper-${version}.zip\n`);
 
 const mb = (n) => (n / 1048576).toFixed(1);
 console.log(

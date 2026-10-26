@@ -19,7 +19,9 @@ A GitHub Actions workflow that runs on `main`: verifies the project, builds the 
 - [x] The zip contains the bundled FFmpeg core and loads unpacked in Chromium without manifest/CSP errors
 - [x] Workflow verifies (typecheck, lint, format, unit tests, build, dist check) before packaging
 - [ ] A release is created only once per version (tag `v<version>`), re-runs on the same version do not fail or overwrite it
-- [ ] A new `package.json` version produces a new tag + release (verified on GitHub)
+- [ ] Every release-worthy push to `main` gets the next version automatically (patch by default, `#minor` / `#major` in a commit message or a manual run input raise it); package.json can still force a higher version
+- [ ] The version computation is unit-tested (no tags, patch/minor/major, forced, package.json ahead, re-run on a tagged commit)
+- [ ] A new version produces a new tag + release (verified on GitHub)
 - [x] Workflow YAML valid; every `npm run` it uses exists
 
 ## Notes
