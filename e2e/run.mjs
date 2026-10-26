@@ -339,13 +339,52 @@ await step(
   },
 );
 
+await step(
+  'funnel: the best match is the highest-quality savable video, its DOWNLOAD is above the fold, one click queues it',
+  async () => {
+    const best = popup.locator('[data-best="true"]');
+    await best.waitFor({ timeout: 10000 });
+    const id = await best.getAttribute('data-resource-id');
+    const r = state.resources.find((x) => x.id === id);
+    const tall = (x) => Math.max(x.height ?? 0, ...x.variants.map((v) => v.height ?? 0));
+    const rivals = state.resources.filter(
+      (x) =>
+        x.mediaType === 'video' &&
+        x.downloadability.status === 'downloadable' &&
+        !x.downloadability.detail?.endsWith('-recordable') &&
+        x.downloadability.detail !== 'mse-capturable',
+    );
+    assert(r && rivals.includes(r), `best match ${r?.url} is not a plain savable video`);
+    assert(
+      rivals.every((x) => tall(x) <= tall(r)),
+      `a taller stream exists than the best match ${r.url} (${tall(r)}p)`,
+    );
+    // The popup is at most 600 px tall: the recommended download must be visible without scrolling.
+    const button = best.getByRole('button', { name: 'DOWNLOAD', exact: true });
+    const box = await button.boundingBox();
+    assert(box && box.y >= 0 && box.y + box.height <= 600, `DOWNLOAD below the fold: ${JSON.stringify(box)}`);
+    assert((await popup.locator('[data-best="true"]').count()) === 1, 'exactly one best match');
+    const before = (await jobs()).length;
+    await button.click();
+    await until(async () => (await jobs()).length > before, 'the best match queued with one click', 15000);
+    const job = (await jobs()).find((j) => j.request.resourceId === r.id);
+    assert(job, 'the queued job is the best match');
+  },
+);
+
 await step('popup renders cards, details and queue (screenshot)', async () => {
   await popup.screenshot({ path: join(shots, 'popup-detected.png'), fullPage: true });
   const r = byPath(state, '/hls/master.m3u8');
   const card = popup.locator(`[data-resource-id="${r.id}"]`);
   await card.getByRole('button', { name: 'DETAILS' }).click();
   await card.getByText('360p').first().waitFor();
-  assert(await card.getByText('HLS MASTER').first().isVisible(), 'kind badge');
+  assert(
+    await card
+      .getByText(/HLS · 2 qualities/)
+      .first()
+      .isVisible(),
+    'headline names the stream and its qualities',
+  );
   // keyboard accessibility: the primary actions are reachable and focusable
   await card.getByRole('button', { name: 'DOWNLOAD' }).focus();
   assert(await popup.evaluate(() => document.activeElement?.tagName === 'BUTTON'), 'focus on button');
@@ -1163,6 +1202,9 @@ await step(
   async () => {
     const done = (await jobs()).find((j) => j.stage === 'completed' && j.chromeDownloadId !== undefined);
     assert(done, 'no completed job');
+    // The popup keeps only the latest finished jobs in view; older ones are behind "Show N more".
+    const more = queuePopup.getByRole('button', { name: /^Show \d+ more$/ });
+    if ((await more.count()) > 0) await more.click();
     const row = queuePopup.locator('li', { hasText: done.request.filename }).first();
     await row.getByRole('button', { name: 'Show in folder' }).click();
     await row.getByRole('button', { name: 'Open file' }).click();
@@ -2554,6 +2596,37 @@ await step('capture: without the page hook the player is explained, never guesse
 });
 
 await step(
+  'capture: a player that started before the hook says "reload", and RELOAD PAGE makes it capturable',
+  async () => {
+    await enableHook(false);
+    const { pg, id } = await openMse();
+    await enableHook(true); // the site is allowed, but this player started before the hook was registered
+    const first = await mseResource(id);
+    assert(
+      first.r?.downloadability.reason === 'mse-needs-reload' && first.r.title !== first.r.url,
+      JSON.stringify([first.r?.downloadability, first.r?.title]),
+    );
+    const card = first.pop.locator(`[data-resource-id="${first.r.id}"]`);
+    assert(!(await card.innerText()).includes('x-vdh-mse'), 'the card shows a title, not the internal label');
+    const loaded = pg.waitForEvent('load', { timeout: 20000 });
+    await card.getByRole('button', { name: 'RELOAD PAGE' }).click();
+    await loaded;
+    await pg.waitForFunction(() => window.ready === true, null, { timeout: 15000 });
+    await pg.waitForFunction(() => document.getElementById('v').buffered.length > 0, null, {
+      timeout: 15000,
+    });
+    const after = await mseResource(id);
+    assert(
+      after.r?.downloadability.detail === 'mse-capturable',
+      `after the reload: ${JSON.stringify(after.r?.downloadability)}`,
+    );
+    await after.pop.close();
+    if (!first.pop.isClosed()) await first.pop.close();
+    await pg.close();
+  },
+);
+
+await step(
   'capture: fast capture records what the player receives into a valid, decodable file; the page is put back',
   async () => {
     const { pg, id } = await openMse();
@@ -3418,9 +3491,11 @@ await step('frames the extension cannot enter are listed by origin, with an "all
   const bid = await tabOf(`${A}/pages/frames-blocked.html`);
   const { pop, st } = await scanTab(bid);
   assert(JSON.stringify(st.notes.blockedFrameOrigins) === JSON.stringify([B]), JSON.stringify(st.notes));
-  await pop
-    .getByRole('button', { name: 'ALLOW ALL EMBEDDED PLAYERS', exact: true })
-    .waitFor({ timeout: 10000 });
+  const allow = pop.getByRole('button', { name: 'ALLOW ALL EMBEDDED PLAYERS', exact: true });
+  await allow.waitFor({ timeout: 10000 });
+  // Nothing else is found here, so the empty state itself is the fix: one button, no competing "scan again".
+  assert((await allow.count()) === 1, 'one allow button');
+  assert((await pop.getByRole('button', { name: 'SCAN AGAIN' }).count()) === 0, 'no competing scan button');
   await shot(pop, 'popup-blocked-frame');
   await pop.close();
   await bp.close();
@@ -3505,6 +3580,23 @@ await step(
     assert(requestedUrls.size > 20, `request capture looks broken (${requestedUrls.size})`);
   },
 );
+
+await step('queue: the popup keeps 3 finished jobs in view and the rest behind "Show N more"', async () => {
+  const all = await jobs();
+  const finished = all.filter((j) => ['completed', 'failed', 'cancelled'].includes(j.stage)).length;
+  assert(finished > 3, `needs more than 3 finished jobs (${finished})`);
+  const pop = await openPopup(tabId);
+  await pop.getByRole('status').filter({ hasText: 'READY' }).waitFor({ timeout: 45000 });
+  const queue = pop.getByRole('region', { name: 'DOWNLOAD QUEUE' });
+  const rows = queue.locator(':scope > ul > li');
+  const more = queue.getByRole('button', { name: /^Show \d+ more$/ });
+  await more.waitFor({ timeout: 10000 });
+  const running = all.length - finished;
+  assert((await rows.count()) === running + 3, `rows ${await rows.count()} (running ${running})`);
+  await more.click();
+  await until(async () => (await rows.count()) === all.length, 'every job after "Show more"', 10000);
+  await pop.close();
+});
 
 await shot(popup, 'popup-final');
 await ctx.close();

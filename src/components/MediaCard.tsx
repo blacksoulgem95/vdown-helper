@@ -16,16 +16,18 @@ import { formatBitrate, formatBytes, formatDuration, resolutionLabel } from '@/l
 import { parseUrl, redactUrl } from '@/lib/security';
 import { t } from '@/lib/i18n';
 import type { MediaResource } from '@/types/media';
-import { kindLabel, reasonText, statusBadge } from './labels';
+import { cardHeadline, reasonText, statusBadge } from './labels';
 import { Badge, Button, Notice, cx } from './ui';
 
 /** Where page-held bytes come from, in words. */
 export const heldSource = (r: MediaResource): string =>
-  r.held?.kind === 'blob'
-    ? t('sourceBlob')
-    : r.held?.kind === 'stream'
-      ? t('sourceStream')
-      : t('sourceInline');
+  r.held?.kind === 'mse'
+    ? t('sourceMse')
+    : r.held?.kind === 'blob'
+      ? t('sourceBlob')
+      : r.held?.kind === 'stream'
+        ? t('sourceStream')
+        : t('sourceInline');
 
 /** Short, token-free hint of where a resource lives, to tell apart cards that share a page title. */
 function sourceHint(r: MediaResource): string {
@@ -72,6 +74,10 @@ export interface MediaCardProps {
   onCapture?: (r: MediaResource, speed: 'fast' | 'realtime') => void;
   /** MediaStreams are recorded until the user stops them. */
   onRecord?: (r: MediaResource) => void;
+  /** The one card the popup recommends: marked and set apart, so the right download is one click away. */
+  best?: boolean;
+  /** A player the page hook could not watch: allow its site (and turn the hook on) as needed, then reload. */
+  onFixPlayer?: (r: MediaResource) => void;
 }
 
 export function MediaCard({
@@ -83,6 +89,8 @@ export function MediaCard({
   onGrantAccess,
   onCapture,
   onRecord,
+  best,
+  onFixPlayer,
 }: MediaCardProps) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
@@ -91,15 +99,29 @@ export function MediaCard({
   const liveRecordable =
     r.downloadability.status === 'downloadable' && r.downloadability.detail === 'live-recordable';
   const ok = r.downloadability.status === 'downloadable';
-  const res = resolutionLabel(r.height, r.width);
-  const size =
-    r.sizeBytes !== undefined
-      ? `${r.sizeIsEstimate ? '≈ ' : ''}${formatBytes(r.sizeBytes)}`
-      : t('sizeUnknown');
+  const size = r.sizeBytes !== undefined ? `${r.sizeIsEstimate ? '≈ ' : ''}${formatBytes(r.sizeBytes)}` : '';
+  // Only what is known, and only chips that change what the user can do.
+  const meta = [
+    size,
+    r.durationSec ? formatDuration(r.durationSec) : '',
+    r.bitrate ? formatBitrate(r.bitrate) : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const subtitle = [r.title, sourceHint(r)].filter(Boolean).join(' · ');
   const canGrant = r.downloadability.status === 'inaccessible' && r.downloadability.reason === 'cors';
+  const fix = r.downloadability.reason;
+  const playerFix =
+    !ok && (fix === 'mse-needs-hook' || fix === 'mse-needs-access' || fix === 'mse-needs-reload')
+      ? fix
+      : undefined;
 
   return (
-    <li className="glass p-3" data-resource-id={r.id}>
+    <li
+      className={cx('glass p-3', best && 'border-magenta/45 shadow-[0_0_22px_rgba(255,43,214,0.12)]')}
+      data-resource-id={r.id}
+      data-best={best ? 'true' : undefined}
+    >
       <div className="flex gap-3">
         <div
           className={cx(
@@ -110,24 +132,17 @@ export function MediaCard({
           <FormatIcon r={r} />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-[13px] font-medium text-fg" title={r.title}>
-            {r.title}
-          </h3>
-          <p className="mono truncate text-[10.5px] text-muted" title={redactUrl(r.url)}>
-            {sourceHint(r)}
+          {(best || !ok) && (
+            <div className="mb-1 flex flex-wrap items-center gap-1">
+              {best && <Badge tone="magenta">{t('bestMatch')}</Badge>}
+              {!ok && <Badge tone={badge.tone}>{badge.text}</Badge>}
+            </div>
+          )}
+          <h3 className="mono truncate text-[13px] font-medium text-fg">{cardHeadline(r)}</h3>
+          <p className="truncate text-[11px] text-muted" title={`${r.title} · ${redactUrl(r.url)}`}>
+            {subtitle}
           </p>
-          <div className="mt-1 flex flex-wrap items-center gap-1">
-            <Badge tone="neon">{r.format === 'unknown' ? '?' : r.format.toUpperCase()}</Badge>
-            {res && <Badge tone="magenta">{res}</Badge>}
-            <Badge>{kindLabel(r)}</Badge>
-            {r.variants.length > 0 && <Badge>{t('variantsCount', r.variants.length)}</Badge>}
-            <Badge tone={badge.tone}>{badge.text}</Badge>
-          </div>
-          <p className="mono mt-1.5 text-[11px] text-muted">
-            <span className={r.sizeBytes === undefined ? 'text-muted' : 'text-fg/80'}>{size}</span>
-            {r.durationSec ? <span> · {formatDuration(r.durationSec)}</span> : null}
-            {r.bitrate ? <span> · {formatBitrate(r.bitrate)}</span> : null}
-          </p>
+          {meta && <p className="mono mt-1 text-[11px] text-fg/80">{meta}</p>}
         </div>
       </div>
 
@@ -146,6 +161,18 @@ export function MediaCard({
 
       {r.held?.kind === 'mse' || r.held?.kind === 'stream' || liveRecordable ? (
         <div className="mt-2.5 space-y-2">
+          {playerFix && onFixPlayer && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="primary"
+                onClick={() => onFixPlayer(r)}
+                disabled={busy}
+                icon={<ShieldCheck size={13} aria-hidden="true" />}
+              >
+                {playerFix === 'mse-needs-reload' ? t('reloadPage') : t('allowAndReload')}
+              </Button>
+            </div>
+          )}
           {ok && (r.held?.kind === 'stream' || liveRecordable) && (
             <div className="flex flex-wrap items-center gap-2">
               <Button

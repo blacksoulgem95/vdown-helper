@@ -1,16 +1,24 @@
 import { analyzeCandidates, provisionalResources, type AnalyzeContext } from '@/lib/analyze';
-import { hookCandidates, markMseResources, markProtectedFrames, protectedKeySystems } from '@/lib/hookData';
+import {
+  hookCandidates,
+  markMseResources,
+  markProtectedFrames,
+  mseMissingReason,
+  protectedKeySystems,
+  type MseMissing,
+} from '@/lib/hookData';
 import { inspectDashRepresentation, inspectMediaPlaylist } from '@/lib/inspect';
 import { parseHls } from '@/lib/hls/parser';
 import { parseDash, mainPeriodIndex } from '@/lib/dash/parser';
 import { parseDashRef } from '@/lib/dash/ref';
 import { isSafeFetchUrl, log } from '@/lib/security';
+import { loadSettings } from '@/lib/settings';
 import { tabOf } from '@/lib/tabs';
 import type { VariantInspection, TabState } from '@/types/messages';
 import type { MediaResource, RawCandidate, ScanNotes, ScanReport } from '@/types/media';
 import { readHookReports } from './hooks';
 import { getObserved, isObserving } from './observer';
-import { combinedFetcher, injectScanner, pageScanAll } from './pageFetch';
+import { combinedFetcher, hasHostAccess, injectScanner, pageScanAll } from './pageFetch';
 import { emptyState, getTabState, setTabState } from './tabState';
 
 const inFlight = new Map<number, Promise<TabState>>();
@@ -154,8 +162,9 @@ async function runScan(tabId: number, automatic: boolean): Promise<TabState> {
       combinedFetcher(tabId, report.pageUrl, !automatic, frameUrls as ReadonlyMap<number, string>),
     );
     const reportsByFrame = new Map(hookReports.map((h) => [h.frameId, h.report] as const));
+    const missing = await whyNoHook(analysed, reportsByFrame, frameUrls, report.pageUrl);
     const resources = sortResources(
-      markProtectedFrames(markMseResources(analysed, reportsByFrame), protectedFrames),
+      markProtectedFrames(markMseResources(analysed, reportsByFrame, missing), protectedFrames),
     );
     const done: TabState = {
       ...base,
@@ -228,4 +237,27 @@ export async function inspectVariant(
   if (!parsed.ok) throw new Error(`parse-${parsed.error.code}`);
   if (parsed.playlist.kind !== 'hls-media') throw new Error('parse-not-media');
   return inspectMediaPlaylist(parsed.playlist);
+}
+
+/**
+ * For each frame with a MediaSource player the page hook did not report on, why not: the setting is off, the site is
+ * not allowed (so the hook is not registered there), or the player started before the hook was in place.
+ */
+async function whyNoHook(
+  resources: readonly MediaResource[],
+  reports: ReadonlyMap<number, unknown>,
+  frameUrls: ReadonlyMap<number, string>,
+  pageUrl: string,
+): Promise<Map<number, MseMissing>> {
+  const frames = new Set(
+    resources
+      .filter((r) => r.held?.kind === 'mse' && !reports.has(r.frameId ?? 0))
+      .map((r) => r.frameId ?? 0),
+  );
+  const out = new Map<number, MseMissing>();
+  if (frames.size === 0) return out;
+  const { pageHook } = await loadSettings();
+  for (const id of frames)
+    out.set(id, mseMissingReason(pageHook, await hasHostAccess(frameUrls.get(id) ?? pageUrl)));
+  return out;
 }

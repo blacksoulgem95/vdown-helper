@@ -5,7 +5,7 @@ import { MediaCard } from '@/components/MediaCard';
 import { Tabs, type TabDef } from '@/components/Tabs';
 import { Button, Notice, SelectField } from '@/components/ui';
 import { t } from '@/lib/i18n';
-import { groupResources } from '@/lib/resources';
+import { bestMatch, groupResources, rankResources } from '@/lib/resources';
 import {
   TAB_ORDER,
   activeTab,
@@ -45,6 +45,7 @@ export interface ResourceTabsProps {
   onGrantAccess: (r: MediaResource) => void;
   onCapture: (r: MediaResource, speed: 'fast' | 'realtime') => void;
   onRecord: (r: MediaResource) => void;
+  onFixPlayer: (r: MediaResource) => void;
   /** Queue several resources; resolves with how many were queued and how many could not be. */
   onBulk: (list: MediaResource[]) => Promise<{ queued: number; failed: number }>;
   /** Pack several files into one ZIP. */
@@ -71,8 +72,15 @@ export function ResourceTabs(props: ResourceTabsProps) {
       tab === 'images' ? split.images.filter((r) => imageMeetsMinimum(r, settings.imageMinPx)) : split[tab],
     [split, tab, settings.imageMinPx],
   );
+  // Media tabs answer "which one?": the most likely pick goes first, set apart, and the rest follow in that order.
+  const ranked = useMemo(
+    () => (tab === 'video' || tab === 'audio' ? rankResources(items) : items),
+    [items, tab],
+  );
+  const best = tab === 'video' || tab === 'audio' ? bestMatch(ranked) : undefined;
+  const rest = best ? ranked.filter((r) => r !== best) : ranked;
   const limit = shown[tab] ?? PAGE;
-  const visible = items.slice(0, limit);
+  const visible = rest.slice(0, limit);
   const downloadable = items.filter((r) => r.downloadability.status === 'downloadable');
   const picked = items.filter((r) => selected.has(r.id));
 
@@ -176,6 +184,23 @@ export function ResourceTabs(props: ResourceTabsProps) {
         </Notice>
       )}
 
+      {best && (
+        <ul aria-label={t('bestMatch')}>
+          <MediaCard
+            resource={best}
+            best
+            onFixPlayer={props.onFixPlayer}
+            busy={busy === best.id}
+            {...(feedback[best.id] ? { feedback: feedback[best.id] as Feedback } : {})}
+            onDownload={props.onDownload}
+            onConfigure={props.onConfigure}
+            onGrantAccess={props.onGrantAccess}
+            onCapture={props.onCapture}
+            onRecord={props.onRecord}
+          />
+        </ul>
+      )}
+
       {items.length === 0 ? (
         <p className="py-4 text-center text-[11.5px] text-muted">{t('tabEmpty')}</p>
       ) : (
@@ -225,6 +250,7 @@ export function ResourceTabs(props: ResourceTabsProps) {
                             onGrantAccess={props.onGrantAccess}
                             onCapture={props.onCapture}
                             onRecord={props.onRecord}
+                            onFixPlayer={props.onFixPlayer}
                           />
                         ))}
                       </ul>
@@ -237,13 +263,13 @@ export function ResourceTabs(props: ResourceTabsProps) {
         </ul>
       )}
 
-      {items.length > visible.length && (
+      {rest.length > visible.length && (
         <Button
           variant="secondary"
           className="w-full"
           onClick={() => setShown((cur) => ({ ...cur, [tab]: limit + PAGE }))}
         >
-          {t('showMore', Math.min(PAGE, items.length - visible.length))}
+          {t('showMore', Math.min(PAGE, rest.length - visible.length))}
         </Button>
       )}
     </div>

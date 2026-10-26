@@ -27,6 +27,22 @@ export const isActive = (j: Pick<DownloadJob, 'stage'>): boolean => ACTIVE_STAGE
 export const isTerminal = (j: Pick<DownloadJob, 'stage'>): boolean => TERMINAL_STAGES.includes(j.stage);
 export const isQueued = (j: Pick<DownloadJob, 'stage'>): boolean => j.stage === 'detected';
 
+/** Finished jobs the popup keeps in view; the rest is one click away, so history never buries the page. */
+export const POPUP_FINISHED = 3;
+
+/**
+ * The jobs the popup shows (newest first, as given): every job still running or waiting, then the most recent
+ * finished ones. `hidden` is how many finished jobs are left out.
+ */
+export function popupQueue<J extends Pick<DownloadJob, 'stage'>>(
+  jobs: readonly J[],
+  keep = POPUP_FINISHED,
+): { shown: J[]; hidden: number } {
+  let kept = 0;
+  const shown = jobs.filter((j) => !isTerminal(j) || kept++ < keep);
+  return { shown, hidden: jobs.length - shown.length };
+}
+
 export class IllegalTransitionError extends Error {
   constructor(
     readonly from: JobStage,

@@ -11,9 +11,6 @@
   "notifyFailTitle": {
     "message": "Download failed"
   },
-  "tagline": {
-    "message": "Detect. Decode. Download."
-  },
   "signature": {
     "message": "YOUR MEDIA. YOUR CONTROL."
   },
@@ -139,9 +136,6 @@
   },
   "kindBlob": {
     "message": "BLOB STREAM"
-  },
-  "variantsCount": {
-    "message": "$1 variants"
   },
   "detailSource": {
     "message": "Source"
@@ -870,7 +864,7 @@
     "message": "held by the page (blob:)"
   },
   "reasonMseNeedsHook": {
-    "message": "This video is fed to the player piece by piece (Media Source Extensions), so there is no file to download. Turn on \"Look inside players\" in Settings to capture what it plays."
+    "message": "This video is fed to the player piece by piece (Media Source Extensions), so there is no file to download. \"Look inside players\" is off: turn it on and reload the page to capture what the player plays."
   },
   "reasonMseUnrecordable": {
     "message": "This video is fed to the player piece by piece, and the page hook never saw how: it cannot be captured."
@@ -988,5 +982,59 @@
   },
   "reloadPage": {
     "message": "RELOAD PAGE"
+  },
+  "bestMatch": {
+    "message": "BEST MATCH"
+  },
+  "kindPlayerVideo": {
+    "message": "Player video"
+  },
+  "qualitiesCount": {
+    "message": "$1 qualities"
+  },
+  "liveTag": {
+    "message": "Live"
+  },
+  "chromeServerForbidden": {
+    "message": "The site refused to hand over the file (it may only serve it to its own player)."
+  },
+  "chromeServerMissing": {
+    "message": "The file is no longer on the server."
+  },
+  "chromeNetwork": {
+    "message": "The connection dropped. Retry when you are back online."
+  },
+  "chromeNoSpace": {
+    "message": "There is not enough disk space for this file."
+  },
+  "chromeFileDenied": {
+    "message": "Chrome could not write to the download folder."
+  },
+  "emptyBlockedTitle": {
+    "message": "THE PLAYER IS IN AN EMBEDDED FRAME"
+  },
+  "emptyReloadTitle": {
+    "message": "RELOAD TO LOOK INSIDE THE PLAYER"
+  },
+  "showAllJobs": {
+    "message": "Show $1 more"
+  },
+  "showFewerJobs": {
+    "message": "Show fewer"
+  },
+  "open": {
+    "message": "Open"
+  },
+  "reasonMseNeedsAccess": {
+    "message": "This video is fed to the player piece by piece (Media Source Extensions), so there is no file to download. \"Look inside players\" only runs on sites you allowed: allow this one and reload the page to capture what the player plays."
+  },
+  "reasonMseNeedsReload": {
+    "message": "This video is fed to the player piece by piece (Media Source Extensions). The player started before \"Look inside players\" was in place: reload the page, press play, and it can be captured."
+  },
+  "allowAndReload": {
+    "message": "ALLOW & RELOAD"
+  },
+  "sourceMse": {
+    "message": "a player in the page (Media Source)"
   }
 }

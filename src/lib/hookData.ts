@@ -139,18 +139,30 @@ export function markProtectedFrames(
   });
 }
 
+/** Why the page hook has nothing to say about a frame: switched off, not allowed on that site, or there too late. */
+export type MseMissing = 'mse-needs-hook' | 'mse-needs-access' | 'mse-needs-reload';
+
+export function mseMissingReason(hookOn: boolean, siteAllowed: boolean): MseMissing {
+  if (!hookOn) return 'mse-needs-hook';
+  return siteAllowed ? 'mse-needs-reload' : 'mse-needs-access';
+}
+
 /**
  * Decide whether a MediaSource player (`held.kind === 'mse'`) can be captured, from what the page hook of its own
- * frame saw. Without the hook there is no way to know how the player is fed.
+ * frame saw. Without the hook there is no way to know how the player is fed; `missing` says why it is not there.
  */
 export function markMseResources(
   resources: MediaResource[],
   reports: Map<number, HookReport>,
+  missing: ReadonlyMap<number, MseMissing> = new Map(),
 ): MediaResource[] {
   return resources.map((r) => {
     if (r.held?.kind !== 'mse') return r;
     const report = reports.get(r.frameId ?? 0);
-    if (!report) return r; // no hook in this frame: stays "needs the hook"
+    if (!report) {
+      const reason = missing.get(r.frameId ?? 0);
+      return reason ? { ...r, downloadability: { status: 'unsupported', reason } } : r;
+    }
     const source = report.mediaSources.find((m) => dataHandle(m.url) === r.held?.id);
     const verdict = (d: MediaResource['downloadability']) => ({ ...r, downloadability: d });
     if (!source || source.buffers.length === 0)

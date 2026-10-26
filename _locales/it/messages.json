@@ -11,9 +11,6 @@
   "notifyFailTitle": {
     "message": "Download non riuscito"
   },
-  "tagline": {
-    "message": "Rileva. Decodifica. Scarica."
-  },
   "signature": {
     "message": "I TUOI MEDIA. IL TUO CONTROLLO."
   },
@@ -139,9 +136,6 @@
   },
   "kindBlob": {
     "message": "STREAM BLOB"
-  },
-  "variantsCount": {
-    "message": "$1 varianti"
   },
   "detailSource": {
     "message": "Sorgente"
@@ -870,7 +864,7 @@
     "message": "tenuto dalla pagina (blob:)"
   },
   "reasonMseNeedsHook": {
-    "message": "Questo video viene dato al lettore a pezzi (Media Source Extensions), quindi non c'è un file da scaricare. Attiva \"Guarda dentro i player\" nelle Impostazioni per catturare ciò che riproduce."
+    "message": "Questo video viene dato al lettore a pezzi (Media Source Extensions), quindi non c'è un file da scaricare. \"Guarda dentro i player\" è disattivato: attivalo e ricarica la pagina per catturare ciò che il player riproduce."
   },
   "reasonMseUnrecordable": {
     "message": "Questo video viene dato al lettore a pezzi e l'hook della pagina non ha visto come: non si può catturare."
@@ -988,5 +982,59 @@
   },
   "reloadPage": {
     "message": "RICARICA PAGINA"
+  },
+  "bestMatch": {
+    "message": "SCELTA MIGLIORE"
+  },
+  "kindPlayerVideo": {
+    "message": "Video del player"
+  },
+  "qualitiesCount": {
+    "message": "$1 qualità"
+  },
+  "liveTag": {
+    "message": "Live"
+  },
+  "chromeServerForbidden": {
+    "message": "Il sito ha rifiutato di consegnare il file (forse lo serve solo al proprio player)."
+  },
+  "chromeServerMissing": {
+    "message": "Il file non è più sul server."
+  },
+  "chromeNetwork": {
+    "message": "La connessione si è interrotta. Riprova quando sei di nuovo online."
+  },
+  "chromeNoSpace": {
+    "message": "Spazio su disco insufficiente per questo file."
+  },
+  "chromeFileDenied": {
+    "message": "Chrome non è riuscito a scrivere nella cartella dei download."
+  },
+  "emptyBlockedTitle": {
+    "message": "IL PLAYER È IN UN FRAME INCORPORATO"
+  },
+  "emptyReloadTitle": {
+    "message": "RICARICA PER GUARDARE DENTRO IL PLAYER"
+  },
+  "showAllJobs": {
+    "message": "Mostra altri $1"
+  },
+  "showFewerJobs": {
+    "message": "Mostra meno"
+  },
+  "open": {
+    "message": "Apri"
+  },
+  "reasonMseNeedsAccess": {
+    "message": "Questo video viene dato al lettore a pezzi (Media Source Extensions), quindi non c'è un file da scaricare. \"Guarda dentro i player\" funziona solo sui siti che hai consentito: consenti questo e ricarica la pagina per catturare ciò che il player riproduce."
+  },
+  "reasonMseNeedsReload": {
+    "message": "Questo video viene dato al lettore a pezzi (Media Source Extensions). Il player è partito prima che \"Guarda dentro i player\" fosse attivo: ricarica la pagina, premi play e potrà essere catturato."
+  },
+  "allowAndReload": {
+    "message": "CONSENTI E RICARICA"
+  },
+  "sourceMse": {
+    "message": "un player nella pagina (Media Source)"
   }
 }

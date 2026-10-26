@@ -451,6 +451,7 @@ function analyzeHeld(r: MediaResource, e: Entry, ctx: AnalyzeContext): MediaReso
     // A player fed through MediaSource: there is nothing to fetch. The background upgrades this to "capturable"
     // when the page hook has seen how the player is fed.
     r.kind = 'blob';
+    r.title = clip(e.hints.title || ctx.pageTitle) || r.host;
     r.downloadability = verdict('unsupported', 'mse-needs-hook');
     return r;
   }

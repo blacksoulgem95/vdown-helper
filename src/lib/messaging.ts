@@ -59,6 +59,7 @@ const validators: { [K in RequestType]: (p: unknown) => p is RequestMap[K]['req'
   'get-jobs': (p): p is RequestMap['get-jobs']['req'] => isObj(p),
   'set-observer': (p): p is RequestMap['set-observer']['req'] =>
     isObj(p) && typeof p['enabled'] === 'boolean',
+  'sync-hook': (p): p is RequestMap['sync-hook']['req'] => isObj(p),
 };
 
 export function parseEnvelope(raw: unknown): Envelope | undefined {

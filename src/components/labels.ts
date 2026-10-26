@@ -1,4 +1,6 @@
 import { t, type MessageKey } from '@/lib/i18n';
+import { resolutionLabel } from '@/lib/media';
+import { bestHeight } from '@/lib/resources';
 import type { DownloadJob, JobStage } from '@/types/download';
 import type { Downloadability, MediaResource, ReasonCode } from '@/types/media';
 
@@ -30,6 +32,8 @@ const REASONS: Record<ReasonCode, MessageKey> = {
   'subtitle-unsupported': 'reasonSubtitleUnsupported',
   'too-large': 'reasonTooLarge',
   'mse-needs-hook': 'reasonMseNeedsHook',
+  'mse-needs-access': 'reasonMseNeedsAccess',
+  'mse-needs-reload': 'reasonMseNeedsReload',
   'mse-unrecordable': 'reasonMseUnrecordable',
   cors: 'reasonCors',
   'http-error': 'reasonHttp',
@@ -88,6 +92,47 @@ export function kindLabel(r: MediaResource): string {
   }
 }
 
+/**
+ * What a card is, in the words that tell it apart from its neighbours: quality first, then the kind of stream and how
+ * many qualities it offers ("1080p · HLS · 3 qualities"). The page title is already the group's heading.
+ */
+export function cardHeadline(r: MediaResource): string {
+  const res = resolutionLabel(bestHeight(r) || undefined, r.width);
+  const family =
+    r.kind === 'hls-master' || r.kind === 'hls-media'
+      ? 'HLS'
+      : r.kind === 'dash'
+        ? 'DASH'
+        : r.held?.kind === 'mse'
+          ? t('kindPlayerVideo')
+          : r.held?.kind === 'stream'
+            ? t('kindStream')
+            : r.format !== 'unknown' && r.kind !== 'unsupported-playlist'
+              ? r.format.toUpperCase()
+              : kindLabel(r);
+  const live = r.downloadability.status === 'downloadable' && r.downloadability.detail === 'live-recordable';
+  return [
+    res,
+    family,
+    r.variants.length > 1 ? t('qualitiesCount', r.variants.length) : '',
+    live ? t('liveTag') : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+/** Chrome's download interrupt reasons, in words; anything else keeps Chrome's own code. */
+const CHROME_REASONS: Record<string, MessageKey> = {
+  SERVER_FORBIDDEN: 'chromeServerForbidden',
+  SERVER_UNAUTHORIZED: 'chromeServerForbidden',
+  SERVER_BAD_CONTENT: 'chromeServerMissing',
+  NETWORK_FAILED: 'chromeNetwork',
+  NETWORK_TIMEOUT: 'chromeNetwork',
+  NETWORK_DISCONNECTED: 'chromeNetwork',
+  FILE_NO_SPACE: 'chromeNoSpace',
+  FILE_ACCESS_DENIED: 'chromeFileDenied',
+};
+
 const STAGES: Record<JobStage, MessageKey> = {
   detected: 'stageDetected',
   preparing: 'stagePreparing',
@@ -119,6 +164,8 @@ export function jobErrorText(job: DownloadJob): string {
     capture: 'jobErrCapture',
   };
   if (e.code === 'too-large' && job.request.zip) return t('zipTooLarge');
+  const chromeKey = e.code === 'chrome-download' ? CHROME_REASONS[e.message.trim()] : undefined;
+  if (chromeKey) return `${t(chromeKey)} (${e.message.trim()})`;
   const key = map[e.code];
   const base = key ? t(key) : t('errGeneric');
   return e.code === 'http-error' ||

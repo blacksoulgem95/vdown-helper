@@ -112,3 +112,44 @@ export function hideCoveredVariants(list: MediaResource[]): MediaResource[] {
   // Subtitle playlists are listed by their manifest on purpose: they are shown as subtitles, not hidden as variants.
   return list.filter((r) => r.kind === 'hls-master' || r.kind === 'subtitle' || !covered.has(r.id));
 }
+
+/** Tallest picture a resource offers: its own, or the best of its variants. */
+export const bestHeight = (r: MediaResource): number =>
+  Math.max(r.height ?? 0, ...r.variants.map((v) => v.height ?? 0));
+
+/** What one click on the card does: a real file beats a capture, which beats a recording; refused comes last. */
+function actionRank(r: MediaResource): number {
+  if (r.downloadability.status !== 'downloadable') return 0;
+  const d = r.downloadability.detail;
+  if (d === 'stream-recordable' || d === 'live-recordable') return 1;
+  if (d === 'mse-capturable') return 2;
+  return 3;
+}
+
+const mediaRank = (r: MediaResource): number =>
+  r.mediaType === 'video' ? 2 : r.mediaType === 'unknown' ? 1 : 0;
+
+/**
+ * The order the user most likely wants: what can be saved with one click first, then video over audio, the highest
+ * quality, the longest, the page itself before embedded frames; detection order breaks the remaining ties.
+ */
+export function rankResources(list: readonly MediaResource[]): MediaResource[] {
+  return list
+    .map((r, i) => ({ r, i }))
+    .sort(
+      (a, b) =>
+        actionRank(b.r) - actionRank(a.r) ||
+        mediaRank(b.r) - mediaRank(a.r) ||
+        bestHeight(b.r) - bestHeight(a.r) ||
+        (b.r.durationSec ?? 0) - (a.r.durationSec ?? 0) ||
+        Number((a.r.frameId ?? 0) !== 0) - Number((b.r.frameId ?? 0) !== 0) ||
+        a.i - b.i,
+    )
+    .map((x) => x.r);
+}
+
+/** The card worth putting first: only when there is a choice to make and the top one can actually be saved. */
+export function bestMatch(ranked: readonly MediaResource[]): MediaResource | undefined {
+  const top = ranked[0];
+  return ranked.length >= 2 && top && actionRank(top) > 0 ? top : undefined;
+}
