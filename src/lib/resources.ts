@@ -55,6 +55,7 @@ export function mergeResource(existing: MediaResource, incoming: MediaResource):
     'playlist',
     'language',
     'subtitleTracks',
+    'ext',
   ] as const;
   for (const k of optional) {
     const v = pick(existing[k], incoming[k]);

@@ -82,7 +82,13 @@ export type OffscreenCommand =
 
 export interface OffscreenPlan {
   pipeline:
-    'hls-concat' | 'hls-ffmpeg-copy' | 'ffmpeg-transcode' | 'file-ffmpeg-copy' | 'file-staged' | 'subtitle';
+    | 'hls-concat'
+    | 'hls-ffmpeg-copy'
+    | 'ffmpeg-transcode'
+    | 'file-ffmpeg-copy'
+    | 'file-staged'
+    | 'subtitle'
+    | 'zip';
   extension: string;
   requiresFfmpeg: boolean;
   video: 'copy' | 'transcode' | 'none';
@@ -95,7 +101,15 @@ export interface OffscreenPlan {
 export type OffscreenEvent =
   | { channel: 'vdown-offscreen-event'; type: 'stage'; jobId: string; stage: JobStage }
   | { channel: 'vdown-offscreen-event'; type: 'progress'; jobId: string; progress: JobProgress }
-  | { channel: 'vdown-offscreen-event'; type: 'ready'; jobId: string; blobUrl: string; bytes: number }
+  | {
+      channel: 'vdown-offscreen-event';
+      type: 'ready';
+      jobId: string;
+      blobUrl: string;
+      bytes: number;
+      /** Files left out of the result (a ZIP). */
+      skipped?: number;
+    }
   | { channel: 'vdown-offscreen-event'; type: 'failed'; jobId: string; code: string; message: string }
   | { channel: 'vdown-offscreen-event'; type: 'cancelled'; jobId: string };
 

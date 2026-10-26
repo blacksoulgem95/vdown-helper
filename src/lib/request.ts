@@ -20,6 +20,8 @@ import {
   type VideoFamily,
 } from './media';
 import { isDataLabel } from './dataUrl';
+import { isFileKind, type FileKind } from './filetypes';
+import { MAX_ZIP_ITEMS } from './zip';
 import { pickVariantIndex } from './settings';
 import {
   isSafeFetchUrl,
@@ -91,6 +93,74 @@ function subtitleExtension(format: MediaFormat, output: 'srt' | 'original'): str
   return SUBTITLE_FILE_FORMATS.has(format) ? format : 'vtt'; // stitched streams are written as WebVTT
 }
 
+/**
+ * A ZIP of several plain files. The request only names the resources; the background derives the URLs and entry names
+ * from its own scan. The size estimate is the sum of the sizes the page or server stated (unknown sizes count as 0:
+ * the packer enforces the limit again while it runs).
+ */
+export function buildZipRequest(resources: readonly MediaResource[], settings: Settings): DownloadRequest {
+  const first = resources[0] as MediaResource;
+  const known = resources.reduce((n, r) => n + (r.held ? 0 : (r.sizeBytes ?? 0)), 0);
+  const title = sanitizeFilename(first.pageTitle || first.host, 'files', 100);
+  const req: DownloadRequest = {
+    resourceId: first.id,
+    // Only a label for the queue and a safe URL for validation: the files come from `zip.items`.
+    sourceUrl: first.pageUrl,
+    tabId: first.tabId,
+    pageUrl: first.pageUrl,
+    host: first.host,
+    mode: 'original',
+    container: 'original',
+    audioFormat: settings.defaultAudioFormat,
+    audioBitrate: settings.defaultAudioBitrate,
+    filename: withExtension(`${title} (${resources.length} files)`, 'zip'),
+    subfolder: sanitizeSubfolder(settings.subfolder),
+    saveAs: settings.askWhereToSave,
+    qualityLabel: `ZIP · ${resources.length}`,
+    sourceFormat: 'unknown',
+    isHls: false,
+    hasMuxedAudio: false,
+    hasVideo: false,
+    zip: { resourceIds: resources.slice(0, MAX_ZIP_ITEMS).map((r) => r.id) },
+  };
+  if (known > 0) req.estimatedBytes = known;
+  return req;
+}
+
+/** Images, documents, archives and page assets: saved as they are, under the name the server gives them. */
+function buildPlainFileRequest(
+  resource: MediaResource,
+  settings: Settings,
+  choices: Choices,
+  kind: FileKind,
+): DownloadRequest {
+  const ext = resource.ext ?? '';
+  const base = sanitizeFilename(choices.filename.trim() || resource.title, 'file');
+  const req: DownloadRequest = {
+    resourceId: resource.id,
+    sourceUrl: resource.url,
+    tabId: resource.tabId,
+    pageUrl: resource.pageUrl,
+    host: resource.host,
+    mode: 'original',
+    container: 'original',
+    audioFormat: choices.audioFormat,
+    audioBitrate: choices.audioBitrate,
+    filename: ext ? withExtension(base, ext) : base,
+    subfolder: sanitizeSubfolder(settings.subfolder),
+    saveAs: choices.saveAs ?? settings.askWhereToSave,
+    qualityLabel: ext.toUpperCase(),
+    sourceFormat: 'unknown',
+    isHls: false,
+    hasMuxedAudio: false,
+    hasVideo: false,
+    file: { kind },
+  };
+  if (resource.held) req.held = resource.held;
+  if (resource.sizeBytes !== undefined) req.estimatedBytes = resource.sizeBytes;
+  return req;
+}
+
 function buildSubtitleRequest(
   resource: MediaResource,
   settings: Settings,
@@ -152,6 +222,7 @@ export function buildRequest(
   inspection?: VariantInspection,
 ): DownloadRequest {
   if (resource.kind === 'subtitle') return buildSubtitleRequest(resource, settings, choices);
+  if (isFileKind(resource.kind)) return buildPlainFileRequest(resource, settings, choices, resource.kind);
   const isMaster = resource.kind === 'hls-master' || resource.kind === 'dash';
   const isDash = resource.kind === 'dash';
   const variant = isMaster ? resource.variants[choices.variantIndex] : undefined;
@@ -289,6 +360,8 @@ export function planFromRequest(
   limits: { maxMemoryMb: number; maxEncodeDurationSec: number },
 ): Plan {
   if (req.subtitle) return planSubtitle(req);
+  if (req.file) return planPlainFile(req);
+  if (req.zip) return planZipJob(req, limits);
   const segmented = req.isHls || req.isDash === true;
   const input: PlanInput = {
     isHls: segmented, // the planner's "isHls" means: a segmented stream (HLS or DASH)
@@ -309,6 +382,44 @@ export function planFromRequest(
   if (req.durationSec !== undefined) input.durationSec = req.durationSec;
   if (req.live !== undefined) input.live = req.live;
   return planOutput(input);
+}
+
+/** ZIP archives are classic ZIP (not ZIP64): never above 4 GB, and never above the user's memory/size limit. */
+export const MAX_ZIP_BYTES = 4000 * 1024 * 1024;
+
+export function zipLimitBytes(maxMemoryMb: number): number {
+  return Math.min(maxMemoryMb * 1024 * 1024, MAX_ZIP_BYTES);
+}
+
+function planZipJob(req: DownloadRequest, limits: { maxMemoryMb: number }): Plan {
+  const issues: Plan['issues'] = [];
+  if (req.estimatedBytes !== undefined && req.estimatedBytes > zipLimitBytes(limits.maxMemoryMb))
+    issues.push('too-large');
+  return {
+    valid: issues.length === 0,
+    issues,
+    pipeline: 'zip',
+    requiresFfmpeg: false,
+    video: 'none',
+    audio: 'none',
+    extension: 'zip',
+    usesBitrate: false,
+  };
+}
+
+/** A plain file is Chrome's own download, as is (a data: source is staged by the page hand-over instead). */
+function planPlainFile(req: DownloadRequest): Plan {
+  const dot = req.filename.lastIndexOf('.');
+  return {
+    valid: true,
+    issues: [],
+    pipeline: 'native',
+    requiresFfmpeg: false,
+    video: 'none',
+    audio: 'none',
+    extension: dot > 0 ? req.filename.slice(dot + 1) : '',
+    usesBitrate: false,
+  };
 }
 
 /** Subtitles are small text: no FFmpeg, no size limit. A plain document saved as found is a native download. */
@@ -363,5 +474,16 @@ export function sanitizeRequest(req: DownloadRequest): DownloadRequest | undefin
     // Only the background may decide which frame's headers a job replays, and what the page holds.
     replay: undefined,
     held: undefined,
+    // The names and URLs inside a ZIP are the background's to decide.
+    zip: sanitizeZip(req.zip),
+    ...(req.file && isFileKind(req.file.kind) ? { file: { kind: req.file.kind } } : { file: undefined }),
   };
+}
+
+function sanitizeZip(zip: DownloadRequest['zip']): DownloadRequest['zip'] {
+  if (!zip || !Array.isArray(zip.resourceIds)) return undefined;
+  const ids = zip.resourceIds
+    .filter((x): x is string => typeof x === 'string' && x.length <= 64)
+    .slice(0, MAX_ZIP_ITEMS);
+  return ids.length > 0 ? { resourceIds: ids } : undefined;
 }

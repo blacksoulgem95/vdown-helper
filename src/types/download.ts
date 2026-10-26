@@ -68,6 +68,18 @@ export interface DownloadRequest {
    * `sourceUrl` is then only a label and is never fetched.
    */
   held?: PageHeld;
+  /**
+   * Several plain files packed into one ZIP. The UI names the resources; the background re-derives every URL and
+   * entry name from its own scan (`items`), so a request can never make the extension fetch a URL it has not seen.
+   */
+  zip?: {
+    resourceIds: string[];
+    items?: Array<{ url: string; name: string; deflate: boolean }>;
+    /** Selected files that could not be included (page-held, not downloadable, over the item limit). */
+    left?: number;
+  };
+  /** A plain file (image, document, archive, page asset) saved as it is. */
+  file?: { kind: 'image' | 'document' | 'archive' | 'asset' };
   /** Source description for the queue display. */
   qualityLabel: string;
   sourceFormat: MediaFormat;
@@ -126,6 +138,8 @@ export interface DownloadJob {
   finishedAt?: number;
   /** Final path reported by Chrome once completed. */
   filePath?: string;
+  /** Files the job could not include (a ZIP lists them inside the archive). */
+  skipped?: number;
   /** Number of times the user retried. */
   attempts: number;
 }

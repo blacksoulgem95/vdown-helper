@@ -3,12 +3,13 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createCipheriv, randomBytes } from 'node:crypto';
+import { zipSync } from 'fflate';
 
 const ff = (args) =>
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...args], { stdio: 'inherit' });
 
 export function ensureFixtures(dir) {
-  if (existsSync(join(dir, '.complete8'))) return;
+  if (existsSync(join(dir, '.complete10'))) return;
   mkdirSync(dir, { recursive: true });
   for (const d of [
     'media',
@@ -31,6 +32,7 @@ export function ensureFixtures(dir) {
     'dash-live',
     'subs',
     'formats',
+    'files',
     'gen',
     'hls-subs/sub-en',
     'dash-vod/t',
@@ -410,6 +412,43 @@ video/index.m3u8
 </script></body></html>`,
   );
 
+  // ---- Images, documents, an archive and page assets
+  const png = (name, size, filter = 'testsrc2') =>
+    ff(['-f', 'lavfi', '-i', `${filter}=size=${size}:rate=1`, '-frames:v', '1', join(dir, 'files', name)]);
+  png('hero.png', '640x360');
+  png('thumb.png', '48x48');
+  png('css-bg.png', '300x200', 'smptebars');
+  png('leaf.png', '320x240');
+  png('inline.png', '160x160');
+  ff([
+    '-f',
+    'lavfi',
+    '-i',
+    'testsrc2=size=400x300:rate=1',
+    '-frames:v',
+    '1',
+    '-q:v',
+    '5',
+    join(dir, 'files/photo.jpg'),
+  ]);
+  writeFileSync(
+    join(dir, 'files/Quarterly Report.pdf'),
+    '%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n',
+  );
+  writeFileSync(join(dir, 'files/data.csv'), 'a,b\n1,2\n3,4\n');
+  writeFileSync(
+    join(dir, 'files/bundle.zip'),
+    Buffer.from(
+      zipSync({ 'readme.txt': new TextEncoder().encode('hello'), 'dir/x.bin': new Uint8Array(500) }),
+    ),
+  );
+  writeFileSync(join(dir, 'files/site.css'), 'body{background:url(css-bg.png)}\n');
+  writeFileSync(join(dir, 'files/app.js'), 'console.log("fixture");\n');
+  writeFileSync(join(dir, 'files/font.woff2'), randomBytes(300));
+  // Two 70 MB archives: together they are over the smallest memory limit a user can set (128 MB).
+  writeFileSync(join(dir, 'files/large1.iso'), Buffer.alloc(70 * 1024 * 1024));
+  writeFileSync(join(dir, 'files/large2.iso'), Buffer.alloc(70 * 1024 * 1024, 1));
+
   // ---- Subtitles (all hand-written text; nothing here needs ffmpeg)
   writeFileSync(
     join(dir, 'subs/en.vtt'),
@@ -485,5 +524,5 @@ video/index.m3u8
     join(dir, 'big/index.m3u8'),
     '#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:10.0,\nseg0.ts\n#EXTINF:10.0,\nseg1.ts\n#EXT-X-ENDLIST\n',
   );
-  writeFileSync(join(dir, '.complete8'), 'ok');
+  writeFileSync(join(dir, '.complete10'), 'ok');
 }

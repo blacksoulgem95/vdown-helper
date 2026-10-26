@@ -9,7 +9,9 @@ import { stageDashRepresentation } from './dash';
 import { expectIngest } from './ingest';
 import { stageDirectFile, stageHlsPlaylist, type StageOptions } from './hls';
 import { removeJobDir } from './opfs';
+import { storageReady } from './startup';
 import { buildSubtitle } from './subtitle';
+import { buildZip } from './zip';
 
 interface Running {
   abort: AbortController;
@@ -86,6 +88,38 @@ async function execute(
   const credentialedOrigins = req.credentialedOrigins ?? [];
   stage(jobId, 'downloading');
 
+  // The page may connect with its bytes at any moment, so the expectation is registered before anything is awaited.
+  const heldBytes = req.held
+    ? expectIngest({
+        jobId,
+        tabId: req.tabId,
+        frameId: req.held.frameId ?? 0,
+        fileName: `source.${req.sourceFormat === 'unknown' ? 'bin' : req.sourceFormat}`,
+        maxBytes: maxBytes === undefined ? MAX_HELD_BYTES : Math.min(maxBytes, MAX_HELD_BYTES),
+        signal,
+        onProgress: (bytes, total) =>
+          send({ bytesDone: bytes, bytesTotal: total, fraction: total ? bytes / total : 1 }),
+      })
+    : undefined;
+  heldBytes?.catch(() => undefined); // reported where it is awaited
+  await storageReady;
+
+  // ZIP of plain files: fetched one by one, written straight to disk.
+  if (plan.pipeline === 'zip') {
+    const zipped = await buildZip(jobId, req, plan.maxMemoryMb, signal, send);
+    if (signal.aborted) throw new CancelledError();
+    entry.blobUrl = URL.createObjectURL(zipped.file);
+    emit({
+      channel: 'vdown-offscreen-event',
+      type: 'ready',
+      jobId,
+      blobUrl: entry.blobUrl,
+      bytes: zipped.bytes,
+      skipped: zipped.failed + (req.zip?.left ?? 0),
+    });
+    return;
+  }
+
   // Subtitles: small text, joined and converted in memory. No staging, no FFmpeg.
   if (plan.pipeline === 'subtitle') {
     const result = await buildSubtitle(req, signal, send);
@@ -144,16 +178,7 @@ async function execute(
     }
   } else if (req.held) {
     // Bytes only the page has (a data: URL): the page sends them to us; we never fetch the URL.
-    const ingested = await expectIngest({
-      jobId,
-      tabId: req.tabId,
-      frameId: req.held.frameId ?? 0,
-      fileName: `source.${req.sourceFormat === 'unknown' ? 'bin' : req.sourceFormat}`,
-      maxBytes: maxBytes === undefined ? MAX_HELD_BYTES : Math.min(maxBytes, MAX_HELD_BYTES),
-      signal,
-      onProgress: (bytes, total) =>
-        send({ bytesDone: bytes, bytesTotal: total, fraction: total ? bytes / total : 1 }),
-    });
+    const ingested = await (heldBytes as NonNullable<typeof heldBytes>);
     videoFile = ingested.file;
   } else {
     const staged = await stageDirectFile({

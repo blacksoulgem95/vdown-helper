@@ -8,6 +8,7 @@ against the upstream source, so check them before redistributing.
 | --------------------------------------------------------------- | ------- | -------------------- | ---------------------------------------------------- |
 | `@ffmpeg/core` (FFmpeg compiled to WebAssembly)                 | 0.12.10 | **GPL-2.0-or-later** | `dist/vendor/ffmpeg/ffmpeg-core.{js,wasm}` (≈ 31 MB) |
 | `@ffmpeg/ffmpeg`                                                | 0.12.15 | MIT                  | offscreen bundle + worker                            |
+| fflate (ZIP writer)                                             | 0.8.3   | MIT                  | offscreen bundle                                     |
 | React / React DOM                                               | 19.3.1  | MIT                  | popup, options, side panel                           |
 | lucide-react (icons)                                            | 1.61.0  | ISC                  | popup, options, side panel                           |
 | Inter (variable, latin subset) via `@fontsource-variable/inter` | 5.3.0   | SIL OFL-1.1          | `dist/assets/*.woff2`                                |

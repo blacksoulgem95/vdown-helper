@@ -703,22 +703,32 @@ await step(
 
 await step('subtitles: the popup lists them in their own tab, media stays in the other', async () => {
   const n = state.resources.filter((r) => r.kind === 'subtitle').length;
-  const m = state.resources.length - n;
+  const FILE_KINDS = ['image', 'document', 'archive', 'asset'];
+  const m = state.resources.filter(
+    (r) => r.kind !== 'subtitle' && !FILE_KINDS.includes(r.kind) && r.mediaType !== 'audio',
+  ).length;
   await popup.reload();
   await popup.getByRole('status').filter({ hasText: 'READY' }).waitFor({ timeout: 45000 });
   const tabs = popup.getByRole('tablist');
   await tabs.waitFor();
-  assert((await popup.locator('[data-resource-id]').count()) === m, 'media tab count');
-  await popup.getByRole('tab', { name: /Subtitles/i }).click();
+  assert(
+    (await popup.getByRole('tab', { name: /^Video/i }).getAttribute('aria-selected')) === 'true',
+    'Video first',
+  );
+  assert((await popup.locator('[data-resource-id]').count()) === m, `video tab count (want ${m})`);
+  await popup.getByRole('tab', { name: /^Subtitles/i }).click();
   assert((await popup.locator('[data-resource-id]').count()) === n, 'subtitle tab count');
   // keyboard: arrow keys move between tabs
-  await popup.getByRole('tab', { name: /Subtitles/i }).focus();
+  await popup.getByRole('tab', { name: /^Subtitles/i }).focus();
   await popup.keyboard.press('ArrowLeft');
   assert(
-    (await popup.getByRole('tab', { name: /Media/i }).getAttribute('aria-selected')) === 'true',
-    'ArrowLeft did not select Media',
+    (await popup
+      .getByRole('tab', { name: /^Audio|^Video/i })
+      .first()
+      .getAttribute('aria-selected')) === 'true',
+    'ArrowLeft did not move to the previous tab',
   );
-  await popup.getByRole('tab', { name: /Subtitles/i }).click();
+  await popup.getByRole('tab', { name: /^Subtitles/i }).click();
   await shot(popup, 'popup-subtitles');
 });
 
@@ -1439,6 +1449,7 @@ await step('data: video: the page hands the bytes over and the saved file is ide
     'saved file differs from the embedded data',
   );
   assert(decodeErrors(fileOf(job)) === '', 'decode errors');
+  await pop.getByRole('tab', { name: /^Audio/ }).click();
   const card = await pop.locator(`[data-resource-id="${dataRes('audio/wav').id}"]`).innerText();
   assert(/32 MB/.test(card), `too-large card: ${card}`);
   assert(
@@ -1513,6 +1524,348 @@ await step('data: URLs cannot be forged: the background only accepts what its ow
 });
 
 await dataPage.close();
+
+// ---- images, documents, archives and page assets
+const filesPage = await ctx.newPage();
+await filesPage.goto(`${A}/pages/files.html?c=${encodeURIComponent(C)}`);
+await filesPage.waitForTimeout(2500); // the embedded frame loads and the inline image is set from script
+const filesTab = await ext(
+  async (u) => (await chrome.tabs.query({})).find((t) => t.url?.startsWith(u))?.id,
+  `${A}/pages/files.html`,
+);
+let filesState;
+let filesPop;
+const frag = (name) => filesState.resources.find((r) => r.url.includes(name) || r.title === name);
+const fsize = (f) => statSync(join(fixtures, 'files', f)).size;
+
+await step(
+  'files: images, documents, archives and assets are found, each with type, name, size and frame',
+  async () => {
+    const res = await ext(
+      (id) => chrome.runtime.sendMessage({ channel: 'vdown', type: 'scan', payload: { tabId: id } }),
+      filesTab,
+    );
+    assert(res.ok, JSON.stringify(res));
+    filesState = res.state;
+    const hero = frag('/files/hero.png');
+    assert(
+      hero?.kind === 'image' && hero.ext === 'png' && hero.width === 640 && hero.height === 360,
+      `hero ${JSON.stringify(hero)}`,
+    );
+    assert(hero.sizeBytes === fsize('hero.png'), `hero size ${hero.sizeBytes} vs ${fsize('hero.png')}`);
+    assert(frag('/files/photo.jpg')?.ext === 'jpg' && frag('/files/photo.jpg').width === 400, 'photo');
+    assert(frag('/files/thumb.png')?.width === 48, 'thumb');
+    const bg = filesState.resources.find((r) => r.url.endsWith('/files/css-bg.png'));
+    assert(
+      bg?.kind === 'image' && bg.detectedBy.includes('dom-style'),
+      `css background ${JSON.stringify(bg)}`,
+    );
+    const inline = filesState.resources.find((r) => r.held && r.kind === 'image');
+    assert(
+      inline && inline.sizeBytes === fsize('inline.png') && inline.ext === 'png',
+      `inline ${JSON.stringify(inline)}`,
+    );
+    const pdf = frag('/files/Quarterly%20Report.pdf');
+    assert(
+      pdf?.kind === 'document' && pdf.ext === 'pdf' && pdf.title === 'Quarterly Report',
+      `pdf ${JSON.stringify(pdf)}`,
+    );
+    assert(frag('/files/data.csv')?.kind === 'document', 'csv');
+    const zip = frag('/files/bundle.zip');
+    assert(zip?.kind === 'archive' && zip.sizeBytes === fsize('bundle.zip'), 'zip');
+    for (const a of ['/files/site.css', '/files/app.js', '/files/font.woff2'])
+      assert(frag(a)?.kind === 'asset', `${a} should be an asset`);
+    assert(!filesState.resources.some((r) => r.url.endsWith('/other.html')), 'a plain link is not a file');
+    const leaf = filesState.resources.find((r) => r.url.endsWith('/files/leaf.png'));
+    assert(
+      leaf?.frameId > 0 && leaf.frameUrl.startsWith(`${C}/pages/files-leaf.html`),
+      `leaf ${JSON.stringify(leaf)}`,
+    );
+    assert(
+      filesState.resources.every((r) => r.downloadability.status === 'downloadable'),
+      'all downloadable',
+    );
+  },
+);
+
+await step('files: tabs by type with counts, the image size filter, and grouping by frame', async () => {
+  filesPop = await openPopup(filesTab);
+  await filesPop.getByRole('status').filter({ hasText: 'READY' }).waitFor({ timeout: 45000 });
+  const n = (kinds) => filesState.resources.filter((r) => kinds.includes(r.kind)).length;
+  const tab = (name) => filesPop.getByRole('tab', { name });
+  await tab(/^Images/).waitFor();
+  assert((await tab(/^Images/).textContent()).includes(String(n(['image']))), 'image count');
+  assert((await tab(/^Files/).textContent()).includes(String(n(['document', 'archive']))), 'files count');
+  assert((await tab(/^Assets/).textContent()).includes(String(n(['asset']))), 'assets count');
+  assert((await tab(/^Video/).count()) === 0, 'no video tab on a page without video');
+  assert((await tab(/^Images/).getAttribute('aria-selected')) === 'true', 'first non-empty tab is active');
+
+  const rows = () => filesPop.locator('[data-kind="image"]');
+  const smaller = filesState.resources.filter(
+    (r) => r.kind === 'image' && r.width && Math.min(r.width, r.height) < 100,
+  ).length;
+  assert(smaller === 1, `expected 1 small image, got ${smaller}`);
+  assert(
+    (await rows().count()) === n(['image']) - smaller,
+    `rows with the 100 px filter: ${await rows().count()}`,
+  );
+  await filesPop.getByText('1 smaller images are hidden.').waitFor();
+  await filesPop.getByLabel('Smallest image to list').selectOption('0');
+  await until(async () => (await rows().count()) === n(['image']), 'all images shown');
+  await filesPop.getByLabel('Smallest image to list').selectOption('800');
+  await until(
+    async () => (await rows().count()) === 0 || (await rows().count()) < n(['image']),
+    'filter applied',
+  );
+  await filesPop.getByLabel('Smallest image to list').selectOption('100');
+  await until(async () => (await rows().count()) === n(['image']) - smaller, 'back to the default');
+
+  // grouping by frame: this page, and the embedded one
+  const headers = await filesPop.locator('[data-frame-id]').allInnerTexts();
+  assert(
+    headers.some((h) => /THIS PAGE/i.test(h)) && headers.some((h) => /EMBEDDED: 127\.0\.0\.2/i.test(h)),
+    `headers ${headers}`,
+  );
+
+  // keyboard: arrow keys walk the tabs
+  await tab(/^Images/).focus();
+  await filesPop.keyboard.press('ArrowRight');
+  assert((await tab(/^Files/).getAttribute('aria-selected')) === 'true', 'ArrowRight did not select Files');
+  assert(
+    (await filesPop.locator('[data-kind="document"], [data-kind="archive"]').count()) === 3,
+    'files rows',
+  );
+  await tab(/^Assets/).click();
+  assert((await filesPop.locator('[data-kind="asset"]').count()) === 3, 'asset rows');
+  await tab(/^Images/).click();
+  await shot(filesPop, 'popup-images');
+});
+
+await step(
+  'files: one click saves an image, a PDF, an archive and an asset exactly as they are',
+  async () => {
+    const cases = [
+      ['Images', '/files/hero.png', 'hero.png', 'hero.png'],
+      ['Files', '/files/Quarterly%20Report.pdf', 'Quarterly Report.pdf', 'Quarterly Report.pdf'],
+      ['Files', '/files/bundle.zip', 'bundle.zip', 'bundle.zip'],
+      ['Assets', '/files/site.css', 'site.css', 'site.css'],
+    ];
+    for (const [tabName, path, name, fixture] of cases) {
+      await filesPop.getByRole('tab', { name: new RegExp(`^${tabName}`) }).click();
+      const r = frag(path);
+      await filesPop
+        .locator(`[data-resource-id="${r.id}"]`)
+        .getByRole('button', { name: `DOWNLOAD ${name}` })
+        .click();
+      const job = await jobFinished((j) => j.request.resourceId === r.id && j.createdAt > Date.now() - 60000);
+      assert(job.stage === 'completed', `${name}: ${job.stage} ${JSON.stringify(job.error)}`);
+      assert(job.request.filename === name, `name ${job.request.filename}`);
+      assert(!job.viaOffscreen, `${name}: a plain file is Chrome's own download`);
+      assert(
+        readFileSync(fileOf(job)).equals(readFileSync(join(fixtures, 'files', fixture))),
+        `${name} differs from the source`,
+      );
+    }
+  },
+);
+
+await step(
+  'files: an image embedded as a data: URL is handed over by the page and saved byte-for-byte',
+  async () => {
+    await filesPop.getByRole('tab', { name: /^Images/ }).click();
+    const inline = filesState.resources.find((r) => r.held && r.kind === 'image');
+    await filesPop
+      .locator(`[data-resource-id="${inline.id}"]`)
+      .getByRole('button', { name: /^DOWNLOAD inline-/ })
+      .click();
+    const job = await jobFinished((j) => j.request.resourceId === inline.id);
+    assert(job.stage === 'completed', `stage ${job.stage}: ${JSON.stringify(job.error)}`);
+    assert(
+      job.viaOffscreen === true && job.request.filename.endsWith('.png'),
+      `name ${job.request.filename}`,
+    );
+    assert(
+      readFileSync(fileOf(job)).equals(readFileSync(join(fixtures, 'files/inline.png'))),
+      'differs from the embedded data',
+    );
+  },
+);
+
+await step('files: several selected files are queued with one click', async () => {
+  await filesPop.getByRole('tab', { name: /^Files/ }).click();
+  const before = (await jobs()).length;
+  await filesPop.getByRole('button', { name: 'Select all' }).click();
+  await filesPop.getByRole('button', { name: 'DOWNLOAD 3' }).click();
+  await filesPop.getByText('3 downloads queued.').waitFor();
+  await until(async () => (await jobs()).slice(before).length === 3, 'three jobs queued');
+  await until(
+    async () => (await jobs()).slice(before).every((j) => ['completed', 'failed'].includes(j.stage)),
+    'three jobs finished',
+    60000,
+  );
+  assert(
+    (await jobs()).slice(before).every((j) => j.stage === 'completed'),
+    'a bulk download failed',
+  );
+});
+
+await step(
+  'files: a page with 320 images stays responsive: capped scan, 40 rows at a time, "show more"',
+  async () => {
+    const many = await ctx.newPage();
+    await many.goto(`${A}/pages/many.html`);
+    await many.waitForTimeout(2500);
+    const id = await ext(
+      async (u) => (await chrome.tabs.query({})).find((t) => t.url?.startsWith(u))?.id,
+      `${A}/pages/many.html`,
+    );
+    const t0 = Date.now();
+    const pop = await openPopup(id);
+    await pop.getByRole('status').filter({ hasText: 'READY' }).waitFor({ timeout: 60000 });
+    const scanSeconds = (Date.now() - t0) / 1000;
+    const st = (await ext((i) => chrome.storage.session.get(`tab:${i}`), id))[`tab:${id}`];
+    const images = st.resources.filter((r) => r.kind === 'image');
+    assert(images.length === 300, `capped at 300 images, got ${images.length}`);
+    const rows = pop.locator('[data-kind="image"]');
+    assert((await rows.count()) === 40, `rendered ${await rows.count()} rows at first`);
+    await pop.getByRole('button', { name: 'SHOW 40 MORE' }).click();
+    assert((await rows.count()) === 80, `after show more: ${await rows.count()}`);
+    const stored = JSON.stringify(st).length;
+    console.log(
+      `        scan+render ${scanSeconds.toFixed(1)} s, stored state ${(stored / 1024).toFixed(0)} KB`,
+    );
+    assert(stored < 1_500_000, `stored state is ${stored} bytes`);
+    await pop.close();
+    await many.close();
+  },
+);
+
+// ---- ZIP
+async function zipOf(job) {
+  const { unzipSync } = await import('fflate');
+  return unzipSync(new Uint8Array(readFileSync(fileOf(job))));
+}
+async function openFilesTab(pagePath) {
+  const pg = await ctx.newPage();
+  await pg.goto(`${A}/pages/${pagePath}`);
+  await pg.waitForTimeout(1200);
+  const id = await ext(
+    async (u) => (await chrome.tabs.query({})).find((t) => t.url?.startsWith(u))?.id,
+    `${A}/pages/${pagePath}`,
+  );
+  const pop = await openPopup(id);
+  await pop.getByRole('status').filter({ hasText: 'READY' }).waitFor({ timeout: 45000 });
+  return { pg, pop, id };
+}
+
+await step(
+  'zip: selected files are packed into one archive with their own names and exact contents',
+  async () => {
+    await filesPop.getByRole('tab', { name: /^Files/ }).click();
+    const before = (await jobs()).length;
+    await filesPop.getByRole('button', { name: 'Select all' }).click();
+    await filesPop.getByRole('button', { name: 'ZIP 3' }).click();
+    const job = await jobFinished((j) => j.request.zip && j.createdAt > Date.now() - 60000);
+    assert(job.stage === 'completed', `stage ${job.stage}: ${JSON.stringify(job.error)}`);
+    assert(job.viaOffscreen === true && /\.zip$/.test(job.request.filename), `name ${job.request.filename}`);
+    const entries = await zipOf(job);
+    assert(
+      JSON.stringify(Object.keys(entries).sort()) ===
+        JSON.stringify(['Quarterly Report.pdf', 'bundle.zip', 'data.csv']),
+      `entries ${Object.keys(entries)}`,
+    );
+    for (const [name, fixture] of [
+      ['Quarterly Report.pdf', 'Quarterly Report.pdf'],
+      ['bundle.zip', 'bundle.zip'],
+      ['data.csv', 'data.csv'],
+    ])
+      assert(
+        Buffer.from(entries[name]).equals(readFileSync(join(fixtures, 'files', fixture))),
+        `${name} differs`,
+      );
+    // unzip(1) agrees that the archive is sound
+    execFileSync('unzip', ['-tq', fileOf(job)]);
+    assert(!job.skipped, 'nothing should have been skipped');
+    assert((await jobs()).length > before, 'job recorded');
+  },
+);
+
+await step('zip: files with the same name get unique names inside the archive', async () => {
+  const many = await ctx.newPage();
+  await many.goto(`${A}/pages/many.html`);
+  await many.waitForTimeout(2000);
+  const id = await ext(
+    async (u) => (await chrome.tabs.query({})).find((t) => t.url?.startsWith(u))?.id,
+    `${A}/pages/many.html`,
+  );
+  const pop = await openPopup(id);
+  await pop.getByRole('status').filter({ hasText: 'READY' }).waitFor({ timeout: 60000 });
+  const boxes = pop.getByRole('checkbox');
+  for (const i of [0, 1, 2]) await boxes.nth(i).check();
+  await pop.getByRole('button', { name: 'ZIP 3' }).click();
+  const job = await jobFinished(
+    (j) => j.request.zip && j.request.pageUrl.endsWith('/many.html') && j.createdAt > Date.now() - 60000,
+  );
+  assert(job.stage === 'completed', `stage ${job.stage}: ${JSON.stringify(job.error)}`);
+  const names = Object.keys(await zipOf(job)).sort();
+  assert(
+    JSON.stringify(names) === JSON.stringify(['hero (2).png', 'hero (3).png', 'hero.png']),
+    `names ${names}`,
+  );
+  await pop.close();
+  await many.close();
+});
+
+await step(
+  'zip: a file that fails is skipped, named inside the archive, and reported on the job',
+  async () => {
+    const { pg, pop } = await openFilesTab('files-zip.html');
+    await pop
+      .getByRole('tab', { name: /^Files/ })
+      .click()
+      .catch(() => {});
+    await pop.getByRole('button', { name: 'Select all' }).click();
+    await pop.getByRole('button', { name: 'ZIP 4' }).click();
+    const job = await jobFinished(
+      (j) =>
+        j.request.zip && j.request.pageUrl.endsWith('/files-zip.html') && j.createdAt > Date.now() - 90000,
+      90000,
+    );
+    assert(job.stage === 'completed', `stage ${job.stage}: ${JSON.stringify(job.error)}`);
+    assert(job.skipped === 1, `skipped ${job.skipped}`);
+    const entries = await zipOf(job);
+    assert(entries['_not-saved.txt'], `entries ${Object.keys(entries)}`);
+    const note = Buffer.from(entries['_not-saved.txt']).toString('utf8');
+    assert(/report/i.test(note) && /http-error/.test(note), `note ${note}`);
+    assert(!/http:\/\//.test(note), 'the note must not contain URLs');
+    assert(
+      entries['data.csv'] && entries['bundle.zip'] && entries['Quarterly Report.pdf'],
+      'the good files are in',
+    );
+    await pop
+      .getByText(/1 file\(s\) could not be included/)
+      .first()
+      .waitFor({ timeout: 15000 });
+    await pop.close();
+    await pg.close();
+  },
+);
+
+await step('zip: above the size limit it refuses with an explanation and queues nothing', async () => {
+  await ext(() => chrome.storage.local.set({ settings: { schemaVersion: 1, maxMemoryMb: 128 } }));
+  const { pg, pop } = await openFilesTab('files-large.html');
+  const before = (await jobs()).length;
+  await pop.getByRole('button', { name: 'Select all' }).click();
+  await pop.getByRole('button', { name: 'ZIP 2' }).click();
+  await pop.getByText(/size limit for a ZIP/).waitFor({ timeout: 15000 });
+  assert((await jobs()).length === before, 'a refused ZIP must not create a job');
+  await ext(() => chrome.storage.local.remove('settings'));
+  await pop.close();
+  await pg.close();
+});
+
+await filesPop.close();
+await filesPage.close();
 
 await step('empty page shows the empty state and SCAN AGAIN', async () => {
   const p2 = await ctx.newPage();

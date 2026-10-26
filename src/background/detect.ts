@@ -5,6 +5,7 @@ import { parseHls } from '@/lib/hls/parser';
 import { parseDash, mainPeriodIndex } from '@/lib/dash/parser';
 import { parseDashRef } from '@/lib/dash/ref';
 import { isSafeFetchUrl, log } from '@/lib/security';
+import { tabOf } from '@/lib/tabs';
 import type { VariantInspection, TabState } from '@/types/messages';
 import type { MediaResource, RawCandidate, ScanNotes, ScanReport } from '@/types/media';
 import { readHookReports } from './hooks';
@@ -23,6 +24,10 @@ function rank(r: MediaResource): number {
     blob: 3,
     'unsupported-playlist': 4,
     subtitle: 5,
+    image: 6,
+    document: 6,
+    archive: 6,
+    asset: 7,
   } as const;
   return order[r.kind] + (r.downloadability.status === 'downloadable' ? 0 : 10);
 }
@@ -32,7 +37,10 @@ export function sortResources(list: MediaResource[]): MediaResource[] {
 }
 
 async function updateBadge(tabId: number, state: TabState): Promise<void> {
-  const n = state.resources.filter((r) => r.downloadability.status === 'downloadable').length;
+  // The badge counts what the extension is for (video, audio, subtitles); images and files have their own tabs.
+  const n = state.resources.filter(
+    (r) => r.downloadability.status === 'downloadable' && ['video', 'audio', 'subtitles'].includes(tabOf(r)),
+  ).length;
   try {
     await chrome.action.setBadgeBackgroundColor({ tabId, color: '#00F5FF' });
     await chrome.action.setBadgeTextColor?.({ tabId, color: '#080A12' });

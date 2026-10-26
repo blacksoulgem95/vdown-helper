@@ -9,6 +9,7 @@ import type {
 } from '@/types/media';
 import { classifyPlaylist, parseHls } from './hls/parser';
 import { dashRef } from './dash/ref';
+import { extensionForMime, fileStem, urlExtension, type FileKind } from './filetypes';
 import { exceedsHeldLimit, isDataLabel } from './dataUrl';
 import { MAX_HELD_BYTES } from '@/types/ingest';
 import {
@@ -59,7 +60,17 @@ interface Entry {
   frameUrl?: string;
   hints: Pick<
     RawCandidate,
-    'title' | 'mimeType' | 'mediaType' | 'durationSec' | 'width' | 'height' | 'poster' | 'role' | 'language'
+    | 'title'
+    | 'mimeType'
+    | 'mediaType'
+    | 'durationSec'
+    | 'width'
+    | 'height'
+    | 'poster'
+    | 'role'
+    | 'language'
+    | 'fileKind'
+    | 'sizeBytes'
   >;
 }
 
@@ -86,6 +97,8 @@ function collectEntries(cands: RawCandidate[]): Entry[] {
       ...(c.width ? { width: c.width, height: c.height } : {}),
       ...(c.poster ? { poster: c.poster } : {}),
       ...(c.role ? { role: c.role } : {}),
+      ...(c.fileKind ? { fileKind: c.fileKind } : {}),
+      ...(c.sizeBytes ? { sizeBytes: c.sizeBytes } : {}),
       ...(c.language ? { language: clip(c.language) } : {}),
     };
     if (prev) {
@@ -103,6 +116,17 @@ function collectEntries(cands: RawCandidate[]): Entry[] {
     }
   }
   return [...map.values()];
+}
+
+/** Per-kind caps on what is analysed in one scan: media is probed deeply, so it gets the tightest limit. */
+export const FILE_CAPS = { image: 300, document: 100, archive: 100, asset: 200 } as const;
+
+function capEntries(entries: Entry[], maxMedia: number): Entry[] {
+  const left: Record<string, number> = { media: maxMedia, ...FILE_CAPS };
+  return entries.filter((e) => {
+    const bucket = e.hints.fileKind ?? 'media';
+    return (left[bucket] = (left[bucket] ?? 0) - 1) >= 0;
+  });
 }
 
 export async function mapPool<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
@@ -164,6 +188,17 @@ function skeleton(e: Entry, ctx: AnalyzeContext, format: MediaFormat): MediaReso
   if (e.hints.poster) r.poster = e.hints.poster;
   if (e.hints.language) r.language = e.hints.language;
   if (e.held) r.held = e.held;
+  if (e.hints.fileKind) {
+    // A plain file: named as the server names it, with the extension its URL (or MIME type) gives.
+    r.kind = e.hints.fileKind;
+    r.format = 'unknown';
+    r.mediaType = 'unknown';
+    r.ext = (e.held ? '' : urlExtension(e.url)) || extensionForMime(e.hints.mimeType) || '';
+    r.title = clip((e.held ? `inline-${e.held.id}` : fileStem(e.url)) || pageHost || clip(ctx.pageTitle));
+    if (e.hints.sizeBytes) r.sizeBytes = e.hints.sizeBytes;
+  } else if (e.hints.role === 'subtitle') {
+    r.kind = 'subtitle';
+  }
   if (e.frameId !== undefined) r.frameId = e.frameId;
   if (e.frameUrl) r.frameUrl = e.frameUrl;
   return r;
@@ -401,10 +436,50 @@ async function analyzeSubtitleFile(r: MediaResource, e: Entry, fetcher: Fetcher)
 function analyzeHeld(r: MediaResource, e: Entry, ctx: AnalyzeContext): MediaResource {
   const held = e.held as PageHeld;
   r.sizeBytes = held.bytes;
-  if (!e.hints.title) r.title = clip(ctx.pageTitle) || r.host;
+  if (!e.hints.title && !e.hints.fileKind) r.title = clip(ctx.pageTitle) || r.host;
   r.downloadability = exceedsHeldLimit(held.bytes)
     ? verdict('unsupported', 'too-large', `${MAX_HELD_BYTES}`)
     : verdict('downloadable', 'ok', 'in-page-data');
+  return r;
+}
+
+/** How many plain files per scan get a HEAD request; the rest are listed from what the page already told us. */
+const FILE_HEAD_BUDGET = 150;
+
+/**
+ * An image, document, archive or page asset. The page usually already knows its size and dimensions, so a HEAD request
+ * (one per file) is only made while the budget lasts; it confirms the type and catches dead links.
+ */
+async function analyzeFileKind(
+  r: MediaResource,
+  e: Entry,
+  ctx: AnalyzeContext,
+  fetcher: Fetcher,
+  budget: { head: number },
+): Promise<MediaResource> {
+  const kind = e.hints.fileKind as FileKind;
+  if (e.held) return analyzeHeld(r, e, ctx);
+  if (budget.head <= 0) {
+    r.downloadability = verdict('downloadable', 'ok');
+    return r;
+  }
+  budget.head--;
+  const head = await fetcher.head(e.url, e.frameId);
+  if (!head.ok) {
+    r.downloadability =
+      head.kind === 'blocked' ? verdict('downloadable', 'ok', 'headers-unreadable') : failureVerdict(head);
+    return r;
+  }
+  const mime = head.contentType.split(';')[0]?.trim().toLowerCase() ?? '';
+  // A link that answers with a web page is not the file it claims to be.
+  if (mime === 'text/html' && kind !== 'document') {
+    r.downloadability = verdict('unsupported', 'unsupported-format', mime);
+    return r;
+  }
+  if (mime) r.mimeType = mime;
+  if (!r.ext) r.ext = extensionForMime(mime) ?? '';
+  if (head.contentLength !== undefined) r.sizeBytes = head.contentLength;
+  r.downloadability = verdict('downloadable', 'ok');
   return r;
 }
 
@@ -413,9 +488,11 @@ async function analyzeOne(
   ctx: AnalyzeContext,
   fetcher: Fetcher,
   covered: Covered,
+  budget: { head: number },
 ): Promise<MediaResource> {
   const format = formatFromMime(e.hints.mimeType) ?? formatFromUrl(e.url) ?? 'unknown';
-  const r = skeleton(e, ctx, format);
+  const r = skeleton(e, ctx, e.hints.fileKind ? 'unknown' : format);
+  if (e.hints.fileKind) return analyzeFileKind(r, e, ctx, fetcher, budget);
   if (e.held) return analyzeHeld(r, e, ctx);
   if (e.hints.role === 'subtitle' || SUBTITLE_FILE_FORMATS.has(format))
     return analyzeSubtitleFile(r, e, fetcher);
@@ -498,13 +575,14 @@ export async function analyzeCandidates(
   fetcher: Fetcher,
   opts: AnalyzeOptions = {},
 ): Promise<MediaResource[]> {
-  const entries = collectEntries(candidates).slice(0, opts.maxResources ?? 60);
+  const entries = capEntries(collectEntries(candidates), opts.maxResources ?? 60);
   const covered: Covered = new Set();
+  const budget = { head: FILE_HEAD_BUDGET };
   const resources = await mapPool(entries, opts.concurrency ?? 4, async (e) => {
     try {
-      return await analyzeOne(e, ctx, fetcher, covered);
+      return await analyzeOne(e, ctx, fetcher, covered, budget);
     } catch {
-      const r = skeleton(e, ctx, formatFromUrl(e.url) ?? 'unknown');
+      const r = skeleton(e, ctx, e.hints.fileKind ? 'unknown' : (formatFromUrl(e.url) ?? 'unknown'));
       r.downloadability = verdict('unknown', 'network');
       return r;
     }
@@ -521,7 +599,13 @@ export async function analyzeCandidates(
 export function provisionalResources(candidates: RawCandidate[], ctx: AnalyzeContext): MediaResource[] {
   return dedupeResources(
     collectEntries(candidates).map((e) =>
-      skeleton(e, ctx, formatFromMime(e.hints.mimeType) ?? formatFromUrl(e.url) ?? 'unknown'),
+      skeleton(
+        e,
+        ctx,
+        e.hints.fileKind
+          ? 'unknown'
+          : (formatFromMime(e.hints.mimeType) ?? formatFromUrl(e.url) ?? 'unknown'),
+      ),
     ),
   );
 }

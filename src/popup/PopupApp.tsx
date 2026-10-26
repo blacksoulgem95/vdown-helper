@@ -1,19 +1,18 @@
 import { Eraser, RefreshCw, Settings, ShieldCheck } from 'lucide-react';
-import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { EmptyState } from '@/components/EmptyState';
 import { Logo } from '@/components/Logo';
-import { MediaCard } from '@/components/MediaCard';
 import { QueueItem, type JobAction } from '@/components/QueueItem';
-import { Tabs } from '@/components/Tabs';
 import { Badge, Button, IconButton, Notice, cx } from '@/components/ui';
 import { useJobs } from '@/hooks/useJobs';
 import { useSettings } from '@/hooks/useSettings';
 import { useActiveTabId, useTabMedia } from '@/hooks/useTabMedia';
 import { t } from '@/lib/i18n';
 import { send } from '@/lib/messaging';
-import { groupResources } from '@/lib/resources';
-import { openDownloadedFile, originOf, quickDownload, requestAccess } from '@/lib/uiActions';
+import { tabOf } from '@/lib/tabs';
+import { openDownloadedFile, originOf, quickDownload, requestAccess, startZip } from '@/lib/uiActions';
 import type { MediaResource } from '@/types/media';
+import { ResourceTabs } from './ResourceTabs';
 
 type Feedback = { tone: 'danger' | 'acid'; text: string };
 
@@ -36,7 +35,7 @@ export function PopupApp() {
   const tabId = useActiveTabId();
   const { state, scanning, rescan } = useTabMedia(tabId);
   const jobs = useJobs();
-  const { settings } = useSettings();
+  const { settings, update } = useSettings();
   const [busy, setBusy] = useState<string | undefined>();
   const [feedback, setFeedback] = useState<Record<string, Feedback>>({});
   const version = chrome.runtime.getManifest().version;
@@ -59,6 +58,28 @@ export function PopupApp() {
       } finally {
         setBusy(undefined);
       }
+    },
+    [settings],
+  );
+
+  const onBulk = useCallback(
+    async (list: MediaResource[]) => {
+      let queued = 0;
+      let failed = 0;
+      for (const r of list) {
+        const out = await quickDownload(r, settings);
+        if (out.ok) queued++;
+        else failed++;
+      }
+      return { queued, failed };
+    },
+    [settings],
+  );
+
+  const onZip = useCallback(
+    async (list: MediaResource[]) => {
+      const out = await startZip(list, settings);
+      return out.ok ? ({ ok: true } as const) : ({ ok: false, error: out.error } as const);
     },
     [settings],
   );
@@ -111,14 +132,12 @@ export function PopupApp() {
   );
 
   const resources = useMemo(() => state?.resources ?? [], [state?.resources]);
-  const [tab, setTab] = useState<'media' | 'subtitles'>('media');
-  const media = useMemo(() => resources.filter((r) => r.kind !== 'subtitle'), [resources]);
-  const subtitles = useMemo(() => resources.filter((r) => r.kind === 'subtitle'), [resources]);
-  // The strip only appears when there is something besides media; an empty tab is never the active one.
-  const activeTab = subtitles.length === 0 ? 'media' : media.length === 0 ? 'subtitles' : tab;
-  const shown = activeTab === 'subtitles' ? subtitles : media;
-  const groups = groupResources(shown);
-  const downloadable = resources.filter((r) => r.downloadability.status === 'downloadable').length;
+  // The headline counts what the extension is for: audio, video and their subtitles. Images and files have their own tabs.
+  const mediaOnly = useMemo(
+    () => resources.filter((r) => ['video', 'audio', 'subtitles'].includes(tabOf(r))),
+    [resources],
+  );
+  const downloadable = mediaOnly.filter((r) => r.downloadability.status === 'downloadable').length;
   const pageHost = state?.pageUrl ? safeHost(state.pageUrl) : '';
   const errText = pageErrorText(state?.status === 'error' ? state.error : undefined);
   const finished = jobs.filter((j) => ['completed', 'failed', 'cancelled'].includes(j.stage));
@@ -170,8 +189,8 @@ export function PopupApp() {
             <div className="text-right">
               <p className="label">{t('detected')}</p>
               <p className="mono text-[18px] leading-none text-fg">
-                {resources.length}
-                {resources.length > 0 && (
+                {mediaOnly.length}
+                {mediaOnly.length > 0 && (
                   <span className="ml-1 text-[10px] text-acid">{t('readyCount', downloadable)}</span>
                 )}
               </p>
@@ -227,42 +246,18 @@ export function PopupApp() {
             />
           )
         ) : (
-          <TabbedList
-            show={subtitles.length > 0 && media.length > 0}
-            tabs={[
-              { key: 'media', label: t('tabMedia'), count: media.length },
-              { key: 'subtitles', label: t('tabSubtitles'), count: subtitles.length },
-            ]}
-            active={activeTab}
-            onChange={setTab}
-            label={t('detectedMedia')}
-          >
-            <ul className="space-y-2.5" aria-label={t('detectedMedia')}>
-              {groups.map((g) => (
-                <li key={g.key} className="list-none">
-                  {g.items.length > 1 && (
-                    <p className="label mb-1.5 flex items-center justify-between">
-                      <span className="truncate">{g.title}</span>
-                      <span>{g.items.length}</span>
-                    </p>
-                  )}
-                  <ul className="space-y-2.5">
-                    {g.items.map((r) => (
-                      <MediaCard
-                        key={r.id}
-                        resource={r}
-                        busy={busy === r.id}
-                        {...(feedback[r.id] ? { feedback: feedback[r.id] as Feedback } : {})}
-                        onDownload={(x) => void onDownload(x)}
-                        onConfigure={(x) => void onConfigure(x)}
-                        onGrantAccess={(x) => void onGrantAccess(x)}
-                      />
-                    ))}
-                  </ul>
-                </li>
-              ))}
-            </ul>
-          </TabbedList>
+          <ResourceTabs
+            resources={resources}
+            settings={settings}
+            busy={busy}
+            feedback={feedback}
+            onDownload={(x) => void onDownload(x)}
+            onConfigure={(x) => void onConfigure(x)}
+            onGrantAccess={(x) => void onGrantAccess(x)}
+            onBulk={onBulk}
+            onZip={onZip}
+            onMinImage={(px) => void update({ imageMinPx: px })}
+          />
         )}
 
         {jobs.length > 0 && (
@@ -302,30 +297,6 @@ export function PopupApp() {
         <p className="mono text-[9.5px] uppercase tracking-[0.24em] text-muted">{t('signature')}</p>
       </footer>
     </div>
-  );
-}
-
-/** The tab strip when there is more than one kind of thing to show; otherwise just the list. */
-function TabbedList({
-  show,
-  tabs,
-  active,
-  onChange,
-  label,
-  children,
-}: {
-  show: boolean;
-  tabs: Array<{ key: 'media' | 'subtitles'; label: string; count: number }>;
-  active: 'media' | 'subtitles';
-  onChange: (k: 'media' | 'subtitles') => void;
-  label: string;
-  children: ReactNode;
-}) {
-  if (!show) return <>{children}</>;
-  return (
-    <Tabs tabs={tabs} active={active} onChange={onChange} label={label}>
-      {children}
-    </Tabs>
   );
 }
 

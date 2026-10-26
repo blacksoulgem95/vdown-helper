@@ -39,13 +39,21 @@ export type StreamKind =
   | 'unsupported-playlist'
   | 'blob'
   /** A subtitle/caption document or stream (format: vtt/srt/ttml, or hls/dash for segmented ones). */
-  | 'subtitle';
+  | 'subtitle'
+  /** Plain files that are not audio/video: saved as they are (see lib/filetypes). */
+  | 'image'
+  | 'document'
+  | 'archive'
+  | 'asset';
 
 export type DetectionMethod =
   | 'dom-element'
   | 'dom-source'
   | 'dom-link'
   | 'dom-track'
+  | 'dom-image'
+  | 'dom-style'
+  | 'dom-meta'
   | 'performance'
   | 'network'
   | 'hook'
@@ -138,6 +146,8 @@ export interface MediaResource {
   subtitleTracks?: HlsRendition[];
   /** Subtitle language (BCP 47) when the page or manifest states it. */
   language?: string;
+  /** Plain files: lower-case extension from the URL or MIME type ("" when neither says). */
+  ext?: string;
   playlist?: PlaylistSummary;
   /** Poster/thumbnail URL when the page provides one. */
   poster?: string;
@@ -162,6 +172,9 @@ export interface RawCandidate {
   poster?: string;
   /** Bytes held by the page (a data: URL); `url` is then a harmless label. */
   held?: PageHeld;
+  /** Plain files (images, documents, archives, page assets) and what the page says about them. */
+  fileKind?: 'image' | 'document' | 'archive' | 'asset';
+  sizeBytes?: number;
   /** `<track>` elements: a subtitle, with its declared language and label. */
   role?: 'subtitle';
   language?: string;

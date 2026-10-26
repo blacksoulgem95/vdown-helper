@@ -91,13 +91,13 @@ describe('content scanner', () => {
     setBody(
       `<video src="data:image/png;base64,AAAA"></video><video src="data:video/mp4"></video>` +
         Array.from(
-          { length: 30 },
+          { length: 50 },
           (_, i) => `<video src="data:video/mp4;base64,${'QUJD'.repeat(i + 1)}"></video>`,
         ).join(''),
     );
     const r = scan();
     expect(r.candidates.every((c) => c.held)).toBe(true);
-    expect(r.candidates.length).toBe(20);
+    expect(r.candidates.length).toBe(40);
   });
 
   it('reads inside open shadow roots', () => {
@@ -125,5 +125,82 @@ describe('content scanner', () => {
   it('caps the number of candidates', () => {
     setBody(Array.from({ length: 500 }, (_, i) => `<a href="/f${i}.mp4">x</a>`).join(''));
     expect(scan().candidates.length).toBeLessThanOrEqual(200);
+  });
+
+  describe('images, documents, archives and page assets', () => {
+    const kinds = (r: ReturnType<typeof scan>) =>
+      r.candidates
+        .filter((c) => c.fileKind)
+        .map((c) => [new URL(c.url).pathname, c.fileKind, c.method] as const)
+        .sort((a, b) => a[0].localeCompare(b[0]));
+
+    it('lists images with their natural size, posters, icons and social images', () => {
+      setBody(`
+        <img id="a" src="/img/a.png" alt="A">
+        <video poster="/img/poster.jpg" src="/v.mp4"></video>`);
+      document.head.innerHTML = `
+        <link rel="icon" href="/favicon.ico">
+        <link rel="apple-touch-icon" href="/touch.png">
+        <meta property="og:image" content="https://cdn.example/og.jpg">`;
+      const img = document.getElementById('a') as HTMLImageElement;
+      Object.defineProperty(img, 'naturalWidth', { value: 640 });
+      Object.defineProperty(img, 'naturalHeight', { value: 480 });
+      const r = scan();
+      document.head.innerHTML = '';
+      expect(kinds(r)).toEqual([
+        ['/favicon.ico', 'image', 'dom-meta'],
+        ['/img/a.png', 'image', 'dom-image'],
+        ['/img/poster.jpg', 'image', 'dom-image'],
+        ['/og.jpg', 'image', 'dom-meta'],
+        ['/touch.png', 'image', 'dom-meta'],
+      ]);
+      expect(r.candidates.find((c) => c.url.endsWith('/img/a.png'))).toMatchObject({
+        width: 640,
+        height: 480,
+      });
+    });
+
+    it('lists document and archive links, scripts, stylesheets and fonts; plain links are not files', () => {
+      setBody(`
+        <a href="/docs/report.PDF">r</a> <a href="/docs/data.csv?x=1">d</a> <a href="/dl/pack.zip">z</a>
+        <a href="/page.html">p</a> <a href="/lib.js">js link</a> <a href="mailto:a@b.c">m</a>
+        <script src="/app.js"></script><link rel="stylesheet" href="/site.css">
+        <link rel="preload" as="font" href="/f.woff2">`);
+      expect(kinds(scan())).toEqual([
+        ['/app.js', 'asset', 'dom-element'],
+        ['/dl/pack.zip', 'archive', 'dom-link'],
+        ['/docs/data.csv', 'document', 'dom-link'],
+        ['/docs/report.PDF', 'document', 'dom-link'],
+        ['/f.woff2', 'asset', 'dom-element'],
+        ['/site.css', 'asset', 'dom-element'],
+      ]);
+    });
+
+    it('finds CSS background images through computed style, ignoring gradients', () => {
+      setBody(`<div style="background-image:url('/bg/hero.jpg')"></div>
+        <div style="background-image:linear-gradient(red, blue)"></div>
+        <div style="background:url(/bg/other.webp), url(/bg/second.png)"></div>`);
+      expect(kinds(scan()).map((k) => k[0])).toEqual(['/bg/hero.jpg', '/bg/other.webp', '/bg/second.png']);
+    });
+
+    it('keeps data: images that are big enough to matter, never the small icons', () => {
+      const big = `data:image/png;base64,${'A'.repeat(4000)}`;
+      setBody(`<img src="${big}"><img src="data:image/png;base64,AAAA">`);
+      const r = scan();
+      const images = r.candidates.filter((c) => c.fileKind === 'image');
+      expect(images).toHaveLength(1);
+      expect(images[0]).toMatchObject({ held: { kind: 'data', bytes: 3000 }, mimeType: 'image/png' });
+      expect(JSON.stringify(r)).not.toContain('AAAAAAAA');
+    });
+
+    it('caps each kind separately so images cannot crowd out media', () => {
+      setBody(
+        '<video src="/v.mp4"></video>' +
+          Array.from({ length: 400 }, (_, i) => `<img src="/i/${i}.png">`).join(''),
+      );
+      const r = scan();
+      expect(r.candidates.filter((c) => c.fileKind === 'image')).toHaveLength(300);
+      expect(r.candidates.filter((c) => !c.fileKind)).toHaveLength(1);
+    });
   });
 });

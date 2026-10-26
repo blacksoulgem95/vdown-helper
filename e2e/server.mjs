@@ -17,6 +17,14 @@ const TYPES = {
   '.mp4': 'video/mp4',
   '.bin': 'application/octet-stream',
   '.vtt': 'text/vtt; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.pdf': 'application/pdf',
+  '.csv': 'text/csv',
+  '.zip': 'application/zip',
+  '.css': 'text/css',
+  '.js': 'text/javascript',
+  '.woff2': 'font/woff2',
   '.flv': 'video/x-flv',
   '.avi': 'video/x-msvideo',
   '.wmv': 'video/x-ms-wmv',
@@ -62,6 +70,13 @@ export function startServers(root, pagesDir) {
         if (req.method === 'OPTIONS') return void res.writeHead(204, headers).end();
       }
       if (m[1] === 'slow' && path.endsWith('.ts')) await new Promise((r) => setTimeout(r, 1500));
+    }
+
+    // A file that looks fine to a HEAD request (so it can be selected) but whose body fails: for the ZIP "not saved" list.
+    if (origin === 'A' && path === '/__headok/report.pdf') {
+      if (req.method === 'HEAD')
+        return void res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Length': 10 }).end();
+      return void res.writeHead(500).end('boom');
     }
 
     if (origin === 'A' && req.method === 'POST' && path === '/__flaky/enable') {

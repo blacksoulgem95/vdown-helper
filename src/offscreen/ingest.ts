@@ -1,6 +1,7 @@
 import { INGEST_PORT_PREFIX, MAX_HELD_BYTES, type IngestDown, type IngestUp } from '@/types/ingest';
 import { CancelledError, PipelineError } from './errors';
 import { createStageFile } from './opfs';
+import { storageReady } from './startup';
 
 interface Pending {
   tabId: number;
@@ -131,6 +132,7 @@ export function handleIngestPort(port: chrome.runtime.Port): void {
               ));
             total = m.total;
             mime = typeof m.mime === 'string' ? m.mime.slice(0, 100) : mime;
+            await storageReady;
             writer = await createStageFile(entry.jobId, entry.fileName);
             return;
           }

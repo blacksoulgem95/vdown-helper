@@ -35,7 +35,9 @@ export type Pipeline =
    */
   | 'file-staged'
   /** A subtitle fetched, stitched and/or converted in the offscreen document (lib/subtitles). */
-  | 'subtitle';
+  | 'subtitle'
+  /** Plain files fetched one by one and packed into a ZIP written to disk (lib/zip). */
+  | 'zip';
 
 export type StreamHandling = 'copy' | 'transcode';
 

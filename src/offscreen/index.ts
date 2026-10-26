@@ -1,10 +1,7 @@
 import type { OffscreenCommand } from '@/types/messages';
 import { handleIngestPort } from './ingest';
 import { cancelJob, releaseJob, startJob } from './jobs';
-import { purgeAll } from './opfs';
-
-// A fresh document means no job is running: anything left in storage is from a previous document.
-void purgeAll();
+import './startup';
 
 chrome.runtime.onMessage.addListener((raw: unknown, sender) => {
   const cmd = raw as Partial<OffscreenCommand> | null;

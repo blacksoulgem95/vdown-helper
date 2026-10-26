@@ -1,7 +1,7 @@
 ---
 id: VDH-042
 title: Tabbed popup with frame grouping
-status: todo
+status: in-progress
 priority: P1
 area: ui
 depends_on: [VDH-037]
@@ -15,10 +15,17 @@ Popup tabs by type (Video, Audio, Subtitles, Images, Files, Assets) with counts;
 
 ## Acceptance criteria
 
-- [ ] Tabs, counts and frame grouping work and are keyboard accessible
-- [ ] Large lists stay responsive (caps, virtual rendering where needed)
-- [ ] All new strings exist in en and it
+- [x] Tabs, counts and frame grouping work and are keyboard accessible
+- [x] Large lists stay responsive (caps, virtual rendering where needed)
+- [x] All new strings exist in en and it
 
 ## Notes
 
-_None yet._
+- Tabs (`src/components/Tabs.tsx`, WAI-ARIA tabs pattern: arrow keys, Home/End, roving tabindex) appear only when more than one kind was found; empty tabs
+  are not shown; the first non-empty tab is active until the user picks one. Pure logic in `lib/tabs.ts` (tab of a resource, split, filter, frame grouping).
+- Items are grouped by the frame they were found in ("This page" first, then "Embedded: <host>") whenever more than one frame has items.
+- Large lists: scans are capped per kind (VDH-037), the popup renders 40 rows at a time with "Show N more", and the stored tab state stays small
+  (320 images: 152 KB, scan + render about 1 s in the E2E).
+- The headline count and the toolbar badge count video, audio and subtitles only; images and files have their own tab counts.
+- **Capture / Record / Stop controls are not part of this task yet**: they belong to VDH-038 (capture) and VDH-040 (live recording) and will be added with them;
+  this task stays `in-progress` until they are, or is closed with that stated.

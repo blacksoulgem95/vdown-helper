@@ -3,10 +3,18 @@ import type { VariantInspection } from '@/types/messages';
 import type { MediaResource } from '@/types/media';
 import type { Settings } from '@/types/settings';
 import { t } from './i18n';
-import { originsOf } from './inspect';
+import { originsOf, sampleByOrigin } from './inspect';
 import { probeHeaders } from './netprobe';
 import { send } from './messaging';
-import { audioOptions, buildRequest, defaultChoices, type Choices } from './request';
+import {
+  audioOptions,
+  buildRequest,
+  buildZipRequest,
+  defaultChoices,
+  planFromRequest,
+  type Choices,
+} from './request';
+import { planZip } from './zip';
 import { mayExtensionFetch, parseUrl } from './security';
 
 export type StartOutcome = { ok: true; jobId: string } | { ok: false; error: string; needsAccess?: string[] };
@@ -47,6 +55,7 @@ export function describeError(raw: string): string {
   if (raw === 'unsafe-url') return t('errUnsafeUrl');
   if (raw === 'protected') return t('errProtected');
   if (raw === 'no-permission') return t('errNoPermission');
+  if (raw === 'nothing-to-zip') return t('errNothingToZip');
   if (raw.startsWith('plan:')) {
     const issues = raw.slice(5).split(',').filter(Boolean);
     return issues.map((i) => issueText(i)).join(' ');
@@ -210,4 +219,38 @@ export async function openDownloadedFile(
   } catch {
     return { ok: false, error: t('errFileMissing') };
   }
+}
+
+/** Pack the selected plain files into one ZIP. Asks for access to the sites the files live on (the click is the gesture). */
+export async function startZip(resources: MediaResource[], settings: Settings): Promise<StartOutcome> {
+  const { items } = planZip(resources);
+  if (items.length === 0) return { ok: false, error: t('errNothingToZip') };
+  const request = buildZipRequest(resources, settings);
+  const plan = planFromRequest(request, {
+    maxMemoryMb: settings.maxMemoryMb,
+    maxEncodeDurationSec: settings.maxEncodeDurationSec,
+  });
+  if (!plan.valid) return { ok: false, error: t('zipTooLarge') };
+  const urls = items.map((i) => i.url);
+  const probe: Inspections = {
+    video: {
+      url: request.pageUrl,
+      segmentCount: 0,
+      durationSec: 0,
+      live: false,
+      fragmented: false,
+      encryption: [],
+      protectedByDrm: false,
+      keyUris: [],
+      origins: originsOf(urls),
+      originSamples: sampleByOrigin(urls),
+      firstSegmentExt: '',
+    },
+  };
+  const missing = await originsNeedingAccess(probe, request.pageUrl);
+  if (missing.length > 0 && !(await requestAccess(missing))) {
+    return { ok: false, error: t('errAccessDenied'), needsAccess: missing };
+  }
+  const res = await send('start-download', { request });
+  return res.ok ? { ok: true, jobId: res.jobId } : { ok: false, error: describeError(res.error) };
 }

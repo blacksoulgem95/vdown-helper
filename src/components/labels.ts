@@ -67,6 +67,14 @@ export function kindLabel(r: MediaResource): string {
           : t('kindPlaylist');
     case 'blob':
       return t('kindBlob');
+    case 'image':
+      return t('kindImage');
+    case 'document':
+      return t('kindDocument');
+    case 'archive':
+      return t('kindArchive');
+    case 'asset':
+      return t('kindAsset');
     case 'subtitle':
       return r.format === 'hls' || r.format === 'dash' ? t('kindSubtitleStream') : t('kindSubtitle');
     default:
@@ -102,6 +110,7 @@ export function jobErrorText(job: DownloadJob): string {
     interrupted: 'jobErrInterrupted',
     invalid: 'jobErrInvalid',
   };
+  if (e.code === 'too-large' && job.request.zip) return t('zipTooLarge');
   const key = map[e.code];
   const base = key ? t(key) : t('errGeneric');
   return e.code === 'http-error' || e.code === 'chrome-download' || e.code === 'ffmpeg'

@@ -15,12 +15,14 @@ import {
   transition,
   withProgress,
 } from '@/lib/queue';
-import { asciiFileName, log, mayExtensionFetch, parseUrl } from '@/lib/security';
+import { asciiFileName, log, mayExtensionFetch, parseUrl, withExtension } from '@/lib/security';
 import type { Plan } from '@/lib/compat';
 import type { DownloadJob, DownloadRequest, JobErrorCode } from '@/types/download';
 import type { MediaResource } from '@/types/media';
 import type { OffscreenEvent, OffscreenPlan, Result } from '@/types/messages';
 import { isDataLabel } from '@/lib/dataUrl';
+import { isFileKind } from '@/lib/filetypes';
+import { planZip } from '@/lib/zip';
 import { inspectVariant } from './detect';
 import { pumpHeld } from './pageFetch';
 import { getJob, listJobs, mutateJobs, putJob, removeJobs, updateJob } from './jobStore';
@@ -93,6 +95,7 @@ export async function submit(raw: DownloadRequest): Promise<Result<{ jobId: stri
   const clean = sanitizeRequest(raw);
   if (!clean) return fail('unsafe-url');
   const settings = await loadSettings();
+  if (clean.zip) return submitZip(clean, settings);
   // Facts about where the media lives come from the background's own scan, never from the request.
   const resource = (await getTabState(clean.tabId))?.resources.find((r) => r.id === clean.resourceId);
   let req: DownloadRequest = { ...clean, credentialedOrigins: credentialedFor(clean, resource) };
@@ -131,6 +134,49 @@ export async function submit(raw: DownloadRequest): Promise<Result<{ jobId: stri
 
   const job = createJob(crypto.randomUUID(), req, plan, Date.now());
   if (plan.pipeline !== 'native' || req.held) job.viaOffscreen = true;
+  await putJob(job);
+  void pump();
+  return { ok: true, jobId: job.id };
+}
+
+/**
+ * A ZIP of plain files. Every URL and entry name comes from this background's own scan of the tab: the request only
+ * names resources, so it cannot make the extension fetch anything the page did not show it.
+ */
+async function submitZip(
+  clean: DownloadRequest,
+  settings: Awaited<ReturnType<typeof loadSettings>>,
+): Promise<Result<{ jobId: string }>> {
+  const state = await getTabState(clean.tabId);
+  const wanted = new Set(clean.zip?.resourceIds ?? []);
+  const chosen = (state?.resources ?? []).filter((r) => wanted.has(r.id) && isFileKind(r.kind));
+  const { items, left } = planZip(chosen);
+  if (items.length === 0) return fail('nothing-to-zip');
+  const included = chosen
+    .filter((r) => !r.held && r.downloadability.status === 'downloadable')
+    .slice(0, items.length);
+  const origins = new Set(included.flatMap((r) => credentialedFor(clean, r)));
+  const frames = new Set(included.map((r) => r.frameUrl ?? ''));
+  let req: DownloadRequest = {
+    ...clean,
+    credentialedOrigins: [...origins],
+    zip: { resourceIds: [...wanted], items, left: left + (wanted.size - chosen.length) },
+    filename: withExtension(
+      `${clean.filename.replace(/ \(\d+ files\)\.zip$/i, '')} (${items.length} files)`,
+      'zip',
+    ),
+    qualityLabel: `ZIP · ${items.length}`,
+  };
+  const known = included.reduce((n, r) => n + (r.sizeBytes ?? 0), 0);
+  if (known > 0) req = { ...req, estimatedBytes: known };
+  else delete req.estimatedBytes;
+  const only = [...frames][0];
+  // One Referer can only describe one frame: replay it when every file came from the same one.
+  if (frames.size === 1 && only) req = { ...req, replay: { frameUrl: only, urls: items.map((i) => i.url) } };
+  const plan = planFromRequest(req, limitsOf(settings));
+  if (!plan.valid) return fail(`plan:${plan.issues.join(',')}`);
+  const job = createJob(crypto.randomUUID(), req, plan, Date.now());
+  job.viaOffscreen = true;
   await putJob(job);
   void pump();
   return { ok: true, jobId: job.id };
@@ -282,6 +328,7 @@ export async function handleOffscreenEvent(ev: OffscreenEvent): Promise<void> {
         await updateJob(ev.jobId, (j) => ({
           ...withProgress(j, { fraction: 1, bytesDone: ev.bytes, bytesTotal: ev.bytes }, now),
           chromeDownloadId: downloadId,
+          ...(ev.skipped ? { skipped: ev.skipped } : {}),
         }));
         startPolling();
       } catch (e) {

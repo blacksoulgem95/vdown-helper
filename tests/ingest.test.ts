@@ -4,6 +4,7 @@ import type { IngestDown, IngestUp } from '@/types/ingest';
 const written: Uint8Array[] = [];
 let aborted = false;
 vi.mock('@/offscreen/opfs', () => ({
+  purgeAll: async () => undefined,
   createStageFile: async () => ({
     bytes: 0,
     write: async (c: Uint8Array) => void written.push(c),

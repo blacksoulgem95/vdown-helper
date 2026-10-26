@@ -529,6 +529,8 @@ function pipelineText(plan: Plan): string {
         : t('pipeTranscode');
     case 'subtitle':
       return t('pipeSubtitle');
+    case 'zip':
+      return t('pipeZip');
   }
 }
 

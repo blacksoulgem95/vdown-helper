@@ -7,14 +7,19 @@
  * permission is needed to read media the page itself can read.
  */
 import { dataHandle, dataLabel, inspectDataUrl } from '@/lib/dataUrl';
+import { fileKindOfExtension, urlExtension, type FileKind } from '@/lib/filetypes';
 import { fetchText, probeHeaders } from '@/lib/netprobe';
 import { pumpData, type PumpResult } from './ingest';
 import type { DetectionMethod, RawCandidate, ScanReport } from '@/types/media';
 
 const MEDIA_EXT =
   /\.(mp4|m4v|webm|mkv|mov|ogv|ts|mp3|m4a|aac|wav|ogg|oga|opus|flac|aif|aiff|aifc|wma|flv|avi|wmv|asf|3gp|3g2|mpg|mpeg|mpe|m3u8|m3u|mpd|vtt|srt|ttml|dfxp)(?:$|[?#])/i;
-const MAX_CANDIDATES = 200;
-const MAX_HELD = 20;
+/** Per kind, so a page with hundreds of images cannot crowd out its one video. */
+const CAPS = { media: 200, image: 300, document: 100, archive: 100, asset: 200 } as const;
+const MAX_HELD = 40;
+const MAX_STYLE_ELEMENTS = 1500;
+/** data: images smaller than this are icons and sprites, not worth listing. */
+const MIN_HELD_IMAGE_BYTES = 2048;
 
 /** data: URLs found by the last scan, by handle. They stay in the page; only a label leaves it (see ingest.ts). */
 export const heldData = new Map<string, string>();
@@ -54,20 +59,25 @@ interface Collector {
   candidates: RawCandidate[];
   notes: ScanReport['notes'];
   seen: Set<string>;
+  counts: Record<keyof typeof CAPS, number>;
 }
 
 function add(c: Collector, candidate: RawCandidate): void {
-  if (c.candidates.length >= MAX_CANDIDATES) return;
+  const bucket = candidate.fileKind ?? 'media';
+  if (c.counts[bucket] >= CAPS[bucket]) return;
   const key = `${candidate.url}|${candidate.method}`;
   if (c.seen.has(key)) return;
   c.seen.add(key);
+  c.counts[bucket]++;
   c.candidates.push(candidate);
 }
 
 /** A data: media source: report a small label and its size, keep the data here. */
 function addData(c: Collector, raw: string, method: DetectionMethod, extra: Partial<RawCandidate>): void {
   const info = inspectDataUrl(raw);
-  if (!info || !/^(video|audio)\//.test(info.mime) || heldData.size >= MAX_HELD) return;
+  if (!info || !/^(video|audio|image)\//.test(info.mime) || heldData.size >= MAX_HELD) return;
+  const isImage = info.mime.startsWith('image/');
+  if (isImage && info.bytes < MIN_HELD_IMAGE_BYTES) return;
   const id = dataHandle(raw);
   if (!heldData.has(id)) heldData.set(id, raw);
   add(c, {
@@ -76,6 +86,7 @@ function addData(c: Collector, raw: string, method: DetectionMethod, extra: Part
     method,
     mimeType: info.mime,
     held: { kind: 'data', id, bytes: info.bytes },
+    ...(isImage ? { fileKind: 'image' as const } : {}),
   });
 }
 
@@ -151,6 +162,80 @@ function scanElements(c: Collector, doc: Document): void {
   }
 }
 
+/** A plain file (image, document, archive, page asset). data: images go through the held-bytes channel. */
+function addFile(
+  c: Collector,
+  raw: string | null | undefined,
+  base: string,
+  method: DetectionMethod,
+  kind: FileKind,
+  extra: Partial<RawCandidate> = {},
+): void {
+  if (!raw) return;
+  if (/^data:/i.test(raw)) {
+    if (kind === 'image') addData(c, raw, method, extra);
+    return;
+  }
+  if (/^(javascript|blob|about):/i.test(raw)) return;
+  const url = abs(raw, base);
+  if (!url || !/^https?:/i.test(url)) return;
+  add(c, { url, method, fileKind: kind, ...extra });
+}
+
+const CSS_URL = /url\(\s*(['"]?)(.*?)\1\s*\)/g;
+
+/** Images, documents, archives and page assets referenced by the document. Read-only, bounded. */
+function scanFiles(c: Collector, doc: Document): void {
+  const base = doc.baseURI;
+  for (const root of roots(doc)) {
+    for (const img of root.querySelectorAll<HTMLImageElement>('img')) {
+      const extra: Partial<RawCandidate> = {};
+      if (img.naturalWidth > 0) {
+        extra.width = img.naturalWidth;
+        extra.height = img.naturalHeight;
+      }
+      addFile(c, img.currentSrc || img.getAttribute('src'), base, 'dom-image', 'image', extra);
+    }
+    for (const v of root.querySelectorAll<HTMLVideoElement>('video[poster]'))
+      addFile(c, v.getAttribute('poster'), base, 'dom-image', 'image');
+    for (const a of root.querySelectorAll<HTMLAnchorElement>('a[href]')) {
+      const href = a.getAttribute('href');
+      if (!href || /^(data|javascript|blob|mailto|tel):/i.test(href)) continue;
+      const abs0 = abs(href, base);
+      const kind = abs0 ? fileKindOfExtension(urlExtension(abs0)) : undefined;
+      // Assets are not links people follow; documents and archives are.
+      if (kind === 'document' || kind === 'archive') addFile(c, abs0, base, 'dom-link', kind);
+    }
+    for (const s of root.querySelectorAll('script[src]'))
+      addFile(c, s.getAttribute('src'), base, 'dom-element', 'asset');
+    for (const l of root.querySelectorAll(
+      'link[rel~="stylesheet"][href], link[rel="preload"][as="font"][href]',
+    ))
+      addFile(c, l.getAttribute('href'), base, 'dom-element', 'asset');
+    if (root === doc) {
+      for (const l of root.querySelectorAll('link[rel~="icon"][href], link[rel="apple-touch-icon"][href]'))
+        addFile(c, l.getAttribute('href'), base, 'dom-meta', 'image');
+      for (const m of root.querySelectorAll(
+        'meta[property="og:image"][content], meta[name="twitter:image"][content]',
+      ))
+        addFile(c, m.getAttribute('content'), base, 'dom-meta', 'image');
+    }
+    // CSS background images: computed style, bounded to the first elements of the document.
+    let looked = 0;
+    for (const el of root.querySelectorAll<HTMLElement>('*')) {
+      if (++looked > MAX_STYLE_ELEMENTS) break;
+      let bg: string;
+      try {
+        bg = getComputedStyle(el).backgroundImage;
+      } catch {
+        continue;
+      }
+      if (!bg || bg === 'none') continue;
+      for (const m of bg.matchAll(CSS_URL)) addFile(c, m[2], base, 'dom-style', 'image');
+    }
+  }
+}
+
 function scanPerformance(c: Collector, base: string): void {
   let entries: PerformanceEntry[];
   try {
@@ -161,7 +246,22 @@ function scanPerformance(c: Collector, base: string): void {
   for (const e of entries) {
     const r = e as PerformanceResourceTiming;
     const isMediaType = r.initiatorType === 'video' || r.initiatorType === 'audio';
-    if (isMediaType || MEDIA_EXT.test(r.name)) addUrl(c, r.name, base, 'performance');
+    if (isMediaType || MEDIA_EXT.test(r.name)) {
+      addUrl(c, r.name, base, 'performance');
+      continue;
+    }
+    const kind =
+      fileKindOfExtension(urlExtension(r.name)) ?? (r.initiatorType === 'img' ? 'image' : undefined);
+    // encodedBodySize is 0 for cross-origin responses that do not allow timing: then the size is simply unknown.
+    if (kind)
+      addFile(
+        c,
+        r.name,
+        base,
+        'performance',
+        kind,
+        r.encodedBodySize > 0 ? { sizeBytes: r.encodedBodySize } : {},
+      );
   }
 }
 
@@ -171,9 +271,11 @@ export function scan(): ScanReport {
     candidates: [],
     notes: { blobSources: 0, inaccessibleFrames: 0, blockedFrameOrigins: [] },
     seen: new Set(),
+    counts: { media: 0, image: 0, document: 0, archive: 0, asset: 0 },
   };
   const doc = document;
   scanElements(c, doc);
+  scanFiles(c, doc);
   // Same-origin iframes are readable here; every frame is also scanned by its own copy of this script (allFrames).
   // Frames this script cannot read are reported by origin so the user can allow them.
   const blocked = new Set<string>();
@@ -182,6 +284,7 @@ export function scan(): ScanReport {
       const inner = frame.contentDocument;
       if (inner) {
         scanElements(c, inner);
+        scanFiles(c, inner);
         continue;
       }
     } catch {

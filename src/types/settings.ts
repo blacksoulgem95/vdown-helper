@@ -20,6 +20,8 @@ export interface Settings {
   pageHook: boolean;
   /** Observe media requests via webRequest (needs the optional permission). */
   networkObserver: boolean;
+  /** Images smaller than this (shorter side, in pixels) are hidden in the Images tab; 0 = show all. */
+  imageMinPx: number;
   maxConcurrentDownloads: number;
   /** Parallel segment fetches per HLS job. */
   segmentConcurrency: number;

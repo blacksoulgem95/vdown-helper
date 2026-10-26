@@ -16,6 +16,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoScan: false,
   pageHook: false,
   networkObserver: false,
+  imageMinPx: 100,
   maxConcurrentDownloads: 2,
   segmentConcurrency: 4,
   maxMemoryMb: 2048,
@@ -28,6 +29,8 @@ const MODES: OutputMode[] = ['video-audio', 'audio-only', 'video-only', 'origina
 const QUALITIES: QualityPreset[] = ['highest', '2160', '1440', '1080', '720', '480', '360'];
 const AUDIO_FORMATS: AudioFormat[] = ['mp3', 'm4a', 'aac', 'wav'];
 const BITRATES: AudioBitrate[] = [128, 192, 256, 320];
+
+export const IMAGE_MIN_CHOICES = [0, 100, 300, 800] as const;
 
 export const LIMITS = {
   maxConcurrentDownloads: { min: 1, max: 5 },
@@ -68,6 +71,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     autoScan: bool(r['autoScan'], d.autoScan),
     pageHook: bool(r['pageHook'], d.pageHook),
     networkObserver: bool(r['networkObserver'], d.networkObserver),
+    imageMinPx: oneOf(r['imageMinPx'], IMAGE_MIN_CHOICES, d.imageMinPx),
     maxConcurrentDownloads: int(
       r['maxConcurrentDownloads'],
       LIMITS.maxConcurrentDownloads,

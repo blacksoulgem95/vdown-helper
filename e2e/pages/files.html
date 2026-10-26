@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Files fixture</title>
+    <link rel="stylesheet" href="/files/site.css" />
+    <script src="/files/app.js"></script>
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/files/font.woff2" />
+  </head>
+  <body>
+    <h1>Images, documents and assets</h1>
+    <img id="hero" src="/files/hero.png" alt="Hero" />
+    <img id="photo" src="/files/photo.jpg" alt="Photo" />
+    <img id="thumb" src="/files/thumb.png" alt="Tiny" />
+    <div id="bg" style="width: 300px; height: 200px; background-image: url('/files/css-bg.png')"></div>
+    <img id="inline" alt="Inline" />
+    <p>
+      <a href="/files/Quarterly%20Report.pdf">Report</a>
+      <a href="/files/data.csv">Data</a>
+      <a href="/files/bundle.zip">Bundle</a>
+      <a href="/other.html">not a file</a>
+    </p>
+    <script>
+      const q = new URLSearchParams(location.search);
+      fetch('/files/inline.png')
+        .then((r) => r.blob())
+        .then(
+          (b) =>
+            new Promise((res) => {
+              const fr = new FileReader();
+              fr.onload = () => res(fr.result);
+              fr.readAsDataURL(b);
+            }),
+        )
+        .then((data) => (document.getElementById('inline').src = data));
+      if (q.get('c')) {
+        const f = document.createElement('iframe');
+        f.src = q.get('c') + '/pages/files-leaf.html';
+        f.width = 360;
+        f.height = 280;
+        document.body.append(f);
+      }
+    </script>
+  </body>
+</html>
