@@ -74,3 +74,13 @@ export function groupByFrame(items: readonly MediaResource[]): FrameGroup[] {
   }
   return [...groups.values()].sort((a, b) => Number(b.frameId === 0) - Number(a.frameId === 0));
 }
+
+/** Why the popup has nothing to offer, which decides the one button the empty state shows. */
+export type EmptyCause = 'error' | 'blocked-frames' | 'reload' | 'nothing';
+
+export function emptyCause(o: { error: boolean; blockedFrames: number; reloadPending: boolean }): EmptyCause {
+  if (o.error) return 'error';
+  if (o.blockedFrames > 0) return 'blocked-frames';
+  if (o.reloadPending) return 'reload';
+  return 'nothing';
+}

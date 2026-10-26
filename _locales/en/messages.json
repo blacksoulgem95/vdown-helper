@@ -11,9 +11,6 @@
   "notifyFailTitle": {
     "message": "Download failed"
   },
-  "tagline": {
-    "message": "Detect. Decode. Download."
-  },
   "signature": {
     "message": "YOUR MEDIA. YOUR CONTROL."
   },
@@ -139,9 +136,6 @@
   },
   "kindBlob": {
     "message": "BLOB STREAM"
-  },
-  "variantsCount": {
-    "message": "$1 variants"
   },
   "detailSource": {
     "message": "Source"
@@ -988,5 +982,47 @@
   },
   "reloadPage": {
     "message": "RELOAD PAGE"
+  },
+  "bestMatch": {
+    "message": "BEST MATCH"
+  },
+  "kindPlayerVideo": {
+    "message": "Player video"
+  },
+  "qualitiesCount": {
+    "message": "$1 qualities"
+  },
+  "liveTag": {
+    "message": "Live"
+  },
+  "chromeServerForbidden": {
+    "message": "The site refused to hand over the file (it may only serve it to its own player)."
+  },
+  "chromeServerMissing": {
+    "message": "The file is no longer on the server."
+  },
+  "chromeNetwork": {
+    "message": "The connection dropped. Retry when you are back online."
+  },
+  "chromeNoSpace": {
+    "message": "There is not enough disk space for this file."
+  },
+  "chromeFileDenied": {
+    "message": "Chrome could not write to the download folder."
+  },
+  "emptyBlockedTitle": {
+    "message": "THE PLAYER IS IN AN EMBEDDED FRAME"
+  },
+  "emptyReloadTitle": {
+    "message": "RELOAD TO LOOK INSIDE THE PLAYER"
+  },
+  "showAllJobs": {
+    "message": "Show $1 more"
+  },
+  "showFewerJobs": {
+    "message": "Show fewer"
+  },
+  "open": {
+    "message": "Open"
   }
 }

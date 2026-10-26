@@ -11,9 +11,6 @@
   "notifyFailTitle": {
     "message": "Download non riuscito"
   },
-  "tagline": {
-    "message": "Rileva. Decodifica. Scarica."
-  },
   "signature": {
     "message": "I TUOI MEDIA. IL TUO CONTROLLO."
   },
@@ -139,9 +136,6 @@
   },
   "kindBlob": {
     "message": "STREAM BLOB"
-  },
-  "variantsCount": {
-    "message": "$1 varianti"
   },
   "detailSource": {
     "message": "Sorgente"
@@ -988,5 +982,47 @@
   },
   "reloadPage": {
     "message": "RICARICA PAGINA"
+  },
+  "bestMatch": {
+    "message": "SCELTA MIGLIORE"
+  },
+  "kindPlayerVideo": {
+    "message": "Video del player"
+  },
+  "qualitiesCount": {
+    "message": "$1 qualità"
+  },
+  "liveTag": {
+    "message": "Live"
+  },
+  "chromeServerForbidden": {
+    "message": "Il sito ha rifiutato di consegnare il file (forse lo serve solo al proprio player)."
+  },
+  "chromeServerMissing": {
+    "message": "Il file non è più sul server."
+  },
+  "chromeNetwork": {
+    "message": "La connessione si è interrotta. Riprova quando sei di nuovo online."
+  },
+  "chromeNoSpace": {
+    "message": "Spazio su disco insufficiente per questo file."
+  },
+  "chromeFileDenied": {
+    "message": "Chrome non è riuscito a scrivere nella cartella dei download."
+  },
+  "emptyBlockedTitle": {
+    "message": "IL PLAYER È IN UN FRAME INCORPORATO"
+  },
+  "emptyReloadTitle": {
+    "message": "RICARICA PER GUARDARE DENTRO IL PLAYER"
+  },
+  "showAllJobs": {
+    "message": "Mostra altri $1"
+  },
+  "showFewerJobs": {
+    "message": "Mostra meno"
+  },
+  "open": {
+    "message": "Apri"
   }
 }

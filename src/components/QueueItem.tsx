@@ -5,7 +5,7 @@ import { t } from '@/lib/i18n';
 import type { DownloadJob } from '@/types/download';
 import { StageTrack } from './StageTrack';
 import { jobErrorText } from './labels';
-import { IconButton, ProgressBar, cx } from './ui';
+import { Button, IconButton, ProgressBar, cx } from './ui';
 
 export type JobAction = 'cancel' | 'retry' | 'pause' | 'resume' | 'open' | 'show' | 'remove' | 'stop';
 
@@ -65,9 +65,12 @@ export function QueueItem({
         </span>
       </div>
 
-      <div className="mt-2">
-        <StageTrack stages={job.stages} current={job.stage} />
-      </div>
+      {/* The stage track explains work in progress and where a failure happened; a finished job needs none. */}
+      {job.stage !== 'completed' && job.stage !== 'cancelled' && (
+        <div className="mt-2">
+          <StageTrack stages={job.stages} current={job.stage} />
+        </div>
+      )}
       {!isTerminal(job) && !isQueued(job) && (
         <div className="mt-2">
           <ProgressBar
@@ -124,18 +127,31 @@ export function QueueItem({
           </IconButton>
         )}
         {canRetry(job) && (
-          <IconButton label={t('retry')} onClick={() => onAction(job.id, 'retry')}>
-            <RotateCcw size={14} aria-hidden="true" />
-          </IconButton>
+          <Button
+            variant="secondary"
+            size="sm"
+            aria-label={t('retry')}
+            onClick={() => onAction(job.id, 'retry')}
+            icon={<RotateCcw size={12} aria-hidden="true" />}
+          >
+            {t('retry')}
+          </Button>
         )}
         {done && (
           <>
-            <IconButton label={t('openFile')} onClick={() => onAction(job.id, 'open')}>
-              <Play size={14} aria-hidden="true" />
-            </IconButton>
             <IconButton label={t('showInFolder')} onClick={() => onAction(job.id, 'show')}>
               <FolderOpen size={14} aria-hidden="true" />
             </IconButton>
+            {/* Opening needs this click as Chrome's user gesture. */}
+            <Button
+              variant="secondary"
+              size="sm"
+              aria-label={t('openFile')}
+              onClick={() => onAction(job.id, 'open')}
+              icon={<Play size={12} aria-hidden="true" />}
+            >
+              {t('open')}
+            </Button>
           </>
         )}
         {isTerminal(job) && (

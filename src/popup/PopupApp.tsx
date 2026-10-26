@@ -3,13 +3,14 @@ import { useCallback, useMemo, useState } from 'react';
 import { EmptyState } from '@/components/EmptyState';
 import { Logo } from '@/components/Logo';
 import { QueueItem, type JobAction } from '@/components/QueueItem';
-import { Badge, Button, IconButton, Notice, cx } from '@/components/ui';
+import { Button, IconButton, Notice, cx } from '@/components/ui';
 import { useJobs } from '@/hooks/useJobs';
 import { useSettings } from '@/hooks/useSettings';
 import { useActiveTabId, useTabMedia } from '@/hooks/useTabMedia';
 import { t } from '@/lib/i18n';
 import { send } from '@/lib/messaging';
-import { tabOf } from '@/lib/tabs';
+import { popupQueue } from '@/lib/queue';
+import { emptyCause, tabOf } from '@/lib/tabs';
 import {
   openDownloadedFile,
   originOf,
@@ -47,7 +48,6 @@ export function PopupApp() {
   const { settings, update } = useSettings();
   const [busy, setBusy] = useState<string | undefined>();
   const [feedback, setFeedback] = useState<Record<string, Feedback>>({});
-  const version = chrome.runtime.getManifest().version;
 
   const setFb = (id: string, fb: Feedback | undefined) =>
     setFeedback((cur) => {
@@ -147,6 +147,7 @@ export function PopupApp() {
   const [queueNote, setQueueNote] = useState<string | undefined>();
   // The hook only sees players that start after it is registered, so a grant made with the hook on offers a reload.
   const [offerReload, setOfferReload] = useState(false);
+  const [showAllJobs, setShowAllJobs] = useState(false);
   const onAllowFrames = useCallback(async () => {
     if (!(await requestAllSites())) return;
     if (settings.pageHook) setOfferReload(true);
@@ -186,24 +187,28 @@ export function PopupApp() {
   const errText = pageErrorText(state?.status === 'error' ? state.error : undefined);
   const finished = jobs.filter((j) => ['completed', 'failed', 'cancelled'].includes(j.stage));
 
+  const blocked = state?.notes.blockedFrameOrigins ?? [];
+  const blockedHosts = blocked.map(hostOf).join(', ');
+  const cause = emptyCause({
+    error: Boolean(errText),
+    blockedFrames: blocked.length,
+    reloadPending: offerReload,
+  });
+  const queue = popupQueue(jobs);
+  const shownJobs = showAllJobs ? jobs : queue.shown;
+
   return (
     <div className="flex max-h-[600px] min-h-[320px] w-[420px] flex-col">
-      <header className="flex items-center gap-2.5 border-b border-white/8 px-3.5 py-2.5">
-        <Logo size={24} />
-        <div className="min-w-0 flex-1">
-          <h1 className="mono text-[13px] font-bold tracking-[0.04em] text-fg">vdown-helper</h1>
-          <p className="label !text-[9px] !tracking-[0.2em]">{t('tagline')}</p>
-        </div>
+      <header className="flex items-center gap-2.5 border-b border-white/8 px-3.5 py-2">
+        <Logo size={22} />
+        <h1 className="mono min-w-0 flex-1 text-[13px] font-bold tracking-[0.04em] text-fg">vdown-helper</h1>
+        {/* Quiet while ready; it only speaks up while scanning or when something went wrong. */}
         <span
           role="status"
           aria-live="polite"
           className={cx(
-            'mono inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em]',
-            scanning
-              ? 'border-magenta/45 text-magenta'
-              : errText
-                ? 'border-danger/45 text-danger'
-                : 'border-acid/40 text-acid',
+            'mono inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.12em]',
+            scanning ? 'text-magenta' : errText ? 'text-danger' : 'text-acid',
           )}
         >
           <span
@@ -212,55 +217,45 @@ export function PopupApp() {
               scanning ? 'animate-pulse-dot bg-magenta' : errText ? 'bg-danger' : 'bg-acid',
             )}
           />
-          {scanning ? t('scanning') : errText ? t('statusError') : t('ready')}
+          <span className={scanning || errText ? '' : 'sr-only'}>
+            {scanning ? t('scanning') : errText ? t('statusError') : t('ready')}
+          </span>
         </span>
         <IconButton label={t('settings')} onClick={() => void chrome.runtime.openOptionsPage()}>
           <Settings size={16} aria-hidden="true" />
         </IconButton>
-        <Badge title={t('version')}>v{version}</Badge>
       </header>
 
       <main className="flex-1 space-y-3 overflow-y-auto px-3.5 py-3">
-        <section aria-label={t('currentPage')} className="glass px-3 py-2.5">
-          <div className="flex items-start gap-3">
-            <div className="min-w-0 flex-1">
-              <p className="label">{t('currentPage')}</p>
-              <p className="mt-0.5 truncate text-[13px] text-fg" title={state?.pageTitle}>
-                {state?.pageTitle || (scanning ? '…' : t('untitled'))}
-              </p>
-              <p className="mono truncate text-[11px] text-neon/80">{pageHost}</p>
-            </div>
-            <div className="text-right">
-              <p className="label">{t('detected')}</p>
-              <p className="mono text-[18px] leading-none text-fg">
-                {mediaOnly.length}
-                {mediaOnly.length > 0 && (
-                  <span className="ml-1 text-[10px] text-acid">{t('readyCount', downloadable)}</span>
-                )}
-              </p>
-            </div>
+        <section aria-label={t('currentPage')} className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[13px] text-fg" title={state?.pageTitle}>
+              {state?.pageTitle || (scanning ? '…' : t('untitled'))}
+            </p>
+            <p className="mono truncate text-[10.5px] text-muted">
+              <span className="text-neon/80">{pageHost}</span>
+              {mediaOnly.length > 0 && <span className="text-acid"> · {t('readyCount', downloadable)}</span>}
+            </p>
           </div>
-          <div className="mt-2.5">
-            <Button
-              variant="secondary"
-              onClick={() => void rescan()}
-              disabled={scanning || tabId === undefined}
-              icon={<RefreshCw size={13} aria-hidden="true" className={scanning ? 'animate-spin' : ''} />}
-            >
-              {t('rescanPage')}
-            </Button>
-          </div>
+          <IconButton
+            label={t('rescanPage')}
+            onClick={() => void rescan()}
+            disabled={scanning || tabId === undefined}
+          >
+            <RefreshCw size={15} aria-hidden="true" className={scanning ? 'animate-spin' : ''} />
+          </IconButton>
         </section>
 
         {state && state.notes.blobSources > 0 && (
           <Notice tone="magenta">{t('noteBlob', state.notes.blobSources)}</Notice>
         )}
-        {offerReload && (
+        {/* With media listed, the notices sit above it; with nothing listed, the empty state carries the one fix. */}
+        {resources.length > 0 && offerReload && (
           <Notice tone="acid">
             <p>{t('reloadForHook')}</p>
             <div className="mt-2">
               <Button
-                variant="secondary"
+                variant="primary"
                 size="sm"
                 onClick={() => void onReload()}
                 icon={<RefreshCw size={13} aria-hidden="true" />}
@@ -270,13 +265,13 @@ export function PopupApp() {
             </div>
           </Notice>
         )}
-        {state && (state.notes.blockedFrameOrigins ?? []).length > 0 ? (
+        {resources.length > 0 && blocked.length > 0 && (
           <Notice tone="neon">
-            <p>{t('noteFramesBlocked', (state.notes.blockedFrameOrigins ?? []).map(hostOf).join(', '))}</p>
+            <p>{t('noteFramesBlocked', blockedHosts)}</p>
             <p className="mt-1 text-[11px] text-muted">{t('allowEmbeddedHint')}</p>
             <div className="mt-2">
               <Button
-                variant="secondary"
+                variant="primary"
                 size="sm"
                 onClick={() => void onAllowFrames()}
                 icon={<ShieldCheck size={13} aria-hidden="true" />}
@@ -285,11 +280,9 @@ export function PopupApp() {
               </Button>
             </div>
           </Notice>
-        ) : (
-          state &&
-          state.notes.inaccessibleFrames > 0 && (
-            <Notice>{t('noteFrames', state.notes.inaccessibleFrames)}</Notice>
-          )
+        )}
+        {state && blocked.length === 0 && state.notes.inaccessibleFrames > 0 && (
+          <Notice>{t('noteFrames', state.notes.inaccessibleFrames)}</Notice>
         )}
 
         {resources.length === 0 ? (
@@ -299,9 +292,13 @@ export function PopupApp() {
             </p>
           ) : (
             <EmptyState
-              onScan={() => void rescan()}
+              cause={cause}
               scanning={scanning}
+              onScan={() => void rescan()}
+              onAllowFrames={() => void onAllowFrames()}
+              onReload={() => void onReload()}
               {...(errText ? { errorText: errText } : {})}
+              {...(blockedHosts ? { blockedHosts } : {})}
             />
           )
         ) : (
@@ -346,17 +343,24 @@ export function PopupApp() {
               </div>
             )}
             <ul className="space-y-2.5">
-              {jobs.map((j) => (
+              {shownJobs.map((j) => (
                 <QueueItem key={j.id} job={j} onAction={(id, a) => void onJobAction(id, a)} />
               ))}
             </ul>
+            {queue.hidden > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mt-2 w-full"
+                aria-expanded={showAllJobs}
+                onClick={() => setShowAllJobs((v) => !v)}
+              >
+                {showAllJobs ? t('showFewerJobs') : t('showAllJobs', queue.hidden)}
+              </Button>
+            )}
           </section>
         )}
       </main>
-
-      <footer className="border-t border-white/8 px-3.5 py-2 text-center">
-        <p className="mono text-[9.5px] uppercase tracking-[0.24em] text-muted">{t('signature')}</p>
-      </footer>
     </div>
   );
 }
