@@ -25,6 +25,7 @@ const REASONS: Record<ReasonCode, MessageKey> = {
   'blob-source': 'reasonBlob',
   drm: 'reasonDrm',
   'sample-aes': 'reasonSampleAes',
+  eme: 'reasonEme',
   cors: 'reasonCors',
   'http-error': 'reasonHttp',
   network: 'reasonNetwork',

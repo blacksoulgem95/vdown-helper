@@ -257,5 +257,7 @@ export function sanitizeRequest(req: DownloadRequest): DownloadRequest | undefin
     filename: ext ? `${base}.${ext}` : base,
     subfolder: sanitizeSubfolder(req.subfolder),
     credentialedOrigins: origins,
+    // Only the background may decide which frame's headers a job replays.
+    replay: undefined,
   };
 }

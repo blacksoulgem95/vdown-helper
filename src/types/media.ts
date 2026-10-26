@@ -22,7 +22,7 @@ export type MediaFormat =
 export type StreamKind = 'file' | 'hls-master' | 'hls-media' | 'unsupported-playlist' | 'blob';
 
 export type DetectionMethod =
-  'dom-element' | 'dom-source' | 'dom-link' | 'performance' | 'network' | 'manual-rescan';
+  'dom-element' | 'dom-source' | 'dom-link' | 'performance' | 'network' | 'hook' | 'manual-rescan';
 
 /** Machine-readable reason, mapped to a localised string by the UI. */
 export type ReasonCode =
@@ -31,6 +31,7 @@ export type ReasonCode =
   | 'blob-source'
   | 'drm'
   | 'sample-aes'
+  | 'eme'
   | 'cors'
   | 'http-error'
   | 'network'
@@ -89,6 +90,9 @@ export interface MediaResource {
   playlist?: PlaylistSummary;
   /** Poster/thumbnail URL when the page provides one. */
   poster?: string;
+  /** Frame the resource was found in (0 = top frame) and that frame's document URL. */
+  frameId?: number;
+  frameUrl?: string;
   detectedAt: number;
 }
 
@@ -103,12 +107,25 @@ export interface RawCandidate {
   width?: number;
   height?: number;
   poster?: string;
+  /** Set by the background from the frame that reported the candidate (never trusted from the page). */
+  frameId?: number;
+  frameUrl?: string;
 }
 
+/** Things a scan could see but not use. */
+export interface ScanNotes {
+  blobSources: number;
+  inaccessibleFrames: number;
+  /** Origins of embedded frames that could not be read (the user can grant access to them). */
+  blockedFrameOrigins: string[];
+}
+
+/** What one frame's scanner reports. `pageUrl`/`pageTitle` describe that frame's own document. */
 export interface ScanReport {
   pageUrl: string;
   pageTitle: string;
   candidates: RawCandidate[];
-  /** Counts of things the scanner could see but not use (e.g. blob: sources, cross-origin frames). */
-  notes: { blobSources: number; inaccessibleFrames: number };
+  notes: ScanNotes;
+  /** Added by the background from the injection result. */
+  frameId?: number;
 }

@@ -2,8 +2,10 @@ import { planFromRequest, sanitizeRequest } from '@/lib/request';
 import { loadSettings } from '@/lib/settings';
 import {
   SpeedMeter,
+  canRestage,
   canRetry,
   canTransition,
+  restage,
   createJob,
   failJob,
   isActive,
@@ -13,13 +15,16 @@ import {
   transition,
   withProgress,
 } from '@/lib/queue';
-import { asciiFileName, log } from '@/lib/security';
+import { asciiFileName, log, mayExtensionFetch, parseUrl } from '@/lib/security';
 import type { Plan } from '@/lib/compat';
 import type { DownloadJob, DownloadRequest, JobErrorCode } from '@/types/download';
+import type { MediaResource } from '@/types/media';
 import type { OffscreenEvent, OffscreenPlan, Result } from '@/types/messages';
 import { inspectVariant } from './detect';
 import { getJob, listJobs, mutateJobs, putJob, removeJobs, updateJob } from './jobStore';
 import { notifyJob } from './notify';
+import { getTabState } from './tabState';
+import { installReplay, pruneReplay, removeReplay } from './replay';
 import {
   cancelInOffscreen,
   closeOffscreen,
@@ -33,6 +38,19 @@ let polling = false;
 
 const ok = (): Result<object> => ({ ok: true });
 const fail = (error: string): { ok: false; error: string } => ({ ok: false, error });
+
+/**
+ * Cookies only go to the page's own origin and to the origin of the frame the player lives in. A frame on a
+ * private-network host is only trusted when the top page is on one too (the SSRF guard in lib/security).
+ */
+export function credentialedFor(req: DownloadRequest, resource: MediaResource | undefined): string[] {
+  const origins = new Set<string>();
+  const pageOrigin = parseUrl(req.pageUrl)?.origin;
+  if (pageOrigin) origins.add(pageOrigin);
+  const frame = resource?.frameUrl ? parseUrl(resource.frameUrl) : undefined;
+  if (frame && mayExtensionFetch(frame.href, req.pageUrl)) origins.add(frame.origin);
+  return [...origins];
+}
 
 function chromePath(req: DownloadRequest, ascii = false): string {
   const path = req.subfolder ? `${req.subfolder}/${req.filename}` : req.filename;
@@ -73,20 +91,34 @@ export async function submit(raw: DownloadRequest): Promise<Result<{ jobId: stri
   const clean = sanitizeRequest(raw);
   if (!clean) return fail('unsafe-url');
   const settings = await loadSettings();
-  let req = clean;
+  // Facts about where the media lives come from the background's own scan, never from the request.
+  const resource = (await getTabState(clean.tabId))?.resources.find((r) => r.id === clean.resourceId);
+  let req: DownloadRequest = { ...clean, credentialedOrigins: credentialedFor(clean, resource) };
+  const involved: string[] = [];
   if (req.isHls) {
     try {
-      const ins = await inspectVariant(req.tabId, req.sourceUrl);
+      const ins = await inspectVariant(req.tabId, req.sourceUrl, resource?.frameId);
       if (ins.protectedByDrm) return fail('protected');
+      involved.push(...ins.origins);
       req = { ...req, fragmented: ins.fragmented, live: ins.live, durationSec: ins.durationSec };
       if (req.audioUrl) {
-        const aud = await inspectVariant(req.tabId, req.audioUrl);
+        const aud = await inspectVariant(req.tabId, req.audioUrl, resource?.frameId);
         if (aud.protectedByDrm) return fail('protected');
+        involved.push(...aud.origins);
         if (aud.live) req = { ...req, live: true };
       }
     } catch (e) {
       return fail(`inspect:${e instanceof Error ? e.message : 'failed'}`);
     }
+  }
+  if (resource?.frameUrl) {
+    req = {
+      ...req,
+      replay: {
+        frameUrl: resource.frameUrl,
+        urls: [req.sourceUrl, ...(req.audioUrl ? [req.audioUrl] : []), ...involved],
+      },
+    };
   }
   const plan = planFromRequest(req, limitsOf(settings));
   if (!plan.valid) return fail(`plan:${plan.issues.join(',')}`);
@@ -135,6 +167,7 @@ async function settle(id: string, code: JobErrorCode, message: string): Promise<
 
 async function afterJobEnds(id: string): Promise<void> {
   meters.delete(id);
+  await removeReplay(id);
   const job = await getJob(id);
   if (job?.viaOffscreen) {
     await releaseInOffscreen(id);
@@ -151,6 +184,11 @@ async function runJob(id: string): Promise<void> {
     const settings = await loadSettings();
     const plan = planFromRequest(job.request, limitsOf(settings));
     if (!plan.valid) return void (await settle(id, 'invalid', plan.issues.join(', ')));
+    if (job.request.replay) {
+      await installReplay(job.id, job.request.replay.frameUrl, job.request.replay.urls);
+    }
+    // A native download that Chrome's download manager could not make (no Referer) is run by the extension itself.
+    if (job.staged && plan.pipeline === 'native') plan.pipeline = 'file-staged';
     if (plan.pipeline === 'native') await runNative(job);
     else await runInOffscreenDoc(job, plan, settings.maxMemoryMb, settings.segmentConcurrency);
   } catch (e) {
@@ -287,6 +325,13 @@ async function syncFromChrome(job: DownloadJob): Promise<void> {
     return;
   }
   if (item.state === 'interrupted') {
+    if (canRestage(job, item.error)) {
+      const next = await updateJob(job.id, (j) => (canRestage(j, item.error) ? restage(j, now) : j));
+      if (next?.staged) {
+        void runJob(job.id);
+        return;
+      }
+    }
     if (item.error === 'USER_CANCELED') {
       await updateJob(job.id, (j) =>
         canTransition(j.stage, 'cancelled') ? transition(j, 'cancelled', now) : j,
@@ -385,6 +430,7 @@ export async function reconcile(): Promise<void> {
       jobs[j.id] = failJob(j, now, { code: 'interrupted', message: 'Interrupted by a browser restart' });
     }
   });
+  await pruneReplay((await listJobs()).filter(isActive).map((j) => j.id));
   startPolling();
   void pump();
 }

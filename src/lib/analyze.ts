@@ -14,8 +14,9 @@ import { isSafeFetchUrl, normalizeUrl, parseUrl } from './security';
 
 /** Network access used while analysing. Implementations decide which origin the request is made from. */
 export interface Fetcher {
-  head(url: string): Promise<ProbeResult>;
-  text(url: string): Promise<ProbeResult>;
+  /** `frameId` is the frame the URL was found in: reads are made from that frame's origin when possible. */
+  head(url: string, frameId?: number): Promise<ProbeResult>;
+  text(url: string, frameId?: number): Promise<ProbeResult>;
 }
 
 export interface AnalyzeContext {
@@ -34,6 +35,8 @@ export interface AnalyzeOptions {
 interface Entry {
   url: string;
   methods: RawCandidate['method'][];
+  frameId?: number;
+  frameUrl?: string;
   hints: Pick<
     RawCandidate,
     'title' | 'mimeType' | 'mediaType' | 'durationSec' | 'width' | 'height' | 'poster'
@@ -64,7 +67,13 @@ function collectEntries(cands: RawCandidate[]): Entry[] {
       if (!prev.methods.includes(c.method)) prev.methods.push(c.method);
       prev.hints = { ...hints, ...prev.hints };
     } else {
-      map.set(key, { url: c.url, methods: [c.method], hints });
+      map.set(key, {
+        url: c.url,
+        methods: [c.method],
+        hints,
+        ...(c.frameId !== undefined ? { frameId: c.frameId } : {}),
+        ...(c.frameUrl ? { frameUrl: c.frameUrl } : {}),
+      });
     }
   }
   return [...map.values()];
@@ -127,6 +136,8 @@ function skeleton(e: Entry, ctx: AnalyzeContext, format: MediaFormat): MediaReso
     if (e.hints.height) r.height = e.hints.height;
   }
   if (e.hints.poster) r.poster = e.hints.poster;
+  if (e.frameId !== undefined) r.frameId = e.frameId;
+  if (e.frameUrl) r.frameUrl = e.frameUrl;
   return r;
 }
 
@@ -163,7 +174,7 @@ function applyVariantTop(r: MediaResource, top: HlsVariant | undefined): void {
 }
 
 async function analyzePlaylist(r: MediaResource, fetcher: Fetcher): Promise<MediaResource> {
-  const res = await fetcher.text(r.url);
+  const res = await fetcher.text(r.url, r.frameId);
   if (!res.ok) {
     r.kind = r.format === 'dash' ? 'unsupported-playlist' : 'hls-media';
     r.downloadability = failureVerdict(res);
@@ -234,7 +245,7 @@ async function finishMaster(
     r.downloadability = verdict('unsupported', 'no-segments');
     return r;
   }
-  const sample = await fetcher.text(sampleUrl);
+  const sample = await fetcher.text(sampleUrl, r.frameId);
   if (!sample.ok) {
     r.downloadability = { ...failureVerdict(sample), detail: 'variant-playlist' };
     return r;
@@ -257,7 +268,7 @@ async function finishMaster(
 }
 
 async function analyzeFile(r: MediaResource, e: Entry, fetcher: Fetcher): Promise<MediaResource> {
-  const head = await fetcher.head(e.url);
+  const head = await fetcher.head(e.url, e.frameId);
   if (!head.ok) {
     if (head.kind === 'blocked') {
       // Chrome's own download manager is not subject to CORS, so the file can still be fetched; only the

@@ -3,17 +3,26 @@ import { fetchText, probeHeaders, type ProbeResult } from '@/lib/netprobe';
 import type { ScanReport } from '@/types/media';
 import type { VdhApi } from '@/content/scanner';
 import { mayExtensionFetch, parseUrl } from '@/lib/security';
+import { withReplay } from './replay';
 
 type ApiCall = 'scan' | 'probeHeaders' | 'fetchText';
 
-/** Inject the (read-only) scanner into the tab's top frame. Requires activeTab or host access. */
+/**
+ * Inject the (read-only) scanner into every frame Chrome lets us into: the top frame (activeTab), same-origin
+ * frames, and, where the user granted access, cross-origin and nested frames. Frames we may not enter are skipped.
+ */
 export async function injectScanner(tabId: number): Promise<void> {
-  await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+  await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ['content.js'] });
 }
 
-async function callPage<T>(tabId: number, name: ApiCall, arg?: string): Promise<T> {
+async function callPage<T>(
+  tabId: number,
+  frameId: number | undefined,
+  name: ApiCall,
+  arg?: string,
+): Promise<T> {
   const [res] = await chrome.scripting.executeScript({
-    target: { tabId },
+    target: { tabId, frameIds: [frameId ?? 0] },
     // Self-contained: serialised and run in the page's isolated world.
     func: (n: string, a?: string) => {
       const api = (globalThis as unknown as { __vdh?: Record<string, (x?: string) => unknown> }).__vdh;
@@ -25,19 +34,33 @@ async function callPage<T>(tabId: number, name: ApiCall, arg?: string): Promise<
   return res?.result as T;
 }
 
-export const pageScan = (tabId: number) => callPage<ScanReport>(tabId, 'scan');
+/** One report per frame that could be scanned; each carries the frame id it came from. */
+export async function pageScanAll(tabId: number): Promise<ScanReport[]> {
+  const results = await chrome.scripting.executeScript({
+    target: { tabId, allFrames: true },
+    func: () => {
+      const api = (globalThis as unknown as { __vdh?: { scan?: () => unknown } }).__vdh;
+      return api?.scan ? api.scan() : null;
+    },
+  });
+  return results.filter((r) => r.result).map((r) => ({ ...(r.result as ScanReport), frameId: r.frameId }));
+}
 
-/** Fetches made from the page's own origin and cookies: sees exactly what the page's player can see. */
+/**
+ * Fetches made from the owning frame's origin and cookies: sees exactly what that frame's player can see.
+ * Falls back to the top frame when the frame has no scanner (e.g. access was not granted).
+ */
 export function pageFetcher(tabId: number): Fetcher {
+  const call = async (name: ApiCall, url: string, frameId?: number): Promise<ProbeResult> => {
+    try {
+      return await callPage<ProbeResult>(tabId, frameId, name, url);
+    } catch {
+      return { ok: false, kind: 'blocked' };
+    }
+  };
   return {
-    head: (url) =>
-      callPage<ProbeResult>(tabId, 'probeHeaders', url).catch(
-        () => ({ ok: false, kind: 'blocked' }) as ProbeResult,
-      ),
-    text: (url) =>
-      callPage<ProbeResult>(tabId, 'fetchText', url).catch(
-        () => ({ ok: false, kind: 'blocked' }) as ProbeResult,
-      ),
+    head: (url, frameId) => call('probeHeaders', url, frameId),
+    text: (url, frameId) => call('fetchText', url, frameId),
   };
 }
 
@@ -75,16 +98,34 @@ export function extensionFetcher(pageUrl: string): Fetcher {
  * granted access to that origin, retry from the extension. `allowExtensionFallback` is false for automatic scans:
  * nothing may reach out beyond what the page itself can read without the user asking for it.
  */
-export function combinedFetcher(tabId: number, pageUrl: string, allowExtensionFallback = true): Fetcher {
+export function combinedFetcher(
+  tabId: number,
+  pageUrl: string,
+  allowExtensionFallback = true,
+  /** frameId -> document URL of that frame, so the fallback can replay the frame's Referer/Origin. */
+  frameUrls: ReadonlyMap<number, string> = new Map(),
+): Fetcher {
   const page = pageFetcher(tabId);
   const ext = extensionFetcher(pageUrl);
-  const withFallback = async (url: string, which: 'head' | 'text'): Promise<ProbeResult> => {
-    const first = await page[which](url);
+  const withFallback = async (
+    url: string,
+    which: 'head' | 'text',
+    frameId?: number,
+  ): Promise<ProbeResult> => {
+    const first = await page[which](url, frameId);
     if (first.ok || first.kind === 'http' || !allowExtensionFallback) return first;
-    if (await hasHostAccess(url)) return ext[which](url);
+    if (await hasHostAccess(url)) {
+      const frameUrl = frameId !== undefined ? frameUrls.get(frameId) : undefined;
+      return withReplay(`probe:${tabId}:${frameId ?? 0}:${which}:${url}`, frameUrl, [url], () =>
+        ext[which](url),
+      );
+    }
     return first;
   };
-  return { head: (u) => withFallback(u, 'head'), text: (u) => withFallback(u, 'text') };
+  return {
+    head: (u, f) => withFallback(u, 'head', f),
+    text: (u, f) => withFallback(u, 'text', f),
+  };
 }
 
 export type { VdhApi };

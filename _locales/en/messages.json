@@ -673,5 +673,26 @@
   },
   "errFileUnavailable": {
     "message": "This download has no file to open."
+  },
+  "detectHook": {
+    "message": "Page hook (fetch/XHR)"
+  },
+  "noteFramesBlocked": {
+    "message": "Embedded players from other sites could not be read: $1"
+  },
+  "allowEmbedded": {
+    "message": "ALLOW EMBEDDED PLAYERS"
+  },
+  "allowEmbeddedHint": {
+    "message": "Chrome will ask for access to those sites only."
+  },
+  "reasonEme": {
+    "message": "The page uses protected playback (EME/DRM). vdown-helper does not bypass DRM."
+  },
+  "optPageHook": {
+    "message": "Look inside players (page hook)"
+  },
+  "optPageHookHint": {
+    "message": "Runs a small read-only script at the start of every page you visit, in every frame, to notice manifests and files that players load from script and to recognise protected playback. It changes nothing and sends nothing; it needs access to all sites, which you can revoke at any time. Off by default."
   }
 }

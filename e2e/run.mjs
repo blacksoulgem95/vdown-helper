@@ -41,9 +41,10 @@ ensureFixtures(fixtures);
 const extDir = join(run, 'ext');
 cpSync(join(root, 'dist'), extDir, { recursive: true });
 const manifest = JSON.parse(readFileSync(join(extDir, 'manifest.json'), 'utf8'));
-manifest.host_permissions = ['http://127.0.0.1/*'];
+// 127.0.0.1-3 are three different origins (site + two nested frames); localhost (B) is deliberately NOT granted.
+manifest.host_permissions = ['http://127.0.0.1/*', 'http://127.0.0.2/*', 'http://127.0.0.3/*'];
 // Stands in for the optional webRequest grant (the real grant needs a user gesture + browser prompt).
-manifest.permissions = [...manifest.permissions, 'webRequest'];
+manifest.permissions = [...manifest.permissions, 'webRequest', 'declarativeNetRequestWithHostAccess'];
 writeFileSync(join(extDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
 
 const downloads = join(run, 'downloads');
@@ -61,6 +62,8 @@ writeFileSync(
 const servers = await startServers(fixtures, join(here, 'pages'));
 const A = servers.a;
 const B = servers.b;
+const C = servers.c;
+const D = servers.d;
 
 const ctx = await chromium.launchPersistentContext(profile, {
   executablePath: chromiumExecutable(),
@@ -1122,6 +1125,232 @@ await step(
   },
 );
 
+// ---------------------------------------------------------------------------------------------------------------
+// VDH-033: nested cross-origin frames, the opt-in page hook, EME refusal, Referer replay
+const tabOf = (prefix) =>
+  ext(async (u) => (await chrome.tabs.query({})).filter((t) => t.url?.startsWith(u)).at(-1)?.id, prefix);
+const stateFor = async (id) => (await ext((i) => chrome.storage.session.get(`tab:${i}`), id))[`tab:${id}`];
+async function scanTab(tabIdToScan) {
+  const pop = await openPopup(tabIdToScan);
+  await pop.getByRole('status').filter({ hasText: 'READY' }).waitFor({ timeout: 45000 });
+  return { pop, st: await stateFor(tabIdToScan) };
+}
+const baseRequestFor = (r) => ({
+  resourceId: r.id,
+  sourceUrl: r.url,
+  tabId: r.tabId,
+  pageUrl: r.pageUrl,
+  host: r.host,
+  mode: 'original',
+  container: 'original',
+  audioFormat: 'mp3',
+  audioBitrate: 192,
+  filename: 'gated-control.mp4',
+  subfolder: '',
+  qualityLabel: 'control',
+  sourceFormat: 'mp4',
+  isHls: false,
+  hasMuxedAudio: true,
+  hasVideo: true,
+});
+const framesUrl = `${A}/pages/frames-top.html?c=${encodeURIComponent(C)}&d=${encodeURIComponent(D)}`;
+let gatedResource;
+
+await step(
+  'nested cross-origin iframes (A -> C -> D) are scanned and each resource knows its frame',
+  async () => {
+    const fp = await ctx.newPage();
+    await fp.goto(framesUrl);
+    await fp.waitForTimeout(2500); // nested frames load
+    const id = await tabOf(`${A}/pages/frames-top.html`);
+    const { pop, st } = await scanTab(id);
+    const mid = st.resources.find((r) => r.url === `${C}/media/sample.mp4`);
+    const gated = st.resources.find((r) => r.url.includes('/__ref/media/sample.mp4'));
+    console.log(`        ${st.resources.length} resources, notes ${JSON.stringify(st.notes)}`);
+    assert(
+      mid && mid.frameId > 0 && mid.frameUrl.startsWith(`${C}/pages/frames-mid.html`),
+      `mid ${JSON.stringify(mid)}`,
+    );
+    assert(
+      gated && gated.frameId > 0 && gated.frameUrl.startsWith(`${D}/pages/frames-leaf.html`),
+      `gated ${JSON.stringify(gated)}`,
+    );
+    assert(mid.frameId !== gated.frameId, 'the two players must be in different frames');
+    assert(gated.downloadability.status === 'downloadable', JSON.stringify(gated.downloadability));
+    gatedResource = { ...gated, tabId: id };
+    // Control for the hook test below: the manifest the leaf frame loaded, then wiped from resource timing.
+    assert(
+      !st.resources.some((r) => r.url === `${D}/hls/master.m3u8`),
+      'manifest must be invisible without the hook',
+    );
+    await pop.close();
+    await fp.close();
+  },
+);
+
+await step(
+  'page hook (opt-in): sees a manifest whose resource-timing entry was wiped, and is registered only while enabled',
+  async () => {
+    assert(
+      (await ext(() => chrome.scripting.getRegisteredContentScripts())).length === 0,
+      'hook registered while disabled',
+    );
+    await ext(() => chrome.storage.local.set({ settings: { schemaVersion: 1, pageHook: true } }));
+    await until(
+      async () =>
+        (await ext(() => chrome.scripting.getRegisteredContentScripts())).some((s) => s.id === 'vdh-hook'),
+      'hook registration',
+      10000,
+    );
+    const reg = (await ext(() => chrome.scripting.getRegisteredContentScripts())).find(
+      (s) => s.id === 'vdh-hook',
+    );
+    assert(reg.world === 'MAIN' && reg.allFrames && reg.runAt === 'document_start', JSON.stringify(reg));
+    assert(
+      !reg.matches.includes('<all_urls>') && reg.matches.every((m) => /127\.0\.0\.[123]/.test(m)),
+      `matches ${reg.matches}`,
+    );
+
+    const fp = await ctx.newPage();
+    await fp.goto(framesUrl);
+    await fp.waitForTimeout(2500);
+    const id = await tabOf(`${A}/pages/frames-top.html`);
+    const { pop, st } = await scanTab(id);
+    const m = st.resources.find((r) => r.url === `${D}/hls/master.m3u8`);
+    assert(m, `manifest not found by the hook; saw ${st.resources.map((r) => r.url).join(', ')}`);
+    assert(
+      m.detectedBy.includes('hook') && !m.detectedBy.includes('performance'),
+      `detectedBy ${m.detectedBy}`,
+    );
+    assert(
+      m.frameUrl.startsWith(`${D}/pages/frames-leaf.html`) && m.kind === 'hls-master',
+      JSON.stringify([m.frameUrl, m.kind]),
+    );
+    assert(m.downloadability.status === 'downloadable', JSON.stringify(m.downloadability));
+    await pop.close();
+    await fp.close();
+
+    // Turning it off removes the registration again.
+    await ext(() => chrome.storage.local.set({ settings: { schemaVersion: 1, pageHook: false } }));
+    await until(
+      async () => (await ext(() => chrome.scripting.getRegisteredContentScripts())).length === 0,
+      'hook removal',
+      10000,
+    );
+    await ext(() => chrome.storage.local.set({ settings: { schemaVersion: 1, pageHook: true } }));
+    await until(
+      async () => (await ext(() => chrome.scripting.getRegisteredContentScripts())).length === 1,
+      'hook re-registration',
+      10000,
+    );
+  },
+);
+
+await step(
+  'Referer-gated file: the browser-sent Referer of the owning frame is replayed, and only for that job',
+  async () => {
+    assert(gatedResource, 'previous step must have found the gated file');
+    const id = await tabOf(`${A}/pages/frames-top.html`).catch(() => undefined);
+    const fp = await ctx.newPage();
+    await fp.goto(framesUrl);
+    await fp.waitForTimeout(2500);
+    const tid = await tabOf(`${A}/pages/frames-top.html`);
+    const { pop, st } = await scanTab(tid);
+    const gated = st.resources.find((r) => r.url.includes('/__ref/media/sample.mp4'));
+    await pop.locator(`[data-resource-id="${gated.id}"]`).getByRole('button', { name: 'DOWNLOAD' }).click();
+    const job = await jobFinished((j) => j.request.resourceId === gated.id, 60000);
+    const hits = servers.state.hits.filter((h) => h.startsWith('ref-check'));
+    console.log(`        server saw: ${hits.at(-1)}`);
+    assert(
+      job.stage === 'completed',
+      `stage ${job.stage}: ${JSON.stringify(job.error)} | ${hits.join(' ; ')}`,
+    );
+    // Chrome's own download manager cannot send a Referer: the refused native download was retried by the extension.
+    assert(
+      job.staged === true && job.viaOffscreen === true,
+      `expected the staged fallback: ${JSON.stringify([job.staged, job.viaOffscreen])}`,
+    );
+    assert(probe(fileOf(job)).codecs.includes('h264'), 'not a valid MP4');
+    assert(
+      hits.at(-1).includes(`referer=${D}/`) && hits.at(-1).endsWith('true'),
+      `server saw: ${hits.at(-1)}`,
+    );
+    // The rule is gone once the job is over.
+    assert(
+      (await ext(() => chrome.declarativeNetRequest.getSessionRules())).length === 0,
+      'replay rule leaked',
+    );
+
+    // Control: the same URL asked for without a known frame gets no Referer and is refused by the server.
+    const direct = await ext(
+      (req) =>
+        chrome.runtime.sendMessage({ channel: 'vdown', type: 'start-download', payload: { request: req } }),
+      {
+        ...baseRequestFor(gated),
+        resourceId: 'no-frame-control',
+      },
+    );
+    assert(direct.ok, JSON.stringify(direct));
+    const denied = await jobFinished((j) => j.request.resourceId === 'no-frame-control', 60000);
+    assert(denied.stage === 'failed', `control should fail, got ${denied.stage}`);
+    await pop.close();
+    await fp.close();
+    void id;
+  },
+);
+
+await step(
+  'page asking for Widevine (EME) is marked protected and cannot be downloaded; ClearKey is not',
+  async () => {
+    const widevine = await ctx.newPage();
+    await widevine.goto(`${A}/pages/eme.html`);
+    await widevine.waitForTimeout(800);
+    const wid = await tabOf(`${A}/pages/eme.html`);
+    const { pop, st } = await scanTab(wid);
+    const v = st.resources.find((r) => r.url.endsWith('/media/sample.mp4'));
+    assert(
+      v?.downloadability.status === 'protected' && v.downloadability.reason === 'eme',
+      JSON.stringify(v?.downloadability),
+    );
+    assert(
+      await pop
+        .locator(`[data-resource-id="${v.id}"]`)
+        .getByRole('button', { name: 'DOWNLOAD' })
+        .isDisabled(),
+      'DOWNLOAD must be disabled',
+    );
+    assert(
+      (await pop.locator(`[data-resource-id="${v.id}"]`).innerText()).includes('does not bypass DRM'),
+      'reason must be shown',
+    );
+    await pop.close();
+    await widevine.close();
+
+    const clear = await ctx.newPage();
+    await clear.goto(`${A}/pages/eme.html?ks=org.w3.clearkey`);
+    await clear.waitForTimeout(800);
+    const cid = await tabOf(`${A}/pages/eme.html`);
+    const r2 = await scanTab(cid);
+    const v2 = r2.st.resources.find((r) => r.url.endsWith('/media/sample.mp4'));
+    assert(v2?.downloadability.status === 'downloadable', JSON.stringify(v2?.downloadability));
+    await r2.pop.close();
+    await clear.close();
+  },
+);
+
+await step('frames the extension cannot enter are listed by origin, with an "allow" button', async () => {
+  const bp = await ctx.newPage();
+  await bp.goto(`${A}/pages/frames-blocked.html?b=${encodeURIComponent(B)}`);
+  await bp.waitForTimeout(1200);
+  const bid = await tabOf(`${A}/pages/frames-blocked.html`);
+  const { pop, st } = await scanTab(bid);
+  assert(JSON.stringify(st.notes.blockedFrameOrigins) === JSON.stringify([B]), JSON.stringify(st.notes));
+  await pop.getByRole('button', { name: 'ALLOW EMBEDDED PLAYERS' }).waitFor({ timeout: 10000 });
+  await shot(pop, 'popup-blocked-frame');
+  await pop.close();
+  await bp.close();
+});
+
 await step(
   'service-worker restart: scan results and the queue survive a forced shutdown of the worker',
   async () => {
@@ -1173,7 +1402,12 @@ await step(
   'no console errors in any extension context (service worker, offscreen, popup, options, side panel)',
   async () => {
     // Only failures the fixtures cause on purpose are tolerated (CORS-closed CDN, the flaky playlist, a missing file).
-    const intended = [/\/closed\//, /\/flaky\//, /does-not-exist\.mp4/];
+    const intended = [
+      /\/closed\//,
+      /\/flaky\//,
+      /does-not-exist\.mp4/,
+      /__ref\/media\/sample\.mp4.*403|status of 403/,
+    ];
     const errors = consoleLog.filter(
       (m) => m.type === 'error' && !intended.some((re) => re.test(`${m.text} ${m.url}`)),
     );
@@ -1190,7 +1424,7 @@ await step(
   'no request left the machine: only the two local test origins and extension/blob/data URLs were contacted',
   async () => {
     const external = [...requestedUrls].filter(
-      (u) => /^https?:/.test(u) && !/^https?:\/\/(127\.0\.0\.1|localhost)[:/]/.test(u),
+      (u) => /^https?:/.test(u) && !/^https?:\/\/(127\.0\.0\.\d+|localhost)[:/]/.test(u),
     );
     assert(external.length === 0, `external requests: ${external.join(', ')}`);
     assert(requestedUrls.size > 20, `request capture looks broken (${requestedUrls.size})`);

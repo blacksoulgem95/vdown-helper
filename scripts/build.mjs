@@ -12,11 +12,14 @@ if (major < 22 || (major === 22 && minor < 18)) {
 }
 
 const root = resolve(import.meta.dirname, '..');
-const { pagesConfig, backgroundConfig, contentConfig, DIST } = await import(resolve(root, 'vite.shared.ts'));
+const { pagesConfig, backgroundConfig, contentConfig, hookConfig, DIST } = await import(
+  resolve(root, 'vite.shared.ts')
+);
 
 await build(pagesConfig());
 await build(backgroundConfig());
 await build(contentConfig());
+await build(hookConfig());
 
 // Manifest (version is sourced from package.json so there is a single source of truth).
 const pkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'));

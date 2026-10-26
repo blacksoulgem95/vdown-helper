@@ -32,6 +32,7 @@ need(manifest.options_ui?.page, 'options page');
 need(manifest.side_panel?.default_path, 'side panel');
 need('offscreen/offscreen.html', 'offscreen document');
 need('content.js', 'content script injected by scripting.executeScript');
+need('hook.js', 'page hook registered by the background when the user opts in');
 need('vendor/ffmpeg/ffmpeg-core.js', 'bundled FFmpeg core');
 need('vendor/ffmpeg/ffmpeg-core.wasm', 'bundled FFmpeg wasm');
 

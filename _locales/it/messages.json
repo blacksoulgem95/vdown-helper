@@ -673,5 +673,26 @@
   },
   "errFileUnavailable": {
     "message": "Questo download non ha un file da aprire."
+  },
+  "detectHook": {
+    "message": "Hook nella pagina (fetch/XHR)"
+  },
+  "noteFramesBlocked": {
+    "message": "Player incorporati da altri siti non leggibili: $1"
+  },
+  "allowEmbedded": {
+    "message": "CONSENTI PLAYER INCORPORATI"
+  },
+  "allowEmbeddedHint": {
+    "message": "Chrome chiederà l'accesso solo a quei siti."
+  },
+  "reasonEme": {
+    "message": "La pagina usa la riproduzione protetta (EME/DRM). vdown-helper non aggira il DRM."
+  },
+  "optPageHook": {
+    "message": "Guarda dentro i player (hook nella pagina)"
+  },
+  "optPageHookHint": {
+    "message": "Esegue uno script di sola lettura all'inizio di ogni pagina che visiti, in ogni frame, per notare manifest e file che i player caricano da script e per riconoscere la riproduzione protetta. Non modifica nulla e non invia nulla; richiede l'accesso a tutti i siti, che puoi revocare in qualsiasi momento. Disattivato per impostazione predefinita."
   }
 }

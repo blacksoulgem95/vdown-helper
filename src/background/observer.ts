@@ -14,6 +14,8 @@ let registered = false;
 interface Observed {
   url: string;
   mime?: string;
+  /** Frame that made the request (webRequest frameId): lets the player's own frame probe it. */
+  frameId?: number;
 }
 
 function relevant(url: string, mime: string): boolean {
@@ -28,7 +30,12 @@ function relevant(url: string, mime: string): boolean {
 export async function getObserved(tabId: number): Promise<RawCandidate[]> {
   const stored = await chrome.storage.session.get(key(tabId));
   const list = (stored[key(tabId)] as Observed[] | undefined) ?? [];
-  return list.map((o) => ({ url: o.url, method: 'network', ...(o.mime ? { mimeType: o.mime } : {}) }));
+  return list.map((o) => ({
+    url: o.url,
+    method: 'network' as const,
+    ...(o.mime ? { mimeType: o.mime } : {}),
+    ...(o.frameId !== undefined && o.frameId >= 0 ? { frameId: o.frameId } : {}),
+  }));
 }
 
 async function record(tabId: number, o: Observed): Promise<void> {
@@ -46,7 +53,9 @@ const listener: HeadersListener = (d) => {
   if (d.tabId < 0 || !isSafeFetchUrl(d.url)) return undefined;
   const ct = d.responseHeaders?.find((h) => h.name.toLowerCase() === 'content-type')?.value ?? '';
   if (relevant(d.url, ct)) {
-    const o: Observed = ct ? { url: d.url, mime: ct.split(';')[0]?.trim() ?? '' } : { url: d.url };
+    const o: Observed = ct
+      ? { url: d.url, mime: ct.split(';')[0]?.trim() ?? '', frameId: d.frameId }
+      : { url: d.url, frameId: d.frameId };
     void record(d.tabId, o);
   }
   return undefined;

@@ -79,6 +79,20 @@ export function startServers(root, pagesDir) {
       return;
     }
 
+    // /__ref/<path>?need=<origin>: only answers requests that look like they come from that page (hotlink protection).
+    if (path.startsWith('/__ref/')) {
+      const need = url.searchParams.get('need') ?? '';
+      const referer = String(req.headers.referer ?? '');
+      const originHdr = req.headers.origin ? String(req.headers.origin) : '';
+      const okReferer = need !== '' && referer.startsWith(`${need}/`);
+      const okOrigin = originHdr === '' || originHdr === need;
+      state.hits.push(
+        `ref-check need=${need} referer=${referer || '-'} origin=${originHdr || '-'} -> ${okReferer && okOrigin}`,
+      );
+      if (!okReferer || !okOrigin) return void res.writeHead(403, headers).end('hotlinking is not allowed');
+      path = path.slice('/__ref'.length);
+    }
+
     // The flaky playlist's segments are real files, but 404 until enabled.
     let file;
     if (path.startsWith('/flaky/seg')) {
@@ -112,19 +126,26 @@ export function startServers(root, pagesDir) {
     createReadStream(file).pipe(res);
   };
 
-  const a = createServer(handler('A'));
-  const b = createServer(handler('B'));
+  // A = the "website", B = a CDN that is not granted, C and D = extra origins for nested iframes (127.0.0.x are all
+  // loopback addresses on Linux, and each is a different origin from every other).
+  const hosts = { A: '127.0.0.1', B: '127.0.0.1', C: '127.0.0.2', D: '127.0.0.3' };
+  const names = { A: '127.0.0.1', B: 'localhost', C: '127.0.0.2', D: '127.0.0.3' };
+  const servers = Object.fromEntries(Object.keys(hosts).map((k) => [k, createServer(handler(k))]));
   return new Promise((resolve) => {
-    a.listen(0, '127.0.0.1', () =>
-      b.listen(0, '127.0.0.1', () =>
+    let pending = Object.keys(servers).length;
+    for (const [k, srv] of Object.entries(servers)) {
+      srv.listen(0, hosts[k], () => {
+        if (--pending > 0) return;
+        const base = (k) => `http://${names[k]}:${servers[k].address().port}`;
         resolve({
-          a: `http://127.0.0.1:${a.address().port}`,
-          // "localhost" is a different origin from 127.0.0.1, so it is not covered by the test build's host grant.
-          b: `http://localhost:${b.address().port}`,
+          a: base('A'),
+          b: base('B'),
+          c: base('C'),
+          d: base('D'),
           state,
-          close: () => Promise.all([new Promise((r) => a.close(r)), new Promise((r) => b.close(r))]),
-        }),
-      ),
-    );
+          close: () => Promise.all(Object.values(servers).map((srv2) => new Promise((r) => srv2.close(r)))),
+        });
+      });
+    }
   });
 }

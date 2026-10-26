@@ -154,3 +154,38 @@ describe('SpeedMeter', () => {
     expect(m.etaSeconds(undefined)).toBeUndefined();
   });
 });
+
+describe('restage: a refused native download is handed to the extension once', () => {
+  const withReplay = {
+    ...request,
+    replay: { frameUrl: 'https://embed.example/p', urls: [request.sourceUrl] },
+  };
+  const downloading = (req = withReplay) =>
+    transition(transition(createJob('j', req, plan(), 1), 'preparing', 2), 'downloading', 3);
+
+  it('applies to 401/403 on a frame-owned plain file, nothing else', async () => {
+    const { canRestage } = await import('@/lib/queue');
+    expect(canRestage(downloading(), 'SERVER_FORBIDDEN')).toBe(true);
+    expect(canRestage(downloading(), 'SERVER_UNAUTHORIZED')).toBe(true);
+    expect(canRestage(downloading(), 'NETWORK_FAILED')).toBe(false);
+    expect(canRestage(downloading(), 'USER_CANCELED')).toBe(false);
+    expect(canRestage(downloading(), undefined)).toBe(false);
+    expect(canRestage(downloading({ ...request } as typeof withReplay), 'SERVER_FORBIDDEN')).toBe(false); // no frame known
+    expect(canRestage(downloading({ ...withReplay, isHls: true }), 'SERVER_FORBIDDEN')).toBe(false);
+  });
+  it('goes back to PREPARING owned by the offscreen pipeline, cannot pause, and only happens once', async () => {
+    const { restage, canRestage } = await import('@/lib/queue');
+    const j = restage({ ...downloading(), chromeDownloadId: 9, canPause: true }, 10);
+    expect(j).toMatchObject({
+      stage: 'preparing',
+      staged: true,
+      viaOffscreen: true,
+      canPause: false,
+      progress: {},
+    });
+    expect(j.chromeDownloadId).toBeUndefined();
+    expect(canRestage({ ...j, stage: 'downloading' }, 'SERVER_FORBIDDEN')).toBe(false);
+    expect(() => restage({ ...j, stage: 'downloading' }, 11)).toThrow(IllegalTransitionError);
+    expect(() => restage(createJob('x', withReplay, plan(), 1), 11)).toThrow(IllegalTransitionError);
+  });
+});

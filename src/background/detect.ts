@@ -1,11 +1,13 @@
 import { analyzeCandidates, provisionalResources, type AnalyzeContext } from '@/lib/analyze';
+import { hookCandidates, markProtectedFrames, protectedKeySystems } from '@/lib/hookData';
 import { inspectMediaPlaylist } from '@/lib/inspect';
 import { parseHls } from '@/lib/hls/parser';
 import { isSafeFetchUrl, log } from '@/lib/security';
 import type { VariantInspection, TabState } from '@/types/messages';
-import type { MediaResource, RawCandidate } from '@/types/media';
+import type { MediaResource, RawCandidate, ScanNotes, ScanReport } from '@/types/media';
+import { readHookReports } from './hooks';
 import { getObserved, isObserving } from './observer';
-import { combinedFetcher, injectScanner, pageScan } from './pageFetch';
+import { combinedFetcher, injectScanner, pageScanAll } from './pageFetch';
 import { emptyState, getTabState, setTabState } from './tabState';
 
 const inFlight = new Map<number, Promise<TabState>>();
@@ -28,6 +30,29 @@ async function updateBadge(tabId: number, state: TabState): Promise<void> {
   } catch {
     // The tab may have closed.
   }
+}
+
+/**
+ * Combine per-frame notes. A frame origin only counts as "blocked" when none of the scanned frames lives there
+ * (with access granted, an iframe that was reported unreadable by its parent has its own report).
+ */
+export function mergeNotes(reports: ScanReport[]): ScanNotes {
+  const scanned = new Set<string>();
+  for (const r of reports) {
+    try {
+      scanned.add(new URL(r.pageUrl).origin);
+    } catch {
+      // about:blank / srcdoc frames have no usable origin
+    }
+  }
+  const blocked = new Set<string>();
+  for (const r of reports)
+    for (const o of r.notes.blockedFrameOrigins ?? []) if (!scanned.has(o)) blocked.add(o);
+  return {
+    blobSources: reports.reduce((n, r) => n + r.notes.blobSources, 0),
+    inaccessibleFrames: reports.reduce((n, r) => n + r.notes.inaccessibleFrames, 0),
+    blockedFrameOrigins: [...blocked].slice(0, 20),
+  };
 }
 
 async function runScan(tabId: number, automatic: boolean): Promise<TabState> {
@@ -59,9 +84,35 @@ async function runScan(tabId: number, automatic: boolean): Promise<TabState> {
 
   try {
     await injectScanner(tabId);
-    const report = await pageScan(tabId);
+    const reports = await pageScanAll(tabId);
+    const report = reports.find((r) => r.frameId === 0) ?? reports[0];
+    if (!report) throw new Error('scanner-missing');
     const observed = await getObserved(tabId);
-    const candidates: RawCandidate[] = [...report.candidates, ...observed];
+    const framed = reports.flatMap((r) =>
+      r.candidates.map((c) => ({
+        ...c,
+        ...(r.frameId !== undefined ? { frameId: r.frameId } : {}),
+        frameUrl: r.pageUrl,
+      })),
+    );
+    // What the opt-in page hook saw in each frame (manifests loaded from script, key systems requested).
+    const hookReports = await readHookReports(tabId);
+    const frameUrls = new Map(
+      reports.flatMap((r) => (r.frameId !== undefined ? [[r.frameId, r.pageUrl] as const] : [])),
+    );
+    const hooked = hookReports.flatMap((h) =>
+      hookCandidates(h.report, {
+        frameId: h.frameId,
+        ...(frameUrls.get(h.frameId) ? { frameUrl: frameUrls.get(h.frameId) as string } : {}),
+      }),
+    );
+    const protectedFrames = new Map<number, string[]>();
+    for (const h of hookReports) {
+      const bad = protectedKeySystems(h.report.emeKeySystems);
+      if (bad.length > 0) protectedFrames.set(h.frameId, bad);
+    }
+    const candidates: RawCandidate[] = [...framed, ...hooked, ...observed];
+    const notes = mergeNotes(reports);
     const ctx: AnalyzeContext = {
       tabId,
       pageUrl: report.pageUrl,
@@ -75,20 +126,23 @@ async function runScan(tabId: number, automatic: boolean): Promise<TabState> {
       ...base,
       pageUrl: report.pageUrl,
       pageTitle: report.pageTitle,
-      notes: report.notes,
+      notes,
       resources: provisional,
     });
 
-    const resources = sortResources(
-      await analyzeCandidates(candidates, ctx, combinedFetcher(tabId, report.pageUrl, !automatic)),
+    const analysed = await analyzeCandidates(
+      candidates,
+      ctx,
+      combinedFetcher(tabId, report.pageUrl, !automatic, frameUrls as ReadonlyMap<number, string>),
     );
+    const resources = sortResources(markProtectedFrames(analysed, protectedFrames));
     const done: TabState = {
       ...base,
       status: 'ready',
       pageUrl: report.pageUrl,
       pageTitle: report.pageTitle,
       scannedAt: Date.now(),
-      notes: report.notes,
+      notes,
       resources,
       observing: isObserving(),
     };
@@ -122,10 +176,20 @@ export function scanTab(tabId: number, automatic = false): Promise<TabState> {
 }
 
 /** Fetch and summarise one HLS media playlist (a chosen variant or audio rendition) for the Studio. */
-export async function inspectVariant(tabId: number, url: string): Promise<VariantInspection> {
+export async function inspectVariant(
+  tabId: number,
+  url: string,
+  frameId?: number,
+): Promise<VariantInspection> {
   if (!isSafeFetchUrl(url)) throw new Error('unsafe-url');
   const tab = await chrome.tabs.get(tabId).catch(() => undefined);
-  const res = await combinedFetcher(tabId, tab?.url ?? '').text(url);
+  const state = await getTabState(tabId);
+  const frameUrls = new Map(
+    (state?.resources ?? []).flatMap((r) =>
+      r.frameId !== undefined && r.frameUrl ? [[r.frameId, r.frameUrl] as const] : [],
+    ),
+  );
+  const res = await combinedFetcher(tabId, tab?.url ?? '', true, frameUrls).text(url, frameId);
   if (!res.ok) throw new Error(res.kind === 'http' ? `http-${res.status ?? 0}` : 'blocked');
   const parsed = parseHls(res.text ?? '', res.finalUrl || url);
   if (!parsed.ok) throw new Error(`parse-${parsed.error.code}`);

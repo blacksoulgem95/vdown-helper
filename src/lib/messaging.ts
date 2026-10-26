@@ -33,7 +33,7 @@ const validators: { [K in RequestType]: (p: unknown) => p is RequestMap[K]['req'
   scan: (p): p is RequestMap['scan']['req'] => isObj(p) && isInt(p['tabId']),
   'get-state': (p): p is RequestMap['get-state']['req'] => isObj(p) && isInt(p['tabId']),
   'inspect-variant': (p): p is RequestMap['inspect-variant']['req'] =>
-    isObj(p) && isInt(p['tabId']) && isStr(p['url']),
+    isObj(p) && isInt(p['tabId']) && isStr(p['url']) && (p['frameId'] === undefined || isInt(p['frameId'])),
   'start-download': (p): p is RequestMap['start-download']['req'] => {
     if (!isObj(p) || !isObj(p['request'])) return false;
     const r = p['request'];

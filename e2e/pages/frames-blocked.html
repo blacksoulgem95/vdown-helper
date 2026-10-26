@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Frames: blocked embed</title>
+  </head>
+  <body>
+    <h1>Page with an embed from a site the extension has no access to</h1>
+    <script>
+      const q = new URLSearchParams(location.search);
+      const f = document.createElement('iframe');
+      f.src = q.get('b') + '/pages/empty.html';
+      f.width = 300;
+      f.height = 150;
+      document.body.append(f);
+    </script>
+  </body>
+</html>

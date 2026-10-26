@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Frames: top page</title>
+  </head>
+  <body>
+    <h1>Top page (origin A)</h1>
+    <p>No media of its own: the players live in nested frames on other origins.</p>
+    <script>
+      const q = new URLSearchParams(location.search);
+      const f = document.createElement('iframe');
+      f.src =
+        q.get('c') +
+        '/pages/frames-mid.html?c=' +
+        encodeURIComponent(q.get('c')) +
+        '&d=' +
+        encodeURIComponent(q.get('d'));
+      f.width = 420;
+      f.height = 300;
+      document.body.append(f);
+    </script>
+  </body>
+</html>

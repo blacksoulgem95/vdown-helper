@@ -16,6 +16,8 @@ export interface Settings {
   askWhereToSave: boolean;
   /** Scan automatically when a tab finishes loading (needs the optional host permission). */
   autoScan: boolean;
+  /** Run the read-only page hook in every frame of granted sites (needs site access). */
+  pageHook: boolean;
   /** Observe media requests via webRequest (needs the optional permission). */
   networkObserver: boolean;
   maxConcurrentDownloads: number;

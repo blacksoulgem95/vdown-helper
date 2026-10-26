@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Frames: middle frame</title>
+  </head>
+  <body>
+    <h2>Middle frame (origin C)</h2>
+    <video id="v" src="/media/sample.mp4" muted width="200" title="Middle clip"></video>
+    <script>
+      const q = new URLSearchParams(location.search);
+      const f = document.createElement('iframe');
+      f.src =
+        q.get('d') +
+        '/pages/frames-leaf.html?c=' +
+        encodeURIComponent(q.get('c')) +
+        '&d=' +
+        encodeURIComponent(q.get('d'));
+      f.width = 380;
+      f.height = 200;
+      document.body.append(f);
+    </script>
+  </body>
+</html>

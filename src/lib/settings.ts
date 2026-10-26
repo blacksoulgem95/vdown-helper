@@ -14,6 +14,7 @@ export const DEFAULT_SETTINGS: Settings = {
   subfolder: '',
   askWhereToSave: false,
   autoScan: false,
+  pageHook: false,
   networkObserver: false,
   maxConcurrentDownloads: 2,
   segmentConcurrency: 4,
@@ -65,6 +66,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     subfolder: typeof r['subfolder'] === 'string' ? sanitizeSubfolder(r['subfolder']) : d.subfolder,
     askWhereToSave: bool(r['askWhereToSave'], d.askWhereToSave),
     autoScan: bool(r['autoScan'], d.autoScan),
+    pageHook: bool(r['pageHook'], d.pageHook),
     networkObserver: bool(r['networkObserver'], d.networkObserver),
     maxConcurrentDownloads: int(
       r['maxConcurrentDownloads'],

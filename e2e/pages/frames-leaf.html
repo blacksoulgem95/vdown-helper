@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Frames: leaf player</title>
+  </head>
+  <body>
+    <h3>Leaf frame (origin D)</h3>
+    <script>
+      const q = new URLSearchParams(location.search);
+      const D = q.get('d');
+      const C = q.get('c');
+      // 1) A hotlink-protected file on origin C that only answers requests coming from THIS frame's origin (D).
+      const v = document.createElement('video');
+      v.muted = true;
+      v.width = 200;
+      v.title = 'Gated clip';
+      v.src = C + '/__ref/media/sample.mp4?need=' + encodeURIComponent(D);
+      document.body.append(v);
+      // 2) A manifest loaded from script. The page then wipes the resource-timing buffer (players that make
+      //    hundreds of segment requests overflow it anyway), so only the page hook can still know about it.
+      fetch(D + '/hls/master.m3u8')
+        .then((r) => r.text())
+        .then(() => performance.clearResourceTimings());
+    </script>
+  </body>
+</html>

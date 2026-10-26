@@ -510,6 +510,7 @@ function StudioForm({ resource }: { resource: MediaResource }) {
 function pipelineText(plan: Plan): string {
   switch (plan.pipeline) {
     case 'native':
+    case 'file-staged':
       return t('pipeNative');
     case 'hls-concat':
       return t('pipeConcat');

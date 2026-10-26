@@ -23,6 +23,9 @@ What automation cannot prove. Follow the manual test procedure in the README in 
 - [ ] Unicode file names save correctly
 - [ ] A real multi-GB VOD stays responsive and can be cancelled
 
+- [ ] Options -> "Look inside players" shows Chrome's all-sites prompt and enables the hook; revoking access removes it
+- [ ] "Allow embedded players" in the popup asks for exactly the listed frame origins, then the nested players appear
+
 ## Notes
 
 Nothing here has been verified yet; all boxes are intentionally unchecked.

@@ -11,6 +11,7 @@ import type { DetectionMethod, RawCandidate, ScanReport } from '@/types/media';
 
 const MEDIA_EXT = /\.(mp4|m4v|webm|mkv|mov|ogv|ts|mp3|m4a|aac|wav|ogg|oga|opus|flac|m3u8|m3u|mpd)(?:$|[?#])/i;
 const MAX_CANDIDATES = 200;
+const MAX_BLOCKED_FRAMES = 20;
 
 function abs(url: string | null | undefined, base: string): string | undefined {
   if (!url) return undefined;
@@ -19,6 +20,11 @@ function abs(url: string | null | undefined, base: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function httpOrigin(raw: string | null | undefined, base: string): string | undefined {
+  const url = abs(raw, base);
+  return url && /^https?:/i.test(url) ? new URL(url).origin : undefined;
 }
 
 function* roots(doc: Document): Generator<Document | ShadowRoot> {
@@ -124,21 +130,29 @@ function scanPerformance(c: Collector, base: string): void {
 export function scan(): ScanReport {
   const c: Collector = {
     candidates: [],
-    notes: { blobSources: 0, inaccessibleFrames: 0 },
+    notes: { blobSources: 0, inaccessibleFrames: 0, blockedFrameOrigins: [] },
     seen: new Set(),
   };
   const doc = document;
   scanElements(c, doc);
-  // Same-origin iframes are readable; cross-origin ones are reported, not guessed at.
+  // Same-origin iframes are readable here; every frame is also scanned by its own copy of this script (allFrames).
+  // Frames this script cannot read are reported by origin so the user can allow them.
+  const blocked = new Set<string>();
   for (const frame of doc.querySelectorAll('iframe')) {
     try {
       const inner = frame.contentDocument;
-      if (inner) scanElements(c, inner);
-      else c.notes.inaccessibleFrames++;
+      if (inner) {
+        scanElements(c, inner);
+        continue;
+      }
     } catch {
-      c.notes.inaccessibleFrames++;
+      // cross-origin: fall through
     }
+    c.notes.inaccessibleFrames++;
+    const origin = httpOrigin(frame.getAttribute('src'), doc.baseURI);
+    if (origin && origin !== location.origin && blocked.size < MAX_BLOCKED_FRAMES) blocked.add(origin);
   }
+  c.notes.blockedFrameOrigins = [...blocked];
   scanPerformance(c, doc.baseURI);
   return {
     pageUrl: location.href,

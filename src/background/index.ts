@@ -4,6 +4,7 @@ import { isSafeFetchUrl, log } from '@/lib/security';
 import type { OffscreenEvent } from '@/types/messages';
 import { inspectVariant, scanTab } from './detect';
 import { listJobs } from './jobStore';
+import { syncHook } from './hooks';
 import { hasHostAccess } from './pageFetch';
 import { setObserverEnabled } from './observer';
 import { clearHistory, handleOffscreenEvent, jobAction, reconcile, submit, syncById } from './runner';
@@ -12,9 +13,9 @@ import { clearTabState, getTabState } from './tabState';
 registerHandlers({
   scan: async ({ tabId }) => ({ ok: true, state: await scanTab(tabId) }),
   'get-state': async ({ tabId }) => ({ ok: true, state: await getTabState(tabId) }),
-  'inspect-variant': async ({ tabId, url }) => {
+  'inspect-variant': async ({ tabId, url, frameId }) => {
     try {
-      return { ok: true, inspection: await inspectVariant(tabId, url) };
+      return { ok: true, inspection: await inspectVariant(tabId, url, frameId) };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : 'inspect-failed' };
     }
@@ -67,6 +68,7 @@ chrome.tabs.onRemoved.addListener((tabId) => void clearTabState(tabId));
 async function syncObserver(): Promise<void> {
   const s = await loadSettings();
   setObserverEnabled(s.networkObserver);
+  await syncHook();
 }
 
 chrome.storage.onChanged.addListener((changes, area) => {

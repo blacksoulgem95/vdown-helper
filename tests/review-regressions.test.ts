@@ -139,7 +139,7 @@ describe('hostile playlists cannot blow up stored state', () => {
       pageUrl: 'https://a.com',
       pageTitle: '',
       resources: many,
-      notes: { blobSources: 0, inaccessibleFrames: 0 },
+      notes: { blobSources: 0, inaccessibleFrames: 0, blockedFrameOrigins: [] },
       observing: false,
     });
     const stored = await getTabState(7);

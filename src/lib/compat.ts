@@ -28,7 +28,12 @@ export type Pipeline =
   /** FFmpeg is needed and at least one stream is re-encoded (audio only; video is never re-encoded). */
   | 'ffmpeg-transcode'
   /** A single non-HLS file is passed through FFmpeg with stream copy. */
-  | 'file-ffmpeg-copy';
+  | 'file-ffmpeg-copy'
+  /**
+   * A plain file fetched by the extension itself (so the owning frame's Referer/Origin can be replayed), staged on
+   * disk and then saved. Never chosen by the planner: only used as a fallback when Chrome's download manager is refused.
+   */
+  | 'file-staged';
 
 export type StreamHandling = 'copy' | 'transcode';
 

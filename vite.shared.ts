@@ -59,6 +59,26 @@ export function backgroundConfig(): InlineConfig {
   };
 }
 
+/** Page hook: a classic script that runs in the page's own world, so it must also be a self-contained IIFE. */
+export function hookConfig(): InlineConfig {
+  const base = baseConfig();
+  return {
+    ...base,
+    publicDir: false,
+    build: {
+      ...base.build,
+      outDir: DIST,
+      emptyOutDir: false,
+      lib: {
+        entry: resolve(SRC, 'content/hook.ts'),
+        formats: ['iife'],
+        name: 'vdhHook',
+        fileName: () => 'hook.js',
+      },
+    },
+  };
+}
+
 /** Content script: classic script, so it must be a self-contained IIFE. */
 export function contentConfig(): InlineConfig {
   const base = baseConfig();

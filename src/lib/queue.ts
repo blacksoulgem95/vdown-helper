@@ -141,3 +141,38 @@ export class SpeedMeter {
     return remainingBytes / r;
   }
 }
+
+/** Chrome errors that mean "the server refused this request": worth one retry with the frame's headers replayed. */
+export const REFUSED_BY_SERVER: readonly string[] = ['SERVER_FORBIDDEN', 'SERVER_UNAUTHORIZED'];
+
+export function canRestage(job: DownloadJob, chromeError: string | undefined): boolean {
+  return (
+    job.stage === 'downloading' &&
+    !job.staged &&
+    job.request.replay !== undefined &&
+    !job.request.isHls &&
+    chromeError !== undefined &&
+    REFUSED_BY_SERVER.includes(chromeError)
+  );
+}
+
+/**
+ * Hand a refused native download to the extension's own fetch pipeline (once). The job goes back to PREPARING so the
+ * runner starts it again; it cannot be paused any more because Chrome no longer owns the transfer.
+ */
+export function restage(job: DownloadJob, now: number): DownloadJob {
+  if (job.stage !== 'downloading' || job.staged) throw new IllegalTransitionError(job.stage, 'preparing');
+  const next: DownloadJob = {
+    ...job,
+    stage: 'preparing',
+    progress: {},
+    updatedAt: now,
+    paused: false,
+    canPause: false,
+    viaOffscreen: true,
+    staged: true,
+  };
+  delete next.chromeDownloadId;
+  delete next.error;
+  return next;
+}

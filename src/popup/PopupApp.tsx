@@ -1,4 +1,4 @@
-import { Eraser, RefreshCw, Settings } from 'lucide-react';
+import { Eraser, RefreshCw, Settings, ShieldCheck } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { EmptyState } from '@/components/EmptyState';
 import { Logo } from '@/components/Logo';
@@ -86,6 +86,13 @@ export function PopupApp() {
   );
 
   const [queueNote, setQueueNote] = useState<string | undefined>();
+  const onAllowFrames = useCallback(
+    async (origins: string[]) => {
+      if (await requestAccess(origins)) await rescan();
+    },
+    [rescan],
+  );
+
   const onJobAction = useCallback(
     async (id: string, action: JobAction) => {
       setQueueNote(undefined);
@@ -178,8 +185,26 @@ export function PopupApp() {
         {state && state.notes.blobSources > 0 && (
           <Notice tone="magenta">{t('noteBlob', state.notes.blobSources)}</Notice>
         )}
-        {state && state.notes.inaccessibleFrames > 0 && (
-          <Notice>{t('noteFrames', state.notes.inaccessibleFrames)}</Notice>
+        {state && (state.notes.blockedFrameOrigins ?? []).length > 0 ? (
+          <Notice tone="neon">
+            <p>{t('noteFramesBlocked', (state.notes.blockedFrameOrigins ?? []).map(hostOf).join(', '))}</p>
+            <p className="mt-1 text-[11px] text-muted">{t('allowEmbeddedHint')}</p>
+            <div className="mt-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void onAllowFrames(state.notes.blockedFrameOrigins ?? [])}
+                icon={<ShieldCheck size={13} aria-hidden="true" />}
+              >
+                {t('allowEmbedded')}
+              </Button>
+            </div>
+          </Notice>
+        ) : (
+          state &&
+          state.notes.inaccessibleFrames > 0 && (
+            <Notice>{t('noteFrames', state.notes.inaccessibleFrames)}</Notice>
+          )
         )}
 
         {resources.length === 0 ? (
@@ -260,6 +285,14 @@ export function PopupApp() {
       </footer>
     </div>
   );
+}
+
+function hostOf(origin: string): string {
+  try {
+    return new URL(origin).host;
+  } catch {
+    return origin;
+  }
 }
 
 function safeHost(url: string): string {

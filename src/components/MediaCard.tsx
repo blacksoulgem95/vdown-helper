@@ -41,6 +41,7 @@ const DETECTION_KEY = {
   'dom-link': 'detectDomLink',
   performance: 'detectPerformance',
   network: 'detectNetwork',
+  hook: 'detectHook',
   'manual-rescan': 'detectManual',
 } as const;
 

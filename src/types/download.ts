@@ -53,6 +53,11 @@ export interface DownloadRequest {
    * without credentials, which is what wildcard-CORS CDNs require.
    */
   credentialedOrigins?: string[];
+  /**
+   * Set by the background (never trusted from the UI) from its own scan: the frame that owns the stream and the URLs
+   * involved, so the frame's Referer/Origin can be replayed on this job's requests.
+   */
+  replay?: { frameUrl: string; urls: string[] };
   /** Source description for the queue display. */
   qualityLabel: string;
   sourceFormat: MediaFormat;
@@ -101,6 +106,8 @@ export interface DownloadJob {
   canPause: boolean;
   /** True when the segment/FFmpeg pipeline in the offscreen document performs this job. */
   viaOffscreen?: boolean;
+  /** A native download was refused (401/403) and this job was handed to the extension's own fetch pipeline. */
+  staged?: boolean;
   paused: boolean;
   createdAt: number;
   updatedAt: number;

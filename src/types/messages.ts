@@ -1,5 +1,5 @@
 import type { DownloadJob, DownloadRequest, JobProgress, JobStage } from './download';
-import type { MediaResource, ScanReport } from './media';
+import type { MediaResource, ScanNotes } from './media';
 import type { HlsKey } from './hls';
 
 /** Failure envelope returned by every handler. Messages are safe to show: they never contain URLs with tokens. */
@@ -18,7 +18,7 @@ export interface TabState {
   scannedAt?: number;
   resources: MediaResource[];
   /** Things the scanner saw but cannot use. */
-  notes: ScanReport['notes'];
+  notes: ScanNotes;
   error?: string;
   /** True when the optional network observer is active for this tab. */
   observing: boolean;
@@ -47,7 +47,7 @@ export interface RequestMap {
   scan: { req: { tabId: number }; res: Result<{ state: TabState }> };
   'get-state': { req: { tabId: number }; res: Result<{ state: TabState | null }> };
   'inspect-variant': {
-    req: { tabId: number; url: string };
+    req: { tabId: number; url: string; frameId?: number };
     res: Result<{ inspection: VariantInspection }>;
   };
   'start-download': { req: { request: DownloadRequest }; res: Result<{ jobId: string }> };
@@ -81,7 +81,7 @@ export type OffscreenCommand =
   | { channel: 'vdown-offscreen'; type: 'release-job'; jobId: string };
 
 export interface OffscreenPlan {
-  pipeline: 'hls-concat' | 'hls-ffmpeg-copy' | 'ffmpeg-transcode' | 'file-ffmpeg-copy';
+  pipeline: 'hls-concat' | 'hls-ffmpeg-copy' | 'ffmpeg-transcode' | 'file-ffmpeg-copy' | 'file-staged';
   extension: string;
   requiresFfmpeg: boolean;
   video: 'copy' | 'transcode' | 'none';

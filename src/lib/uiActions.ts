@@ -30,7 +30,11 @@ export async function hasAccess(origins: string[]): Promise<boolean> {
 export async function requestAccess(origins: string[]): Promise<boolean> {
   if (origins.length === 0 || (await hasAccess(origins))) return true;
   try {
-    return await chrome.permissions.request({ origins: originPatterns(origins) });
+    // The second permission lets downloads replay the owning frame's Referer/Origin; it is optional and harmless alone.
+    return await chrome.permissions.request({
+      origins: originPatterns(origins),
+      permissions: ['declarativeNetRequestWithHostAccess'],
+    });
   } catch {
     return false;
   }
@@ -107,11 +111,19 @@ export async function inspectForChoices(
     ['audio', draft.audioUrl],
   ] as const) {
     if (!url) continue;
-    let r = await send('inspect-variant', { tabId: resource.tabId, url });
+    let r = await send('inspect-variant', {
+      tabId: resource.tabId,
+      url,
+      ...(resource.frameId !== undefined ? { frameId: resource.frameId } : {}),
+    });
     if (!r.ok && r.error === 'blocked' && allowPrompt) {
       const origin = originOf(url);
       if (origin && (await requestAccess([origin])))
-        r = await send('inspect-variant', { tabId: resource.tabId, url });
+        r = await send('inspect-variant', {
+          tabId: resource.tabId,
+          url,
+          ...(resource.frameId !== undefined ? { frameId: resource.frameId } : {}),
+        });
     }
     if (!r.ok) return { ok: false, error: `inspect:${r.error}` };
     out[slot] = r.inspection;
