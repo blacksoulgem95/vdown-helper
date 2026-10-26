@@ -22,3 +22,5 @@ Pushing `claude/confident-archimedes-8e7ebj` to `blacksoulgem95/vdown-helper` fa
 ## Notes
 
 Needs an org admin: install the Claude GitHub App (https://github.com/apps/claude/installations/select_target) or reconnect GitHub at https://claude.ai/connect-github. `add_repo` reported the repository as already attached, so this is an authorisation problem, not a missing clone.
+
+Re-tried after the user asked again: `git push` still returns 403, and the GitHub API tools can read the repo (it is empty, no branches) but writes fail with "Resource not accessible by integration" (403). The fix is the same: grant the Claude GitHub App write access to `blacksoulgem95/vdown-helper`.
