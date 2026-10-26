@@ -7,7 +7,7 @@ import type {
 } from '@/types/download';
 import type { HlsRendition, HlsVariant } from '@/types/hls';
 import type { VariantInspection } from '@/types/messages';
-import type { MediaResource } from '@/types/media';
+import type { MediaFormat, MediaResource } from '@/types/media';
 import type { Settings } from '@/types/settings';
 import { planOutput, type Plan, type PlanInput } from './compat';
 import {
@@ -15,6 +15,7 @@ import {
   estimateBytes,
   formatFromMime,
   resolutionLabel,
+  SUBTITLE_FILE_FORMATS,
   type AudioFamily,
   type VideoFamily,
 } from './media';
@@ -37,6 +38,8 @@ export interface Choices {
   variantIndex: number;
   /** Index into the audio renditions compatible with the chosen variant; -1 = none/muxed. */
   audioIndex: number;
+  /** Subtitles: keep the format found, or convert to SRT. */
+  subtitleOutput: 'srt' | 'original';
   /** User-typed base name (no extension); empty = use the naming template. */
   filename: string;
   /** Override of the global "ask where to save" setting. */
@@ -67,8 +70,72 @@ export function defaultChoices(resource: MediaResource, settings: Settings): Cho
     audioBitrate: settings.defaultAudioBitrate,
     variantIndex: Math.max(variantIndex, 0),
     audioIndex: opts.length ? Math.max(def, 0) : -1,
+    subtitleOutput: defaultSubtitleOutput(resource),
     filename: '',
   };
+}
+
+/** Keep the original unless the format is not one we can name (then a converted SRT is the only honest result). */
+export function defaultSubtitleOutput(resource: MediaResource): 'srt' | 'original' {
+  return resource.kind === 'subtitle' && !isKnownSubtitleFormat(resource.format) ? 'srt' : 'original';
+}
+
+function isKnownSubtitleFormat(format: MediaFormat): boolean {
+  return SUBTITLE_FILE_FORMATS.has(format) || format === 'hls' || format === 'dash';
+}
+
+/** The extension of the file a subtitle request produces. */
+function subtitleExtension(format: MediaFormat, output: 'srt' | 'original'): string {
+  if (output === 'srt') return 'srt';
+  return SUBTITLE_FILE_FORMATS.has(format) ? format : 'vtt'; // stitched streams are written as WebVTT
+}
+
+function buildSubtitleRequest(
+  resource: MediaResource,
+  settings: Settings,
+  choices: Choices,
+): DownloadRequest {
+  const output = isKnownSubtitleFormat(resource.format) ? choices.subtitleOutput : 'srt';
+  const isHls = resource.format === 'hls';
+  const isDash = resource.format === 'dash';
+  const ext = subtitleExtension(resource.format, output);
+  const lang = resource.language ? sanitizeFilename(resource.language) : '';
+  const base = choices.filename.trim()
+    ? sanitizeFilename(choices.filename)
+    : renderNameTemplate(settings.namingTemplate, {
+        title:
+          lang && !resource.title.toLowerCase().includes(lang.toLowerCase())
+            ? `${resource.title}.${lang}`
+            : resource.title,
+        host: resource.host,
+        resolution: '',
+        date: new Date().toISOString().slice(0, 10),
+        format: ext,
+        id: resource.id,
+      });
+  const req: DownloadRequest = {
+    resourceId: resource.id,
+    sourceUrl: resource.url,
+    tabId: resource.tabId,
+    pageUrl: resource.pageUrl,
+    host: resource.host,
+    mode: 'original',
+    container: 'original',
+    audioFormat: choices.audioFormat,
+    audioBitrate: choices.audioBitrate,
+    filename: withExtension(base, ext),
+    subfolder: sanitizeSubfolder(settings.subfolder),
+    saveAs: choices.saveAs ?? settings.askWhereToSave,
+    qualityLabel: output === 'srt' ? 'SRT' : ext.toUpperCase(),
+    sourceFormat: resource.format,
+    isHls,
+    hasMuxedAudio: false,
+    hasVideo: false,
+    subtitle: { output },
+  };
+  if (isDash) req.isDash = true;
+  if (resource.durationSec) req.durationSec = resource.durationSec;
+  return req;
 }
 
 function familyOf(codecs: string | undefined): { video?: VideoFamily; audio?: AudioFamily } {
@@ -83,6 +150,7 @@ export function buildRequest(
   choices: Choices,
   inspection?: VariantInspection,
 ): DownloadRequest {
+  if (resource.kind === 'subtitle') return buildSubtitleRequest(resource, settings, choices);
   const isMaster = resource.kind === 'hls-master' || resource.kind === 'dash';
   const isDash = resource.kind === 'dash';
   const variant = isMaster ? resource.variants[choices.variantIndex] : undefined;
@@ -218,6 +286,7 @@ export function planFromRequest(
   req: DownloadRequest,
   limits: { maxMemoryMb: number; maxEncodeDurationSec: number },
 ): Plan {
+  if (req.subtitle) return planSubtitle(req);
   const segmented = req.isHls || req.isDash === true;
   const input: PlanInput = {
     isHls: segmented, // the planner's "isHls" means: a segmented stream (HLS or DASH)
@@ -238,6 +307,24 @@ export function planFromRequest(
   if (req.durationSec !== undefined) input.durationSec = req.durationSec;
   if (req.live !== undefined) input.live = req.live;
   return planOutput(input);
+}
+
+/** Subtitles are small text: no FFmpeg, no size limit. A plain document saved as found is a native download. */
+function planSubtitle(req: DownloadRequest): Plan {
+  const segmented = req.isHls || req.isDash === true;
+  const output = req.subtitle?.output ?? 'original';
+  const issues: Plan['issues'] = [];
+  if (req.live) issues.push('live-stream');
+  return {
+    valid: issues.length === 0,
+    issues,
+    pipeline: !segmented && output === 'original' ? 'native' : 'subtitle',
+    requiresFfmpeg: false,
+    video: 'none',
+    audio: 'none',
+    extension: subtitleExtension(req.sourceFormat, output),
+    usesBitrate: false,
+  };
 }
 
 /**

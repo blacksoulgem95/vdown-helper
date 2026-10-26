@@ -26,6 +26,7 @@ import {
 import type { DownloadJob, OutputMode, VideoContainer } from '@/types/download';
 import type { MediaResource } from '@/types/media';
 import type { TabState } from '@/types/messages';
+import { SubtitleForm } from './SubtitleForm';
 
 interface Selection {
   tabId: number;
@@ -63,8 +64,10 @@ export function StudioApp() {
           <p className="mono text-[12px] uppercase tracking-[0.14em]">{t('studioEmptyTitle')}</p>
           <p className="mx-auto mt-2 max-w-[320px] text-[12px] text-muted">{t('studioEmptyBody')}</p>
         </Panel>
+      ) : // Re-mount when the selection changes so choices reset for the new resource.
+      resource.kind === 'subtitle' ? (
+        <SubtitleForm key={`${resource.id}:${selection?.at ?? 0}`} resource={resource} />
       ) : (
-        // Re-mount when the selection changes so choices reset for the new resource.
         <StudioForm key={`${resource.id}:${selection?.at ?? 0}`} resource={resource} />
       )}
 
@@ -524,6 +527,8 @@ function pipelineText(plan: Plan): string {
       return plan.video === 'copy' && plan.audio === 'transcode'
         ? t('pipeTranscodeAudio')
         : t('pipeTranscode');
+    case 'subtitle':
+      return t('pipeSubtitle');
   }
 }
 

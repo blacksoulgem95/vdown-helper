@@ -75,6 +75,10 @@ const MIME_TO_FORMAT: Record<string, MediaFormat> = {
   'audio/mpegurl': 'm3u',
   'audio/x-mpegurl': 'm3u',
   'application/dash+xml': 'dash',
+  'text/vtt': 'vtt',
+  'application/x-subrip': 'srt',
+  'text/srt': 'srt',
+  'application/ttml+xml': 'ttml',
 };
 
 const EXT_TO_FORMAT: Record<string, MediaFormat> = {
@@ -96,6 +100,11 @@ const EXT_TO_FORMAT: Record<string, MediaFormat> = {
   m3u8: 'hls',
   m3u: 'm3u',
   mpd: 'dash',
+  vtt: 'vtt',
+  webvtt: 'vtt',
+  srt: 'srt',
+  ttml: 'ttml',
+  dfxp: 'ttml',
 };
 
 export function formatFromMime(mime: string | undefined): MediaFormat | undefined {
@@ -115,6 +124,9 @@ export function extensionOf(url: string): string {
 export function formatFromUrl(url: string): MediaFormat | undefined {
   return EXT_TO_FORMAT[extensionOf(url)];
 }
+
+/** Subtitle documents that are saved or converted as text. */
+export const SUBTITLE_FILE_FORMATS: ReadonlySet<MediaFormat> = new Set(['vtt', 'srt', 'ttml']);
 
 export const AUDIO_ONLY_FORMATS: ReadonlySet<MediaFormat> = new Set([
   'mp3',

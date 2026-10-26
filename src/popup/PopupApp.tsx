@@ -1,9 +1,10 @@
 import { Eraser, RefreshCw, Settings, ShieldCheck } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { EmptyState } from '@/components/EmptyState';
 import { Logo } from '@/components/Logo';
 import { MediaCard } from '@/components/MediaCard';
 import { QueueItem, type JobAction } from '@/components/QueueItem';
+import { Tabs } from '@/components/Tabs';
 import { Badge, Button, IconButton, Notice, cx } from '@/components/ui';
 import { useJobs } from '@/hooks/useJobs';
 import { useSettings } from '@/hooks/useSettings';
@@ -109,8 +110,14 @@ export function PopupApp() {
     [jobs],
   );
 
-  const resources = state?.resources ?? [];
-  const groups = groupResources(resources);
+  const resources = useMemo(() => state?.resources ?? [], [state?.resources]);
+  const [tab, setTab] = useState<'media' | 'subtitles'>('media');
+  const media = useMemo(() => resources.filter((r) => r.kind !== 'subtitle'), [resources]);
+  const subtitles = useMemo(() => resources.filter((r) => r.kind === 'subtitle'), [resources]);
+  // The strip only appears when there is something besides media; an empty tab is never the active one.
+  const activeTab = subtitles.length === 0 ? 'media' : media.length === 0 ? 'subtitles' : tab;
+  const shown = activeTab === 'subtitles' ? subtitles : media;
+  const groups = groupResources(shown);
   const downloadable = resources.filter((r) => r.downloadability.status === 'downloadable').length;
   const pageHost = state?.pageUrl ? safeHost(state.pageUrl) : '';
   const errText = pageErrorText(state?.status === 'error' ? state.error : undefined);
@@ -220,31 +227,42 @@ export function PopupApp() {
             />
           )
         ) : (
-          <ul className="space-y-2.5" aria-label={t('detectedMedia')}>
-            {groups.map((g) => (
-              <li key={g.key} className="list-none">
-                {g.items.length > 1 && (
-                  <p className="label mb-1.5 flex items-center justify-between">
-                    <span className="truncate">{g.title}</span>
-                    <span>{g.items.length}</span>
-                  </p>
-                )}
-                <ul className="space-y-2.5">
-                  {g.items.map((r) => (
-                    <MediaCard
-                      key={r.id}
-                      resource={r}
-                      busy={busy === r.id}
-                      {...(feedback[r.id] ? { feedback: feedback[r.id] as Feedback } : {})}
-                      onDownload={(x) => void onDownload(x)}
-                      onConfigure={(x) => void onConfigure(x)}
-                      onGrantAccess={(x) => void onGrantAccess(x)}
-                    />
-                  ))}
-                </ul>
-              </li>
-            ))}
-          </ul>
+          <TabbedList
+            show={subtitles.length > 0 && media.length > 0}
+            tabs={[
+              { key: 'media', label: t('tabMedia'), count: media.length },
+              { key: 'subtitles', label: t('tabSubtitles'), count: subtitles.length },
+            ]}
+            active={activeTab}
+            onChange={setTab}
+            label={t('detectedMedia')}
+          >
+            <ul className="space-y-2.5" aria-label={t('detectedMedia')}>
+              {groups.map((g) => (
+                <li key={g.key} className="list-none">
+                  {g.items.length > 1 && (
+                    <p className="label mb-1.5 flex items-center justify-between">
+                      <span className="truncate">{g.title}</span>
+                      <span>{g.items.length}</span>
+                    </p>
+                  )}
+                  <ul className="space-y-2.5">
+                    {g.items.map((r) => (
+                      <MediaCard
+                        key={r.id}
+                        resource={r}
+                        busy={busy === r.id}
+                        {...(feedback[r.id] ? { feedback: feedback[r.id] as Feedback } : {})}
+                        onDownload={(x) => void onDownload(x)}
+                        onConfigure={(x) => void onConfigure(x)}
+                        onGrantAccess={(x) => void onGrantAccess(x)}
+                      />
+                    ))}
+                  </ul>
+                </li>
+              ))}
+            </ul>
+          </TabbedList>
         )}
 
         {jobs.length > 0 && (
@@ -284,6 +302,30 @@ export function PopupApp() {
         <p className="mono text-[9.5px] uppercase tracking-[0.24em] text-muted">{t('signature')}</p>
       </footer>
     </div>
+  );
+}
+
+/** The tab strip when there is more than one kind of thing to show; otherwise just the list. */
+function TabbedList({
+  show,
+  tabs,
+  active,
+  onChange,
+  label,
+  children,
+}: {
+  show: boolean;
+  tabs: Array<{ key: 'media' | 'subtitles'; label: string; count: number }>;
+  active: 'media' | 'subtitles';
+  onChange: (k: 'media' | 'subtitles') => void;
+  label: string;
+  children: ReactNode;
+}) {
+  if (!show) return <>{children}</>;
+  return (
+    <Tabs tabs={tabs} active={active} onChange={onChange} label={label}>
+      {children}
+    </Tabs>
   );
 }
 

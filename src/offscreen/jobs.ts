@@ -7,6 +7,7 @@ import { runFfmpeg } from './ffmpeg';
 import { stageDashRepresentation } from './dash';
 import { stageDirectFile, stageHlsPlaylist, type StageOptions } from './hls';
 import { removeJobDir } from './opfs';
+import { buildSubtitle } from './subtitle';
 
 interface Running {
   abort: AbortController;
@@ -82,6 +83,21 @@ async function execute(
   const maxBytes = plan.requiresFfmpeg ? plan.maxMemoryMb * MB : undefined;
   const credentialedOrigins = req.credentialedOrigins ?? [];
   stage(jobId, 'downloading');
+
+  // Subtitles: small text, joined and converted in memory. No staging, no FFmpeg.
+  if (plan.pipeline === 'subtitle') {
+    const result = await buildSubtitle(req, signal, send);
+    if (signal.aborted) throw new CancelledError();
+    entry.blobUrl = URL.createObjectURL(result.blob);
+    emit({
+      channel: 'vdown-offscreen-event',
+      type: 'ready',
+      jobId,
+      blobUrl: entry.blobUrl,
+      bytes: result.blob.size,
+    });
+    return;
+  }
 
   // 1. Stage the source(s) on disk.
   let videoFile: File;

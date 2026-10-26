@@ -39,6 +39,7 @@ const DETECTION_KEY = {
   'dom-element': 'detectDomElement',
   'dom-source': 'detectDomSource',
   'dom-link': 'detectDomLink',
+  'dom-track': 'detectDomTrack',
   performance: 'detectPerformance',
   network: 'detectNetwork',
   hook: 'detectHook',

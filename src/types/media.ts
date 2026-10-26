@@ -16,13 +16,31 @@ export type MediaFormat =
   | 'hls'
   | 'm3u'
   | 'dash'
+  | 'vtt'
+  | 'srt'
+  | 'ttml'
   | 'blob'
   | 'unknown';
 
-export type StreamKind = 'file' | 'hls-master' | 'hls-media' | 'dash' | 'unsupported-playlist' | 'blob';
+export type StreamKind =
+  | 'file'
+  | 'hls-master'
+  | 'hls-media'
+  | 'dash'
+  | 'unsupported-playlist'
+  | 'blob'
+  /** A subtitle/caption document or stream (format: vtt/srt/ttml, or hls/dash for segmented ones). */
+  | 'subtitle';
 
 export type DetectionMethod =
-  'dom-element' | 'dom-source' | 'dom-link' | 'performance' | 'network' | 'hook' | 'manual-rescan';
+  | 'dom-element'
+  | 'dom-source'
+  | 'dom-link'
+  | 'dom-track'
+  | 'performance'
+  | 'network'
+  | 'hook'
+  | 'manual-rescan';
 
 /** Machine-readable reason, mapped to a localised string by the UI. */
 export type ReasonCode =
@@ -43,7 +61,8 @@ export type ReasonCode =
   | 'unsupported-format'
   | 'aes-key-inaccessible'
   | 'no-segments'
-  | 'dash-clearkey';
+  | 'dash-clearkey'
+  | 'subtitle-unsupported';
 
 export type DownloadabilityStatus = 'downloadable' | 'protected' | 'inaccessible' | 'unsupported' | 'unknown';
 
@@ -90,6 +109,10 @@ export interface MediaResource {
   downloadability: Downloadability;
   variants: HlsVariant[];
   audioTracks: HlsRendition[];
+  /** Subtitle renditions the manifest lists (HLS SUBTITLES, DASH text); offered as their own subtitle resources. */
+  subtitleTracks?: HlsRendition[];
+  /** Subtitle language (BCP 47) when the page or manifest states it. */
+  language?: string;
   playlist?: PlaylistSummary;
   /** Poster/thumbnail URL when the page provides one. */
   poster?: string;
@@ -110,6 +133,10 @@ export interface RawCandidate {
   width?: number;
   height?: number;
   poster?: string;
+  /** `<track>` elements: a subtitle, with its declared language and label. */
+  role?: 'subtitle';
+  language?: string;
+  label?: string;
   /** Set by the background from the frame that reported the candidate (never trusted from the page). */
   frameId?: number;
   frameUrl?: string;

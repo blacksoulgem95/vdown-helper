@@ -16,7 +16,14 @@ import {
   periodDuration,
   protectionsOf,
 } from './dash/parser';
-import { estimateBytes, formatFromMime, formatFromUrl, inferTitle, mediaTypeOf } from './media';
+import {
+  estimateBytes,
+  formatFromMime,
+  formatFromUrl,
+  inferTitle,
+  mediaTypeOf,
+  SUBTITLE_FILE_FORMATS,
+} from './media';
 import type { ProbeResult } from './netprobe';
 import { dedupeResources, hideCoveredVariants, resourceId } from './resources';
 import { isSafeFetchUrl, normalizeUrl, parseUrl } from './security';
@@ -48,13 +55,15 @@ interface Entry {
   frameUrl?: string;
   hints: Pick<
     RawCandidate,
-    'title' | 'mimeType' | 'mediaType' | 'durationSec' | 'width' | 'height' | 'poster'
+    'title' | 'mimeType' | 'mediaType' | 'durationSec' | 'width' | 'height' | 'poster' | 'role' | 'language'
   >;
 }
 
 const PLAYLIST_FORMATS: ReadonlySet<MediaFormat> = new Set(['hls', 'm3u', 'dash']);
 const MAX_VARIANTS = 50;
 const MAX_AUDIO_TRACKS = 50;
+const MAX_SUBTITLE_TRACKS = 30;
+const MAX_DERIVED_SUBTITLES = 60;
 const MAX_TEXT = 200;
 const clip = (s: string): string => (s.length > MAX_TEXT ? `${s.slice(0, MAX_TEXT)}…` : s);
 
@@ -71,6 +80,8 @@ function collectEntries(cands: RawCandidate[]): Entry[] {
       ...(c.durationSec ? { durationSec: c.durationSec } : {}),
       ...(c.width ? { width: c.width, height: c.height } : {}),
       ...(c.poster ? { poster: c.poster } : {}),
+      ...(c.role ? { role: c.role } : {}),
+      ...(c.language ? { language: clip(c.language) } : {}),
     };
     if (prev) {
       if (!prev.methods.includes(c.method)) prev.methods.push(c.method);
@@ -145,6 +156,7 @@ function skeleton(e: Entry, ctx: AnalyzeContext, format: MediaFormat): MediaReso
     if (e.hints.height) r.height = e.hints.height;
   }
   if (e.hints.poster) r.poster = e.hints.poster;
+  if (e.hints.language) r.language = e.hints.language;
   if (e.frameId !== undefined) r.frameId = e.frameId;
   if (e.frameUrl) r.frameUrl = e.frameUrl;
   return r;
@@ -182,7 +194,20 @@ function applyVariantTop(r: MediaResource, top: HlsVariant | undefined): void {
   if (top.codecs) r.codecs = top.codecs;
 }
 
-async function analyzePlaylist(r: MediaResource, fetcher: Fetcher): Promise<MediaResource> {
+/** Segment resources of subtitle playlists: they belong to their playlist and are never listed on their own. */
+type Covered = Set<string>;
+
+const VTT_SEGMENT = /\.(web)?vtt(?:$|[?#])/i;
+
+function isSubtitlePlaylist(p: HlsMediaPlaylist): boolean {
+  return p.segments.length > 0 && p.segments.every((s) => VTT_SEGMENT.test(s.uri));
+}
+
+function coverSegments(p: HlsMediaPlaylist, covered: Covered): void {
+  for (const s of p.segments) covered.add(resourceId(s.uri));
+}
+
+async function analyzePlaylist(r: MediaResource, fetcher: Fetcher, covered: Covered): Promise<MediaResource> {
   const res = await fetcher.text(r.url, r.frameId);
   if (!res.ok) {
     r.kind = r.format === 'dash' ? 'unsupported-playlist' : 'hls-media';
@@ -222,6 +247,12 @@ async function analyzePlaylist(r: MediaResource, fetcher: Fetcher): Promise<Medi
     r.durationSec = pl.totalDuration;
     r.playlist = summaryOf(pl, 'hls-media');
     r.downloadability = mediaPlaylistVerdict(pl);
+    if (isSubtitlePlaylist(pl)) {
+      // A WebVTT playlist found on its own (the player loaded it directly): it is a subtitle, not a video.
+      r.kind = 'subtitle';
+      r.mediaType = 'unknown';
+      coverSegments(pl, covered);
+    }
     return r;
   }
 
@@ -239,6 +270,10 @@ async function finishMaster(
     .filter((x) => x.type === 'AUDIO' && x.uri)
     .slice(0, MAX_AUDIO_TRACKS)
     .map((a) => ({ ...a, name: clip(a.name), groupId: clip(a.groupId) }));
+  r.subtitleTracks = pl.renditions
+    .filter((x) => x.type === 'SUBTITLES' && x.uri)
+    .slice(0, MAX_SUBTITLE_TRACKS)
+    .map((s) => ({ ...s, name: clip(s.name), groupId: clip(s.groupId) }));
   applyVariantTop(r, r.variants[0]);
   const audioOnly = r.variants.length === 0 && r.audioTracks.length > 0;
   if (audioOnly) r.mediaType = 'audio';
@@ -277,7 +312,12 @@ async function finishMaster(
   return r;
 }
 
-async function analyzeFile(r: MediaResource, e: Entry, fetcher: Fetcher): Promise<MediaResource> {
+async function analyzeFile(
+  r: MediaResource,
+  e: Entry,
+  fetcher: Fetcher,
+  covered: Covered,
+): Promise<MediaResource> {
   const head = await fetcher.head(e.url, e.frameId);
   if (!head.ok) {
     if (head.kind === 'blocked') {
@@ -293,7 +333,7 @@ async function analyzeFile(r: MediaResource, e: Entry, fetcher: Fetcher): Promis
   const fromMime = formatFromMime(mime);
   if (fromMime && PLAYLIST_FORMATS.has(fromMime)) {
     r.format = fromMime;
-    return analyzePlaylist(r, fetcher);
+    return analyzePlaylist(r, fetcher, covered);
   }
   if (mime) r.mimeType = mime;
   if (fromMime) {
@@ -320,11 +360,116 @@ async function analyzeFile(r: MediaResource, e: Entry, fetcher: Fetcher): Promis
   return r;
 }
 
-async function analyzeOne(e: Entry, ctx: AnalyzeContext, fetcher: Fetcher): Promise<MediaResource> {
+/** A subtitle document: a `<track>`, or a .vtt/.srt/.ttml file. Saved as found, or converted to SRT. */
+async function analyzeSubtitleFile(r: MediaResource, e: Entry, fetcher: Fetcher): Promise<MediaResource> {
+  r.kind = 'subtitle';
+  r.mediaType = 'unknown';
+  // The HTML spec says <track> sources are WebVTT; anything else is named by its MIME type or extension.
+  if (!SUBTITLE_FILE_FORMATS.has(r.format)) r.format = e.hints.role === 'subtitle' ? 'vtt' : r.format;
+  const head = await fetcher.head(e.url, e.frameId);
+  if (!head.ok) {
+    r.downloadability =
+      head.kind === 'blocked' ? verdict('downloadable', 'ok', 'headers-unreadable') : failureVerdict(head);
+    return r;
+  }
+  const mime = head.contentType.split(';')[0]?.trim().toLowerCase() ?? '';
+  if (
+    mime === 'text/html' ||
+    mime.startsWith('image/') ||
+    mime.startsWith('video/') ||
+    mime.startsWith('audio/')
+  ) {
+    r.downloadability = verdict('unsupported', 'unsupported-format', mime);
+    return r;
+  }
+  const fromMime = formatFromMime(mime);
+  if (fromMime && SUBTITLE_FILE_FORMATS.has(fromMime)) r.format = fromMime;
+  if (mime) r.mimeType = mime;
+  if (head.contentLength !== undefined) r.sizeBytes = head.contentLength;
+  r.downloadability = verdict('downloadable', 'ok');
+  return r;
+}
+
+async function analyzeOne(
+  e: Entry,
+  ctx: AnalyzeContext,
+  fetcher: Fetcher,
+  covered: Covered,
+): Promise<MediaResource> {
   const format = formatFromMime(e.hints.mimeType) ?? formatFromUrl(e.url) ?? 'unknown';
   const r = skeleton(e, ctx, format);
-  if (PLAYLIST_FORMATS.has(format)) return analyzePlaylist(r, fetcher);
-  return analyzeFile(r, e, fetcher);
+  if (e.hints.role === 'subtitle' || SUBTITLE_FILE_FORMATS.has(format))
+    return analyzeSubtitleFile(r, e, fetcher);
+  if (PLAYLIST_FORMATS.has(format)) return analyzePlaylist(r, fetcher, covered);
+  return analyzeFile(r, e, fetcher, covered);
+}
+
+/** Codecs of text tracks this extension cannot turn into a subtitle file (WebVTT-in-MP4 cues, image subtitles). */
+const UNREADABLE_TEXT = /wvtt|stpp\.ttml\.im1i|dvbs|bitmap/i;
+
+/**
+ * Subtitle renditions listed by HLS and DASH manifests become subtitle resources of their own. An HLS rendition is a
+ * media playlist, read once to learn its length and whether it is protected or live.
+ */
+export async function deriveSubtitleResources(
+  parents: MediaResource[],
+  ctx: AnalyzeContext,
+  fetcher: Fetcher,
+  covered: Covered,
+): Promise<MediaResource[]> {
+  const jobs: Array<{ parent: MediaResource; track: HlsRendition }> = [];
+  for (const parent of parents)
+    for (const track of parent.subtitleTracks ?? []) if (track.uri) jobs.push({ parent, track });
+  const results = await mapPool(jobs.slice(0, MAX_DERIVED_SUBTITLES), 4, async ({ parent, track }) => {
+    const uri = track.uri as string;
+    const isDash = parent.kind === 'dash';
+    const e: Entry = {
+      url: uri,
+      methods: [...parent.detectedBy],
+      hints: {
+        title: `${parent.title} · ${track.name}`,
+        role: 'subtitle',
+        ...(track.language ? { language: track.language } : {}),
+      },
+      ...(parent.frameId !== undefined ? { frameId: parent.frameId } : {}),
+      ...(parent.frameUrl ? { frameUrl: parent.frameUrl } : {}),
+    };
+    const r = skeleton(e, ctx, isDash ? 'dash' : 'hls');
+    r.kind = 'subtitle';
+    r.mediaType = 'unknown';
+    if (track.language) r.language = track.language;
+    if (track.codecs && UNREADABLE_TEXT.test(track.codecs)) {
+      r.downloadability = verdict('unsupported', 'subtitle-unsupported', track.codecs);
+      return r;
+    }
+    if (isDash) {
+      // The manifest was already parsed; protection and liveness were decided there.
+      r.downloadability = verdict('downloadable', 'ok');
+      if (parent.durationSec) r.durationSec = parent.durationSec;
+      return r;
+    }
+    try {
+      const res = await fetcher.text(uri, parent.frameId);
+      if (!res.ok) {
+        r.downloadability = failureVerdict(res);
+        return r;
+      }
+      const parsed = parseHls(res.text ?? '', res.finalUrl || uri);
+      if (!parsed.ok || parsed.playlist.kind !== 'hls-media') {
+        r.downloadability = verdict('unsupported', 'malformed', 'subtitle-playlist');
+        return r;
+      }
+      const pl = parsed.playlist;
+      r.durationSec = pl.totalDuration;
+      r.playlist = summaryOf(pl, 'hls-media');
+      r.downloadability = mediaPlaylistVerdict(pl);
+      coverSegments(pl, covered);
+    } catch {
+      r.downloadability = verdict('unknown', 'network');
+    }
+    return r;
+  });
+  return results;
 }
 
 /** Probe candidates and build deduplicated resources with downloadability verdicts. */
@@ -335,16 +480,22 @@ export async function analyzeCandidates(
   opts: AnalyzeOptions = {},
 ): Promise<MediaResource[]> {
   const entries = collectEntries(candidates).slice(0, opts.maxResources ?? 60);
+  const covered: Covered = new Set();
   const resources = await mapPool(entries, opts.concurrency ?? 4, async (e) => {
     try {
-      return await analyzeOne(e, ctx, fetcher);
+      return await analyzeOne(e, ctx, fetcher, covered);
     } catch {
       const r = skeleton(e, ctx, formatFromUrl(e.url) ?? 'unknown');
       r.downloadability = verdict('unknown', 'network');
       return r;
     }
   });
-  return hideCoveredVariants(dedupeResources(resources));
+  const subtitles = await deriveSubtitleResources(resources, ctx, fetcher, covered);
+  return hideCoveredVariants(
+    dedupeResources([...resources, ...subtitles]).filter(
+      (r) => !(r.kind === 'subtitle' && r.format !== 'hls' && r.format !== 'dash' && covered.has(r.id)),
+    ),
+  );
 }
 
 /** A resource as shown before probing completes: facts from the page only. */
@@ -406,6 +557,24 @@ function analyzeDash(r: MediaResource, text: string, url: string): MediaResource
     if (x.codecs) t.codecs = x.codecs;
     return t;
   });
+  const texts = period.representations.filter((x) => x.content === 'text').slice(0, MAX_SUBTITLE_TRACKS);
+  if (m.type === 'static' && texts.length > 0) {
+    r.subtitleTracks = texts.map((x) => {
+      const t: HlsRendition = {
+        type: 'SUBTITLES',
+        groupId: 'dash-text',
+        name: clip(x.label ?? x.lang ?? x.id),
+        uri: dashRef(url, x.id),
+        isDefault: false,
+        autoSelect: false,
+      };
+      if (x.lang) t.language = x.lang;
+      // The codec decides whether the track can be read (wvtt/image tracks cannot), the MIME type is the fallback.
+      const codec = x.codecs ?? x.mimeType;
+      if (codec) t.codecs = codec;
+      return t;
+    });
+  }
   r.mediaType = videos.length > 0 ? 'video' : 'audio';
   applyVariantTop(r, r.variants[0]);
   if (videos.length === 0 && audios[0]) r.bitrate = audios[0].bandwidth;

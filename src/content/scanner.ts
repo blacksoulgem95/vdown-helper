@@ -9,7 +9,8 @@
 import { fetchText, probeHeaders } from '@/lib/netprobe';
 import type { DetectionMethod, RawCandidate, ScanReport } from '@/types/media';
 
-const MEDIA_EXT = /\.(mp4|m4v|webm|mkv|mov|ogv|ts|mp3|m4a|aac|wav|ogg|oga|opus|flac|m3u8|m3u|mpd)(?:$|[?#])/i;
+const MEDIA_EXT =
+  /\.(mp4|m4v|webm|mkv|mov|ogv|ts|mp3|m4a|aac|wav|ogg|oga|opus|flac|m3u8|m3u|mpd|vtt|srt|ttml|dfxp)(?:$|[?#])/i;
 const MAX_CANDIDATES = 200;
 const MAX_BLOCKED_FRAMES = 20;
 
@@ -90,6 +91,18 @@ function scanElements(c: Collector, doc: Document): void {
       if (isVideo && media.poster) {
         const poster = abs(media.poster, base);
         if (poster && /^https?:/i.test(poster)) extra.poster = poster;
+      }
+      for (const track of media.querySelectorAll('track')) {
+        const kind = (track.getAttribute('kind') ?? 'subtitles').toLowerCase();
+        if (kind !== 'subtitles' && kind !== 'captions') continue; // chapters, descriptions and metadata are not subtitles
+        const lang = track.getAttribute('srclang')?.slice(0, 35);
+        const label = track.getAttribute('label')?.slice(0, 100);
+        addUrl(c, track.getAttribute('src'), base, 'dom-track', {
+          role: 'subtitle',
+          mimeType: 'text/vtt', // the HTML spec: <track> sources are WebVTT
+          ...(lang ? { language: lang } : {}),
+          ...(label ? { title: label } : {}),
+        });
       }
       addUrl(c, media.currentSrc, base, 'dom-element', extra);
       addUrl(c, media.getAttribute('src'), base, 'dom-element', extra);

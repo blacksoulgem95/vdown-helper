@@ -32,6 +32,23 @@ describe('content scanner', () => {
     expect(r.pageTitle).toBe('Test page');
   });
 
+  it('finds subtitle and caption <track>s with language and label, and ignores other kinds', () => {
+    setBody(`<video src="/v.mp4">
+      <track kind="subtitles" src="/cc/en.vtt" srclang="en" label="English">
+      <track src="/cc/it.vtt" srclang="it">
+      <track kind="captions" src="/cc/cap.vtt">
+      <track kind="chapters" src="/cc/chapters.vtt">
+      <track kind="metadata" src="/cc/meta.vtt">
+      <track kind="subtitles" src="data:text/vtt;base64,V0VCVlRU" srclang="fr">
+    </video>`);
+    const tracks = scan().candidates.filter((c) => c.method === 'dom-track');
+    expect(tracks.map((c) => [new URL(c.url).pathname, c.language, c.title, c.role, c.mimeType])).toEqual([
+      ['/cc/en.vtt', 'en', 'English', 'subtitle', 'text/vtt'],
+      ['/cc/it.vtt', 'it', undefined, 'subtitle', 'text/vtt'],
+      ['/cc/cap.vtt', undefined, undefined, 'subtitle', 'text/vtt'],
+    ]);
+  });
+
   it('counts blob: sources but never reports them as candidates', () => {
     setBody('<video src="blob:https://example.com/1234"></video>');
     const r = scan();

@@ -22,8 +22,9 @@ function rank(r: MediaResource): number {
     file: 2,
     blob: 3,
     'unsupported-playlist': 4,
+    subtitle: 5,
   } as const;
-  return (order[r.kind] ?? 5) + (r.downloadability.status === 'downloadable' ? 0 : 10);
+  return order[r.kind] + (r.downloadability.status === 'downloadable' ? 0 : 10);
 }
 
 export function sortResources(list: MediaResource[]): MediaResource[] {

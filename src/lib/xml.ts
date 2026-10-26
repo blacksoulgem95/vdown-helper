@@ -10,6 +10,15 @@ export interface XmlNode {
   children: XmlNode[];
   /** Concatenated character data directly inside this element. */
   text: string;
+  /** Character data and child elements in document order (for mixed content such as subtitles). */
+  content: (string | XmlNode)[];
+}
+
+function appendText(node: XmlNode, s: string): void {
+  node.text += s;
+  const last = node.content[node.content.length - 1];
+  if (typeof last === 'string') node.content[node.content.length - 1] = last + s;
+  else node.content.push(s);
 }
 
 export interface XmlLimits {
@@ -65,7 +74,7 @@ export function parseXml(input: string, limits: Partial<XmlLimits> = {}): XmlNod
     const textEnd = lt === -1 ? n : lt;
     if (textEnd > i && stack.length > 0) {
       const top = stack[stack.length - 1] as XmlNode;
-      top.text += decodeEntities(src.slice(i, textEnd));
+      appendText(top, decodeEntities(src.slice(i, textEnd)));
     }
     if (lt === -1) break;
     i = lt;
@@ -77,7 +86,7 @@ export function parseXml(input: string, limits: Partial<XmlLimits> = {}): XmlNod
     } else if (src.startsWith('<![CDATA[', i)) {
       const end = src.indexOf(']]>', i + 9);
       if (end === -1 || stack.length === 0) return undefined;
-      (stack[stack.length - 1] as XmlNode).text += src.slice(i + 9, end);
+      appendText(stack[stack.length - 1] as XmlNode, src.slice(i + 9, end));
       i = end + 3;
     } else if (src.startsWith('<?', i)) {
       const end = src.indexOf('?>', i + 2);
@@ -104,7 +113,7 @@ export function parseXml(input: string, limits: Partial<XmlLimits> = {}): XmlNod
       while (j < n && isNameChar(src[j] as string)) j++;
       const name = src.slice(i + 1, j);
       if (!name) return undefined;
-      const node: XmlNode = { name, attrs: {}, children: [], text: '' };
+      const node: XmlNode = { name, attrs: {}, children: [], text: '', content: [] };
       let selfClosing = false;
       for (;;) {
         while (j < n && /\s/.test(src[j] as string)) j++;
@@ -136,8 +145,10 @@ export function parseXml(input: string, limits: Partial<XmlLimits> = {}): XmlNod
       }
       if (++nodes > maxNodes) return undefined;
       const parent = stack[stack.length - 1];
-      if (parent) parent.children.push(node);
-      else if (root)
+      if (parent) {
+        parent.children.push(node);
+        parent.content.push(node);
+      } else if (root)
         return undefined; // a second root element
       else root = node;
       i = j;

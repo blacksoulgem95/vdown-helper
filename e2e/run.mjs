@@ -662,6 +662,136 @@ await step(
   },
 );
 
+const subtitleByUrl = (suffix) =>
+  state.resources.find((r) => r.kind === 'subtitle' && r.url.endsWith(suffix));
+const text = (file) => readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
+
+await step(
+  'subtitles: <track>, linked files, HLS and DASH subtitle renditions are found, with languages',
+  async () => {
+    const subs = state.resources.filter((r) => r.kind === 'subtitle');
+    const track = subtitleByUrl('/subs/en.vtt');
+    assert(
+      track?.format === 'vtt' && track.language === 'en' && track.title === 'English',
+      `track ${JSON.stringify(track)}`,
+    );
+    assert(track.detectedBy.includes('dom-track'), `detectedBy ${track.detectedBy}`);
+    assert(subtitleByUrl('/subs/it.srt')?.format === 'srt', 'srt link');
+    assert(subtitleByUrl('/subs/en.ttml')?.format === 'ttml', 'ttml link');
+    const hls = subtitleByUrl('/hls-subs/sub-en/index.m3u8');
+    assert(
+      hls?.format === 'hls' && hls.language === 'en' && hls.downloadability.status === 'downloadable',
+      `hls ${JSON.stringify(hls)}`,
+    );
+    assert(Math.abs(hls.durationSec - 12) < 0.1, `duration ${hls.durationSec}`);
+    const dash = subtitleByUrl('#vdh-rep=sub-it');
+    assert(dash?.format === 'dash' && dash.language === 'it', `dash ${JSON.stringify(dash)}`);
+    // the segments of the subtitle playlist are not listed as subtitles of their own
+    assert(!subs.some((r) => /seg\d\.vtt$/.test(r.url)), 'subtitle segments leaked into the list');
+    // the manifests that carry them are still media
+    assert(byPath(state, '/hls-subs/master.m3u8')?.kind === 'hls-master', 'master lost');
+    assert(
+      state.resources.find((r) => r.url.endsWith('/dash-vod/manifest-subs.mpd'))?.kind === 'dash',
+      'dash lost',
+    );
+  },
+);
+
+await step('subtitles: the popup lists them in their own tab, media stays in the other', async () => {
+  const n = state.resources.filter((r) => r.kind === 'subtitle').length;
+  const m = state.resources.length - n;
+  await popup.reload();
+  await popup.getByRole('status').filter({ hasText: 'READY' }).waitFor({ timeout: 45000 });
+  const tabs = popup.getByRole('tablist');
+  await tabs.waitFor();
+  assert((await popup.locator('[data-resource-id]').count()) === m, 'media tab count');
+  await popup.getByRole('tab', { name: /Subtitles/i }).click();
+  assert((await popup.locator('[data-resource-id]').count()) === n, 'subtitle tab count');
+  // keyboard: arrow keys move between tabs
+  await popup.getByRole('tab', { name: /Subtitles/i }).focus();
+  await popup.keyboard.press('ArrowLeft');
+  assert(
+    (await popup.getByRole('tab', { name: /Media/i }).getAttribute('aria-selected')) === 'true',
+    'ArrowLeft did not select Media',
+  );
+  await popup.getByRole('tab', { name: /Subtitles/i }).click();
+  await shot(popup, 'popup-subtitles');
+});
+
+await step('subtitles: a WebVTT track is saved as found by a native download (byte-for-byte)', async () => {
+  const r = subtitleByUrl('/subs/en.vtt');
+  await popup.locator(`[data-resource-id="${r.id}"]`).getByRole('button', { name: 'DOWNLOAD' }).click();
+  const job = await jobFinished((j) => j.request.resourceId === r.id);
+  assert(job.stage === 'completed', `stage ${job.stage}: ${JSON.stringify(job.error)}`);
+  assert(!job.viaOffscreen && job.request.filename.endsWith('.vtt'), `name ${job.request.filename}`);
+  assert(
+    readFileSync(fileOf(job), 'utf8') === readFileSync(join(fixtures, 'subs/en.vtt'), 'utf8'),
+    'file differs from the original',
+  );
+});
+
+async function saveSubtitle(r, format) {
+  await select(r);
+  await studio.getByLabel('Subtitle format').selectOption(format);
+  const start = studio.getByRole('button', { name: 'START DOWNLOAD' });
+  await until(() => start.isEnabled(), 'start enabled');
+  await start.click();
+  const job = await jobFinished(
+    (j) =>
+      j.request.resourceId === r.id &&
+      j.request.subtitle?.output === format &&
+      j.createdAt > Date.now() - 120000,
+  );
+  assert(job.stage === 'completed', `stage ${job.stage}: ${JSON.stringify(job.error)}`);
+  return job;
+}
+
+await step('subtitles: WebVTT, SRT and TTML tracks convert to valid SRT', async () => {
+  const expectSrt = {
+    '/subs/en.vtt':
+      '1\n00:00:01,000 --> 00:00:02,500\nHello <i>world</i>\n\n2\n00:00:03,000 --> 00:00:04,000\nSecond & last\n',
+    '/subs/it.srt': '1\n00:00:00,500 --> 00:00:01,500\nCiao\n\n2\n00:00:02,000 --> 00:00:03,000\nMondo\n',
+    '/subs/en.ttml':
+      '1\n00:00:01,000 --> 00:00:02,000\nHello\nworld\n\n2\n00:00:02,500 --> 00:00:04,000\nTwo spans\n',
+  };
+  for (const [path, want] of Object.entries(expectSrt)) {
+    const job = await saveSubtitle(subtitleByUrl(path), 'srt');
+    assert(job.request.filename.endsWith('.srt'), `name ${job.request.filename}`);
+    assert(job.viaOffscreen === true, `${path}: conversion runs in the offscreen document`);
+    const got = text(fileOf(job));
+    assert(got === want, `${path}: ${JSON.stringify(got)}`);
+  }
+});
+
+await step(
+  'subtitles: segmented HLS WebVTT is stitched on the media timeline (X-TIMESTAMP-MAP), as SRT and as WebVTT',
+  async () => {
+    const r = subtitleByUrl('/hls-subs/sub-en/index.m3u8');
+    const srt = await saveSubtitle(r, 'srt');
+    assert(
+      text(fileOf(srt)) ===
+        '1\n00:00:01,000 --> 00:00:03,000\nFirst segment\n\n2\n00:00:06,500 --> 00:00:08,000\nSecond segment\n',
+      JSON.stringify(text(fileOf(srt))),
+    );
+    const vtt = await saveSubtitle(r, 'original');
+    assert(vtt.request.filename.endsWith('.vtt'), `name ${vtt.request.filename}`);
+    assert(
+      text(fileOf(vtt)) ===
+        'WEBVTT\n\n00:00:01.000 --> 00:00:03.000\nFirst segment\n\n00:00:06.500 --> 00:00:08.000\nSecond segment\n',
+      JSON.stringify(text(fileOf(vtt))),
+    );
+  },
+);
+
+await step('subtitles: a DASH text track (IMSC1 in MP4) is read and saved as SRT', async () => {
+  const job = await saveSubtitle(subtitleByUrl('#vdh-rep=sub-it'), 'srt');
+  assert(
+    text(fileOf(job)) ===
+      '1\n00:00:01,000 --> 00:00:02,000\nPrima riga\n\n2\n00:00:03,000 --> 00:00:04,500\nSeconda riga\n',
+    JSON.stringify(text(fileOf(job))),
+  );
+});
+
 await step('Studio: output mode radios are operable from the keyboard', async () => {
   const r = state.resources.find((x) => x.url.endsWith('/media/sample.mp4'));
   await select(r);

@@ -61,4 +61,7 @@ export const MIME_BY_EXTENSION: Record<string, string> = {
   m4a: 'audio/mp4',
   aac: 'audio/aac',
   wav: 'audio/wav',
+  srt: 'application/x-subrip',
+  vtt: 'text/vtt',
+  ttml: 'application/ttml+xml',
 };

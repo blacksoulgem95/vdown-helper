@@ -706,5 +706,47 @@
   },
   "reasonDashPeriods": {
     "message": "This manifest has several periods: only the longest (the main content) is downloaded."
+  },
+  "detectDomTrack": {
+    "message": "Subtitle track (<track>)"
+  },
+  "reasonSubtitleUnsupported": {
+    "message": "This subtitle track uses a format that cannot be turned into a text file (WebVTT-in-MP4 cues or image subtitles)."
+  },
+  "kindSubtitle": {
+    "message": "SUBTITLE"
+  },
+  "kindSubtitleStream": {
+    "message": "SUBTITLE STREAM"
+  },
+  "pipeSubtitle": {
+    "message": "Subtitle file: fetched, joined if segmented, and written as text. No video processing."
+  },
+  "subOutput": {
+    "message": "Subtitle format"
+  },
+  "subOutputOriginal": {
+    "message": "As found"
+  },
+  "subOutputOriginalStitched": {
+    "message": "WebVTT (segments joined)"
+  },
+  "subOutputSrt": {
+    "message": "SRT (converted)"
+  },
+  "subOutputHint": {
+    "message": "SRT works in almost every player. Conversion keeps the text and timing; styling and positioning are dropped."
+  },
+  "subtitlesHeading": {
+    "message": "Subtitles"
+  },
+  "tabMedia": {
+    "message": "Media"
+  },
+  "tabSubtitles": {
+    "message": "Subtitles"
+  },
+  "subtitleLang": {
+    "message": "Language: $1"
   }
 }

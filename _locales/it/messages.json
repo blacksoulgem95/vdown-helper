@@ -706,5 +706,47 @@
   },
   "reasonDashPeriods": {
     "message": "Il manifest ha più periodi: viene scaricato solo il più lungo (il contenuto principale)."
+  },
+  "detectDomTrack": {
+    "message": "Traccia sottotitoli (<track>)"
+  },
+  "reasonSubtitleUnsupported": {
+    "message": "Questa traccia di sottotitoli usa un formato che non si può trasformare in un file di testo (cue WebVTT in MP4 o sottotitoli immagine)."
+  },
+  "kindSubtitle": {
+    "message": "SOTTOTITOLI"
+  },
+  "kindSubtitleStream": {
+    "message": "FLUSSO SOTTOTITOLI"
+  },
+  "pipeSubtitle": {
+    "message": "File di sottotitoli: scaricato, unito se segmentato e scritto come testo. Nessuna elaborazione video."
+  },
+  "subOutput": {
+    "message": "Formato dei sottotitoli"
+  },
+  "subOutputOriginal": {
+    "message": "Come trovato"
+  },
+  "subOutputOriginalStitched": {
+    "message": "WebVTT (segmenti uniti)"
+  },
+  "subOutputSrt": {
+    "message": "SRT (convertito)"
+  },
+  "subOutputHint": {
+    "message": "SRT funziona in quasi tutti i lettori. La conversione mantiene testo e tempi; stile e posizione vengono scartati."
+  },
+  "subtitlesHeading": {
+    "message": "Sottotitoli"
+  },
+  "tabMedia": {
+    "message": "Media"
+  },
+  "tabSubtitles": {
+    "message": "Sottotitoli"
+  },
+  "subtitleLang": {
+    "message": "Lingua: $1"
   }
 }

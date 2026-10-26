@@ -1,9 +1,11 @@
 import type { DetectionMethod, MediaResource } from '@/types/media';
+import { parseDashRef } from './dash/ref';
 import { normalizeUrl } from './security';
 
 /** Stable, short id derived from the normalised URL (FNV-1a, 32-bit, hex). Not a security hash. */
 export function resourceId(url: string): string {
-  const s = normalizeUrl(url);
+  // A DASH representation (a subtitle track of a manifest) is a resource of its own: keep it apart from the manifest.
+  const s = normalizeUrl(url) + (parseDashRef(url) ? `#${url.slice(url.indexOf('#vdh-rep=') + 1)}` : '');
   let h = 0x811c9dc5;
   for (let i = 0; i < s.length; i++) {
     h ^= s.charCodeAt(i);
@@ -51,6 +53,8 @@ export function mergeResource(existing: MediaResource, incoming: MediaResource):
     'codecs',
     'poster',
     'playlist',
+    'language',
+    'subtitleTracks',
   ] as const;
   for (const k of optional) {
     const v = pick(existing[k], incoming[k]);
@@ -101,7 +105,9 @@ export function hideCoveredVariants(list: MediaResource[]): MediaResource[] {
     if (r.kind === 'hls-master') {
       for (const v of r.variants) covered.add(resourceId(v.uri));
       for (const a of r.audioTracks) if (a.uri) covered.add(resourceId(a.uri));
+      for (const s of r.subtitleTracks ?? []) if (s.uri) covered.add(resourceId(s.uri));
     }
   }
-  return list.filter((r) => r.kind === 'hls-master' || !covered.has(r.id));
+  // Subtitle playlists are listed by their manifest on purpose: they are shown as subtitles, not hidden as variants.
+  return list.filter((r) => r.kind === 'hls-master' || r.kind === 'subtitle' || !covered.has(r.id));
 }

@@ -8,7 +8,7 @@ const ff = (args) =>
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...args], { stdio: 'inherit' });
 
 export function ensureFixtures(dir) {
-  if (existsSync(join(dir, '.complete5'))) return;
+  if (existsSync(join(dir, '.complete6'))) return;
   mkdirSync(dir, { recursive: true });
   for (const d of [
     'media',
@@ -29,6 +29,9 @@ export function ensureFixtures(dir) {
     'dash-vod',
     'dash-drm',
     'dash-live',
+    'subs',
+    'hls-subs/sub-en',
+    'dash-vod/t',
   ]) {
     mkdirSync(join(dir, d), { recursive: true });
   }
@@ -338,6 +341,73 @@ video/index.m3u8
     vodMpd.replace('type="static"', 'type="dynamic" minimumUpdatePeriod="PT2S"'),
   );
 
+  // ---- Subtitles (all hand-written text; nothing here needs ffmpeg)
+  writeFileSync(
+    join(dir, 'subs/en.vtt'),
+    'WEBVTT\n\nNOTE a comment\n\nintro\n00:00:01.000 --> 00:00:02.500 line:90%\nHello <i>world</i>\n\n00:00:03.000 --> 00:00:04.000\nSecond &amp; last\n',
+  );
+  writeFileSync(
+    join(dir, 'subs/it.srt'),
+    '1\r\n00:00:00,500 --> 00:00:01,500\r\nCiao\r\n\r\n2\r\n00:00:02,000 --> 00:00:03,000\r\nMondo\r\n',
+  );
+  writeFileSync(
+    join(dir, 'subs/en.ttml'),
+    '<?xml version="1.0" encoding="utf-8"?><tt xmlns="http://www.w3.org/ns/ttml" xml:lang="en"><body><div>' +
+      '<p begin="00:00:01.000" end="00:00:02.000">Hello<br/>world</p>' +
+      '<p begin="2.5s" end="4s"><span>Two</span> <span>spans</span></p></div></body></tt>',
+  );
+  // A segmented HLS WebVTT subtitle: two segments placed on the media timeline by X-TIMESTAMP-MAP.
+  writeFileSync(
+    join(dir, 'hls-subs/master.m3u8'),
+    '#EXTM3U\n#EXT-X-VERSION:3\n' +
+      '#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="English",LANGUAGE="en",DEFAULT=YES,URI="sub-en/index.m3u8"\n' +
+      '#EXT-X-STREAM-INF:BANDWIDTH=900000,RESOLUTION=640x360,CODECS="avc1.64001e,mp4a.40.2",SUBTITLES="subs"\n../hls/v360/index.m3u8\n',
+  );
+  writeFileSync(
+    join(dir, 'hls-subs/sub-en/index.m3u8'),
+    '#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:6\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXTINF:6,\nseg0.vtt\n#EXTINF:6,\nseg1.vtt\n#EXT-X-ENDLIST\n',
+  );
+  writeFileSync(
+    join(dir, 'hls-subs/sub-en/seg0.vtt'),
+    'WEBVTT\nX-TIMESTAMP-MAP=MPEGTS:900000,LOCAL:00:00:00.000\n\n00:00:01.000 --> 00:00:03.000\nFirst segment\n',
+  );
+  writeFileSync(
+    join(dir, 'hls-subs/sub-en/seg1.vtt'),
+    'WEBVTT\nX-TIMESTAMP-MAP=MPEGTS:1440000,LOCAL:00:00:00.000\n\n00:00:00.500 --> 00:00:02.000\nSecond segment\n',
+  );
+  // DASH with an IMSC1 (stpp) text track: each segment is an MP4 whose mdat holds one TTML document.
+  const mp4box = (type, payload) => {
+    const head = Buffer.alloc(8);
+    head.writeUInt32BE(8 + payload.length, 0);
+    head.write(type, 4, 'latin1');
+    return Buffer.concat([head, payload]);
+  };
+  const ttmlDoc = (begin, end, text) =>
+    `<?xml version="1.0" encoding="utf-8"?><tt xmlns="http://www.w3.org/ns/ttml"><body><div><p begin="${begin}" end="${end}">${text}</p></div></body></tt>`;
+  writeFileSync(
+    join(dir, 'dash-vod/t/0.m4s'),
+    Buffer.concat([
+      mp4box('moof', Buffer.alloc(8)),
+      mp4box('mdat', Buffer.from(ttmlDoc('00:00:01.000', '00:00:02.000', 'Prima riga'))),
+    ]),
+  );
+  writeFileSync(
+    join(dir, 'dash-vod/t/1.m4s'),
+    Buffer.concat([
+      mp4box('moof', Buffer.alloc(8)),
+      mp4box('mdat', Buffer.from(ttmlDoc('00:00:03.000', '00:00:04.500', 'Seconda riga'))),
+    ]),
+  );
+  writeFileSync(
+    join(dir, 'dash-vod/manifest-subs.mpd'),
+    vodMpd.replace(
+      /<\/Period>/,
+      '<AdaptationSet id="9" contentType="text" mimeType="application/mp4" codecs="stpp" lang="it">' +
+        '<SegmentTemplate timescale="1000" duration="3000" startNumber="0" media="t/$Number$.m4s"/>' +
+        '<Representation id="sub-it" bandwidth="1000"/></AdaptationSet></Period>',
+    ),
+  );
+
   // Two 70 MB "segments" (zeros): the playlist is valid, the data is not media. Used to trip the memory guard.
   const chunk = Buffer.alloc(70 * 1024 * 1024);
   writeFileSync(join(dir, 'big/seg0.ts'), chunk);
@@ -346,5 +416,5 @@ video/index.m3u8
     join(dir, 'big/index.m3u8'),
     '#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:10.0,\nseg0.ts\n#EXTINF:10.0,\nseg1.ts\n#EXT-X-ENDLIST\n',
   );
-  writeFileSync(join(dir, '.complete5'), 'ok');
+  writeFileSync(join(dir, '.complete6'), 'ok');
 }

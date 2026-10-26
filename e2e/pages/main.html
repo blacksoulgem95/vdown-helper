@@ -6,8 +6,11 @@
   </head>
   <body>
     <h1>Fixture page</h1>
-    <video id="v" src="/media/sample.mp4" controls muted width="320" title="Sample clip"></video>
+    <video id="v" src="/media/sample.mp4" controls muted width="320" title="Sample clip">
+      <track kind="subtitles" src="/subs/en.vtt" srclang="en" label="English" />
+    </video>
     <p><a href="/media/sample.mp4">Download sample</a></p>
+    <p><a href="/subs/it.srt">Italiano (SRT)</a> <a href="/subs/en.ttml">English (TTML)</a></p>
     <script>
       // Players fetch manifests via XHR/fetch: these leave Performance entries the extension can see.
       const CDN = new URLSearchParams(location.search).get('cdn') || '';
@@ -16,6 +19,8 @@
         '/hls-sep/master.m3u8',
         '/hls-aes/index.m3u8',
         '/dash-vod/manifest.mpd',
+        '/hls-subs/master.m3u8',
+        '/dash-vod/manifest-subs.mpd',
         '/dash-drm/manifest.mpd',
         '/dash-live/manifest.mpd',
         '/hls-aes-fmp4/index.m3u8',

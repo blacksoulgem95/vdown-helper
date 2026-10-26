@@ -172,7 +172,7 @@ async function readCapped(
   return out;
 }
 
-async function getBytes(
+export async function getBytes(
   url: string,
   signal: AbortSignal,
   creds: Creds,

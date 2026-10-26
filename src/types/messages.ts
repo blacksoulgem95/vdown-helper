@@ -81,7 +81,8 @@ export type OffscreenCommand =
   | { channel: 'vdown-offscreen'; type: 'release-job'; jobId: string };
 
 export interface OffscreenPlan {
-  pipeline: 'hls-concat' | 'hls-ffmpeg-copy' | 'ffmpeg-transcode' | 'file-ffmpeg-copy' | 'file-staged';
+  pipeline:
+    'hls-concat' | 'hls-ffmpeg-copy' | 'ffmpeg-transcode' | 'file-ffmpeg-copy' | 'file-staged' | 'subtitle';
   extension: string;
   requiresFfmpeg: boolean;
   video: 'copy' | 'transcode' | 'none';

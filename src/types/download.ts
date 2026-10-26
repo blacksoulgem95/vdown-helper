@@ -58,6 +58,11 @@ export interface DownloadRequest {
    * involved, so the frame's Referer/Origin can be replayed on this job's requests.
    */
   replay?: { frameUrl: string; urls: string[] };
+  /**
+   * A subtitle download. The source is a text document, or (isHls / isDash) a segmented subtitle stream that is
+   * stitched. `output`: keep the format found (WebVTT for stitched streams) or convert to SRT.
+   */
+  subtitle?: { output: 'srt' | 'original' };
   /** Source description for the queue display. */
   qualityLabel: string;
   sourceFormat: MediaFormat;

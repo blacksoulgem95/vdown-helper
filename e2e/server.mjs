@@ -16,6 +16,9 @@ const TYPES = {
   '.ts': 'video/mp2t',
   '.mp4': 'video/mp4',
   '.bin': 'application/octet-stream',
+  '.vtt': 'text/vtt; charset=utf-8',
+  '.srt': 'application/x-subrip',
+  '.ttml': 'application/ttml+xml',
 };
 
 export function startServers(root, pagesDir) {

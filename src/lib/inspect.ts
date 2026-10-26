@@ -63,7 +63,8 @@ export function inspectDashRepresentation(
   const e = expandSegments(m, period, rep);
   const urls = new Set<string>([m.url, ...e.segments.map((s) => s.uri)]);
   if (e.init) urls.add(e.init.uri);
-  const prot = protectionsOf(period.representations);
+  // A subtitle track is separate clear text even when the video of the same stream is encrypted.
+  const prot = protectionsOf(rep.content === 'text' ? [rep] : period.representations);
   return {
     url: m.url,
     segmentCount: e.segments.length,

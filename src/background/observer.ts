@@ -22,9 +22,24 @@ function relevant(url: string, mime: string): boolean {
   const ext = extensionOf(url);
   if (SEGMENT_EXT.has(ext)) return false;
   if (formatFromMime(mime)) return true;
-  return ['mp4', 'm4v', 'webm', 'mkv', 'mov', 'mp3', 'm4a', 'wav', 'ogg', 'flac', 'm3u8', 'mpd'].includes(
-    ext,
-  );
+  return [
+    'mp4',
+    'm4v',
+    'webm',
+    'mkv',
+    'mov',
+    'mp3',
+    'm4a',
+    'wav',
+    'ogg',
+    'flac',
+    'm3u8',
+    'mpd',
+    'vtt',
+    'srt',
+    'ttml',
+    'dfxp',
+  ].includes(ext);
 }
 
 export async function getObserved(tabId: number): Promise<RawCandidate[]> {

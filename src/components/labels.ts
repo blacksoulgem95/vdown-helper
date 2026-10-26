@@ -27,6 +27,7 @@ const REASONS: Record<ReasonCode, MessageKey> = {
   'sample-aes': 'reasonSampleAes',
   eme: 'reasonEme',
   'dash-clearkey': 'reasonDashClearKey',
+  'subtitle-unsupported': 'reasonSubtitleUnsupported',
   cors: 'reasonCors',
   'http-error': 'reasonHttp',
   network: 'reasonNetwork',
@@ -64,6 +65,8 @@ export function kindLabel(r: MediaResource): string {
           : t('kindPlaylist');
     case 'blob':
       return t('kindBlob');
+    case 'subtitle':
+      return r.format === 'hls' || r.format === 'dash' ? t('kindSubtitleStream') : t('kindSubtitle');
     default:
       return t('kindFile');
   }

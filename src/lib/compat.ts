@@ -33,7 +33,9 @@ export type Pipeline =
    * A plain file fetched by the extension itself (so the owning frame's Referer/Origin can be replayed), staged on
    * disk and then saved. Never chosen by the planner: only used as a fallback when Chrome's download manager is refused.
    */
-  | 'file-staged';
+  | 'file-staged'
+  /** A subtitle fetched, stitched and/or converted in the offscreen document (lib/subtitles). */
+  | 'subtitle';
 
 export type StreamHandling = 'copy' | 'transcode';
 

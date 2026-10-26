@@ -172,7 +172,8 @@ describe('HLS', () => {
   it('hides variant playlists that a master already offers', async () => {
     const f = fetcher({ [MASTER_URL]: okText(MASTER, MASTER_URL), [V1080]: okText(MEDIA, V1080) });
     const out = await analyzeCandidates([cand(V1080, { method: 'performance' }), cand(MASTER_URL)], ctx, f);
-    expect(out.map((r) => r.kind)).toEqual(['hls-master']);
+    // the master's own subtitle rendition is listed too, as a subtitle (see tests/subtitle-analyze.test.ts)
+    expect(out.map((r) => r.kind).filter((k) => k !== 'subtitle')).toEqual(['hls-master']);
   });
 });
 
