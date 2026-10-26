@@ -66,3 +66,4 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-046](VDH-046-verify-site-adapters.md) | Verify the open-site adapters against the real services | todo | P3 | test | VDH-041 |
 | [VDH-047](VDH-047-security-review-fixes.md) | Fixes from the independent security review | done | P0 | security | VDH-044 |
 | [VDH-048](VDH-048-ci-green-and-pr-flow.md) | CI green on GitHub, release bump rule, PR-and-merge flow | done | P0 | build | VDH-022, VDH-032, VDH-047 |
+| [VDH-049](VDH-049-hook-default-and-all-embedded.md) | Page hook on by default, one grant for all embedded players | in-progress | P1 | security | VDH-033 |

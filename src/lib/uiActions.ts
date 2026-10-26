@@ -34,7 +34,7 @@ export async function hasAccess(origins: string[]): Promise<boolean> {
 }
 
 /**
- * Ask the user for access to specific sites (never "all sites"). Must be called from a user gesture.
+ * Ask the user for access to specific sites. Must be called from a user gesture. (All sites: `requestAllSites`.)
  * Needed because downloading segments happens from the extension, whose requests are subject to CORS unless
  * the user has granted the site.
  */
@@ -46,6 +46,21 @@ export async function requestAccess(origins: string[]): Promise<boolean> {
       origins: originPatterns(origins),
       permissions: ['declarativeNetRequestWithHostAccess'],
     });
+  } catch {
+    return false;
+  }
+}
+
+/** Access to every site, with the header-replay permission: what unlocks every embedded player, nested to any depth. */
+export const ALL_SITES_ACCESS: chrome.permissions.Permissions = {
+  origins: ['<all_urls>'],
+  permissions: ['declarativeNetRequestWithHostAccess'],
+};
+
+/** Ask once for access to all sites. Must be called from a user gesture; afterwards no frame needs asking for again. */
+export async function requestAllSites(): Promise<boolean> {
+  try {
+    return await chrome.permissions.request(ALL_SITES_ACCESS);
   } catch {
     return false;
   }

@@ -681,10 +681,10 @@
     "message": "Embedded players from other sites could not be read: $1"
   },
   "allowEmbedded": {
-    "message": "ALLOW EMBEDDED PLAYERS"
+    "message": "ALLOW ALL EMBEDDED PLAYERS"
   },
   "allowEmbeddedHint": {
-    "message": "Chrome will ask for access to those sites only."
+    "message": "Chrome asks once for access to all sites; after that, embedded players on any site are read without asking again. You can revoke it in Settings."
   },
   "reasonEme": {
     "message": "The page uses protected playback (EME/DRM). vdown-helper does not bypass DRM."
@@ -693,7 +693,7 @@
     "message": "Look inside players (page hook)"
   },
   "optPageHookHint": {
-    "message": "Runs a small read-only script at the start of every page you visit, in every frame, to notice manifests and files that players load from script and to recognise protected playback. It changes nothing and sends nothing; it needs access to all sites, which you can revoke at any time. Off by default."
+    "message": "Runs a small read-only script at the start of pages, in every frame, to notice manifests and files that players load from script and to recognise protected playback. It changes nothing and sends nothing. On by default; it runs only on the sites you have allowed (one by one, or all sites with the switch above)."
   },
   "kindDashStream": {
     "message": "DASH STREAM"
@@ -976,5 +976,17 @@
   },
   "detectSiteApi": {
     "message": "The site's public API"
+  },
+  "optAllSites": {
+    "message": "Allow all sites and embedded players"
+  },
+  "optAllSitesHint": {
+    "message": "One Chrome prompt for access to all sites, so every embedded player, nested to any depth, is read without asking again. Revocable at any time."
+  },
+  "reloadForHook": {
+    "message": "Access granted. Reload the page so \"Look inside players\" can watch the players from the start."
+  },
+  "reloadPage": {
+    "message": "RELOAD PAGE"
   }
 }

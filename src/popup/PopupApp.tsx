@@ -15,6 +15,7 @@ import {
   originOf,
   quickDownload,
   requestAccess,
+  requestAllSites,
   startCapture,
   startRecord,
   startZip,
@@ -144,12 +145,19 @@ export function PopupApp() {
   );
 
   const [queueNote, setQueueNote] = useState<string | undefined>();
-  const onAllowFrames = useCallback(
-    async (origins: string[]) => {
-      if (await requestAccess(origins)) await rescan();
-    },
-    [rescan],
-  );
+  // The hook only sees players that start after it is registered, so a grant made with the hook on offers a reload.
+  const [offerReload, setOfferReload] = useState(false);
+  const onAllowFrames = useCallback(async () => {
+    if (!(await requestAllSites())) return;
+    if (settings.pageHook) setOfferReload(true);
+    await rescan();
+  }, [rescan, settings.pageHook]);
+  const onReload = useCallback(async () => {
+    if (tabId === undefined) return;
+    setOfferReload(false);
+    await chrome.tabs.reload(tabId);
+    window.close();
+  }, [tabId]);
 
   const onJobAction = useCallback(
     async (id: string, action: JobAction) => {
@@ -247,6 +255,21 @@ export function PopupApp() {
         {state && state.notes.blobSources > 0 && (
           <Notice tone="magenta">{t('noteBlob', state.notes.blobSources)}</Notice>
         )}
+        {offerReload && (
+          <Notice tone="acid">
+            <p>{t('reloadForHook')}</p>
+            <div className="mt-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void onReload()}
+                icon={<RefreshCw size={13} aria-hidden="true" />}
+              >
+                {t('reloadPage')}
+              </Button>
+            </div>
+          </Notice>
+        )}
         {state && (state.notes.blockedFrameOrigins ?? []).length > 0 ? (
           <Notice tone="neon">
             <p>{t('noteFramesBlocked', (state.notes.blockedFrameOrigins ?? []).map(hostOf).join(', '))}</p>
@@ -255,7 +278,7 @@ export function PopupApp() {
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => void onAllowFrames(state.notes.blockedFrameOrigins ?? [])}
+                onClick={() => void onAllowFrames()}
                 icon={<ShieldCheck size={13} aria-hidden="true" />}
               >
                 {t('allowEmbedded')}

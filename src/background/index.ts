@@ -1,5 +1,5 @@
 import { registerHandlers } from '@/lib/messaging';
-import { SETTINGS_KEY, loadSettings } from '@/lib/settings';
+import { SETTINGS_KEY, loadSettings, runMigrations } from '@/lib/settings';
 import { isExtensionPage, isSafeFetchUrl, log } from '@/lib/security';
 import type { OffscreenEvent } from '@/types/messages';
 import { inspectVariant, scanTab } from './detect';
@@ -77,7 +77,13 @@ chrome.storage.onChanged.addListener((changes, area) => {
 chrome.permissions.onAdded.addListener(() => void syncObserver());
 chrome.permissions.onRemoved.addListener(() => void syncObserver());
 
-chrome.runtime.onInstalled.addListener(() => void reconcile());
+chrome.runtime.onInstalled.addListener(({ reason }) => {
+  void reconcile();
+  // The settings change it makes re-syncs the page hook through storage.onChanged.
+  runMigrations(reason).catch((e: unknown) =>
+    log.warn('migration failed:', e instanceof Error ? e.message : 'error'),
+  );
+});
 chrome.runtime.onStartup.addListener(() => void reconcile());
 
 // Runs on every service-worker start (listeners above must be registered synchronously at top level).

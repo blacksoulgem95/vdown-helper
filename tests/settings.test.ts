@@ -2,8 +2,12 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   DEFAULT_SETTINGS,
   SETTINGS_KEY,
+  HOOK_DEFAULT_ON,
+  MIGRATIONS_KEY,
   loadSettings,
+  migrateHookDefault,
   pickVariantIndex,
+  runMigrations,
   resetSettings,
   sanitizeSettings,
   saveSettings,
@@ -117,6 +121,42 @@ describe('persistence through chrome.storage.local', () => {
     await saveSettings({ autoScan: true });
     expect(await resetSettings()).toEqual(DEFAULT_SETTINGS);
     expect(await loadSettings()).toEqual(DEFAULT_SETTINGS);
+  });
+});
+
+describe('page hook default (VDH-049)', () => {
+  it('is on by default', () => {
+    expect(DEFAULT_SETTINGS.pageHook).toBe(true);
+    expect(sanitizeSettings({}).pageHook).toBe(true);
+    expect(sanitizeSettings({ pageHook: false }).pageHook).toBe(false);
+  });
+  it('migrateHookDefault switches stored settings on once, and leaves nothing-stored to the defaults', () => {
+    expect(migrateHookDefault({ schemaVersion: 1, pageHook: false, subfolder: 'x' }, [])).toEqual({
+      schemaVersion: 1,
+      pageHook: true,
+      subfolder: 'x',
+    });
+    expect(migrateHookDefault(undefined, [])).toBeUndefined();
+    expect(migrateHookDefault([1], [])).toBeUndefined();
+    expect(migrateHookDefault({ pageHook: false }, [HOOK_DEFAULT_ON])).toBeUndefined();
+  });
+  it('an update turns a stored "off" on once; switching it off again afterwards sticks', async () => {
+    fake.storage.local.data[SETTINGS_KEY] = { schemaVersion: 1, pageHook: false, subfolder: 'keep' };
+    await runMigrations('update');
+    expect(await loadSettings()).toMatchObject({ pageHook: true, subfolder: 'keep' });
+    expect(fake.storage.local.data[MIGRATIONS_KEY]).toEqual([HOOK_DEFAULT_ON]);
+    await saveSettings({ pageHook: false });
+    await runMigrations('update');
+    expect((await loadSettings()).pageHook).toBe(false);
+  });
+  it('a new install only records the migration; an update with nothing stored writes no settings', async () => {
+    await runMigrations('install');
+    expect(fake.storage.local.data[MIGRATIONS_KEY]).toEqual([HOOK_DEFAULT_ON]);
+    expect(fake.storage.local.data[SETTINGS_KEY]).toBeUndefined();
+    fake.storage.local.data = {};
+    await runMigrations('update');
+    expect(fake.storage.local.data[SETTINGS_KEY]).toBeUndefined();
+    expect((await loadSettings()).pageHook).toBe(true);
   });
 });
 

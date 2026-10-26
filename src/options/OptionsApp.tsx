@@ -7,15 +7,11 @@ import { t } from '@/lib/i18n';
 import { send } from '@/lib/messaging';
 import { LIMITS } from '@/lib/settings';
 import { renderNameTemplate, NAME_TOKENS } from '@/lib/security';
+import { requestAllSites } from '@/lib/uiActions';
 import type { AudioBitrate, AudioFormat, OutputMode } from '@/types/download';
 import type { QualityPreset } from '@/types/settings';
 
 const ALL_SITES: chrome.permissions.Permissions = { origins: ['<all_urls>'] };
-// The page hook also lets downloads replay the Referer/Origin of the frame that owns a stream.
-const HOOK: chrome.permissions.Permissions = {
-  origins: ['<all_urls>'],
-  permissions: ['declarativeNetRequestWithHostAccess'],
-};
 const OBSERVER: chrome.permissions.Permissions = { permissions: ['webRequest'], origins: ['<all_urls>'] };
 
 // The typings expose a callback/promise hybrid; this pins the promise form.
@@ -59,12 +55,19 @@ export function OptionsApp() {
     await update({ autoScan: on });
     await refreshPermissions();
   };
+  // The hook runs on whatever sites are allowed (one site, or all of them); switching it needs no prompt.
   const toggleHook = async (on: boolean) => {
-    if (on) {
-      const ok = await chrome.permissions.request(HOOK);
-      if (!ok) return flash('danger', t('permDenied'));
-    }
     await update({ pageHook: on });
+  };
+  const toggleAllSites = async (on: boolean) => {
+    if (on) {
+      if (!(await requestAllSites())) return flash('danger', t('permDenied'));
+    } else {
+      await update({ autoScan: false, networkObserver: false });
+      await send('set-observer', { enabled: false });
+      // Header replay stays: sites allowed one by one still use it.
+      await chrome.permissions.remove(ALL_SITES).catch(() => false);
+    }
     await refreshPermissions();
   };
   const toggleObserver = async (on: boolean) => {
@@ -77,7 +80,8 @@ export function OptionsApp() {
     await refreshPermissions();
   };
   const revokeAll = async () => {
-    await update({ autoScan: false, networkObserver: false, pageHook: false });
+    // The hook setting is kept: with no site allowed it is simply not registered anywhere.
+    await update({ autoScan: false, networkObserver: false });
     await chrome.permissions
       .remove({ permissions: ['webRequest', 'declarativeNetRequestWithHostAccess'] })
       .catch(() => false);
@@ -202,9 +206,15 @@ export function OptionsApp() {
             onChange={(v) => void toggleAutoScan(v)}
           />
           <Toggle
+            label={t('optAllSites')}
+            description={t('optAllSitesHint')}
+            checked={allSites}
+            onChange={(v) => void toggleAllSites(v)}
+          />
+          <Toggle
             label={t('optPageHook')}
             description={t('optPageHookHint')}
-            checked={settings.pageHook && allSites}
+            checked={settings.pageHook}
             onChange={(v) => void toggleHook(v)}
           />
           <Toggle
