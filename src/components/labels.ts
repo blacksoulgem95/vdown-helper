@@ -32,6 +32,8 @@ const REASONS: Record<ReasonCode, MessageKey> = {
   'subtitle-unsupported': 'reasonSubtitleUnsupported',
   'too-large': 'reasonTooLarge',
   'mse-needs-hook': 'reasonMseNeedsHook',
+  'mse-needs-access': 'reasonMseNeedsAccess',
+  'mse-needs-reload': 'reasonMseNeedsReload',
   'mse-unrecordable': 'reasonMseUnrecordable',
   cors: 'reasonCors',
   'http-error': 'reasonHttp',

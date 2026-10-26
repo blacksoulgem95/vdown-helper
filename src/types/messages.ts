@@ -58,6 +58,8 @@ export interface RequestMap {
   'clear-history': { req: Record<string, never>; res: Result<object> };
   'get-jobs': { req: Record<string, never>; res: Result<{ jobs: DownloadJob[] }> };
   'set-observer': { req: { enabled: boolean }; res: Result<object> };
+  /** Bring the page hook's registration up to date now (after a grant), so a reload that follows finds it in place. */
+  'sync-hook': { req: Record<string, never>; res: Result<{ registered: boolean }> };
 }
 
 export type RequestType = keyof RequestMap;

@@ -864,7 +864,7 @@
     "message": "tenuto dalla pagina (blob:)"
   },
   "reasonMseNeedsHook": {
-    "message": "Questo video viene dato al lettore a pezzi (Media Source Extensions), quindi non c'è un file da scaricare. Attiva \"Guarda dentro i player\" nelle Impostazioni per catturare ciò che riproduce."
+    "message": "Questo video viene dato al lettore a pezzi (Media Source Extensions), quindi non c'è un file da scaricare. \"Guarda dentro i player\" è disattivato: attivalo e ricarica la pagina per catturare ciò che il player riproduce."
   },
   "reasonMseUnrecordable": {
     "message": "Questo video viene dato al lettore a pezzi e l'hook della pagina non ha visto come: non si può catturare."
@@ -1024,5 +1024,17 @@
   },
   "open": {
     "message": "Apri"
+  },
+  "reasonMseNeedsAccess": {
+    "message": "Questo video viene dato al lettore a pezzi (Media Source Extensions), quindi non c'è un file da scaricare. \"Guarda dentro i player\" funziona solo sui siti che hai consentito: consenti questo e ricarica la pagina per catturare ciò che il player riproduce."
+  },
+  "reasonMseNeedsReload": {
+    "message": "Questo video viene dato al lettore a pezzi (Media Source Extensions). Il player è partito prima che \"Guarda dentro i player\" fosse attivo: ricarica la pagina, premi play e potrà essere catturato."
+  },
+  "allowAndReload": {
+    "message": "CONSENTI E RICARICA"
+  },
+  "sourceMse": {
+    "message": "un player nella pagina (Media Source)"
   }
 }

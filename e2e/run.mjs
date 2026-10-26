@@ -1202,6 +1202,9 @@ await step(
   async () => {
     const done = (await jobs()).find((j) => j.stage === 'completed' && j.chromeDownloadId !== undefined);
     assert(done, 'no completed job');
+    // The popup keeps only the latest finished jobs in view; older ones are behind "Show N more".
+    const more = queuePopup.getByRole('button', { name: /^Show \d+ more$/ });
+    if ((await more.count()) > 0) await more.click();
     const row = queuePopup.locator('li', { hasText: done.request.filename }).first();
     await row.getByRole('button', { name: 'Show in folder' }).click();
     await row.getByRole('button', { name: 'Open file' }).click();
@@ -2591,6 +2594,37 @@ await step('capture: without the page hook the player is explained, never guesse
   await pg.close();
   await enableHook(true);
 });
+
+await step(
+  'capture: a player that started before the hook says "reload", and RELOAD PAGE makes it capturable',
+  async () => {
+    await enableHook(false);
+    const { pg, id } = await openMse();
+    await enableHook(true); // the site is allowed, but this player started before the hook was registered
+    const first = await mseResource(id);
+    assert(
+      first.r?.downloadability.reason === 'mse-needs-reload' && first.r.title !== first.r.url,
+      JSON.stringify([first.r?.downloadability, first.r?.title]),
+    );
+    const card = first.pop.locator(`[data-resource-id="${first.r.id}"]`);
+    assert(!(await card.innerText()).includes('x-vdh-mse'), 'the card shows a title, not the internal label');
+    const loaded = pg.waitForEvent('load', { timeout: 20000 });
+    await card.getByRole('button', { name: 'RELOAD PAGE' }).click();
+    await loaded;
+    await pg.waitForFunction(() => window.ready === true, null, { timeout: 15000 });
+    await pg.waitForFunction(() => document.getElementById('v').buffered.length > 0, null, {
+      timeout: 15000,
+    });
+    const after = await mseResource(id);
+    assert(
+      after.r?.downloadability.detail === 'mse-capturable',
+      `after the reload: ${JSON.stringify(after.r?.downloadability)}`,
+    );
+    await after.pop.close();
+    if (!first.pop.isClosed()) await first.pop.close();
+    await pg.close();
+  },
+);
 
 await step(
   'capture: fast capture records what the player receives into a valid, decodable file; the page is put back',

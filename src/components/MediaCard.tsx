@@ -21,11 +21,13 @@ import { Badge, Button, Notice, cx } from './ui';
 
 /** Where page-held bytes come from, in words. */
 export const heldSource = (r: MediaResource): string =>
-  r.held?.kind === 'blob'
-    ? t('sourceBlob')
-    : r.held?.kind === 'stream'
-      ? t('sourceStream')
-      : t('sourceInline');
+  r.held?.kind === 'mse'
+    ? t('sourceMse')
+    : r.held?.kind === 'blob'
+      ? t('sourceBlob')
+      : r.held?.kind === 'stream'
+        ? t('sourceStream')
+        : t('sourceInline');
 
 /** Short, token-free hint of where a resource lives, to tell apart cards that share a page title. */
 function sourceHint(r: MediaResource): string {
@@ -74,6 +76,8 @@ export interface MediaCardProps {
   onRecord?: (r: MediaResource) => void;
   /** The one card the popup recommends: marked and set apart, so the right download is one click away. */
   best?: boolean;
+  /** A player the page hook could not watch: allow its site (and turn the hook on) as needed, then reload. */
+  onFixPlayer?: (r: MediaResource) => void;
 }
 
 export function MediaCard({
@@ -86,6 +90,7 @@ export function MediaCard({
   onCapture,
   onRecord,
   best,
+  onFixPlayer,
 }: MediaCardProps) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
@@ -105,6 +110,11 @@ export function MediaCard({
     .join(' · ');
   const subtitle = [r.title, sourceHint(r)].filter(Boolean).join(' · ');
   const canGrant = r.downloadability.status === 'inaccessible' && r.downloadability.reason === 'cors';
+  const fix = r.downloadability.reason;
+  const playerFix =
+    !ok && (fix === 'mse-needs-hook' || fix === 'mse-needs-access' || fix === 'mse-needs-reload')
+      ? fix
+      : undefined;
 
   return (
     <li
@@ -151,6 +161,18 @@ export function MediaCard({
 
       {r.held?.kind === 'mse' || r.held?.kind === 'stream' || liveRecordable ? (
         <div className="mt-2.5 space-y-2">
+          {playerFix && onFixPlayer && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="primary"
+                onClick={() => onFixPlayer(r)}
+                disabled={busy}
+                icon={<ShieldCheck size={13} aria-hidden="true" />}
+              >
+                {playerFix === 'mse-needs-reload' ? t('reloadPage') : t('allowAndReload')}
+              </Button>
+            </div>
+          )}
           {ok && (r.held?.kind === 'stream' || liveRecordable) && (
             <div className="flex flex-wrap items-center gap-2">
               <Button

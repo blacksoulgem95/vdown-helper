@@ -864,7 +864,7 @@
     "message": "held by the page (blob:)"
   },
   "reasonMseNeedsHook": {
-    "message": "This video is fed to the player piece by piece (Media Source Extensions), so there is no file to download. Turn on \"Look inside players\" in Settings to capture what it plays."
+    "message": "This video is fed to the player piece by piece (Media Source Extensions), so there is no file to download. \"Look inside players\" is off: turn it on and reload the page to capture what the player plays."
   },
   "reasonMseUnrecordable": {
     "message": "This video is fed to the player piece by piece, and the page hook never saw how: it cannot be captured."
@@ -1024,5 +1024,17 @@
   },
   "open": {
     "message": "Open"
+  },
+  "reasonMseNeedsAccess": {
+    "message": "This video is fed to the player piece by piece (Media Source Extensions), so there is no file to download. \"Look inside players\" only runs on sites you allowed: allow this one and reload the page to capture what the player plays."
+  },
+  "reasonMseNeedsReload": {
+    "message": "This video is fed to the player piece by piece (Media Source Extensions). The player started before \"Look inside players\" was in place: reload the page, press play, and it can be captured."
+  },
+  "allowAndReload": {
+    "message": "ALLOW & RELOAD"
+  },
+  "sourceMse": {
+    "message": "a player in the page (Media Source)"
   }
 }

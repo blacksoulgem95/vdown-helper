@@ -27,6 +27,7 @@ registerHandlers({
     return { ok: true };
   },
   'get-jobs': async () => ({ ok: true, jobs: await listJobs() }),
+  'sync-hook': async () => ({ ok: true, registered: await syncHook() }),
   'set-observer': async ({ enabled }) => {
     const active = setObserverEnabled(enabled);
     return enabled && !active ? { ok: false, error: 'no-permission' } : { ok: true };

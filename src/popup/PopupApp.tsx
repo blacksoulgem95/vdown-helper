@@ -153,6 +153,22 @@ export function PopupApp() {
     if (settings.pageHook) setOfferReload(true);
     await rescan();
   }, [rescan, settings.pageHook]);
+  // A player the hook could not watch: ask for its site while this click still counts as the user's gesture, switch
+  // the hook on if it was off, wait until it is registered there, then reload so it sees the player start.
+  const onFixPlayer = useCallback(
+    async (r: MediaResource) => {
+      const origin = originOf(r.frameUrl ?? r.pageUrl);
+      if (!origin || !(await requestAccess([origin]))) {
+        setFb(r.id, { tone: 'danger', text: t('errAccessDenied') });
+        return;
+      }
+      if (!settings.pageHook) await update({ pageHook: true });
+      await send('sync-hook', {});
+      await chrome.tabs.reload(r.tabId);
+      window.close();
+    },
+    [settings.pageHook, update],
+  );
   const onReload = useCallback(async () => {
     if (tabId === undefined) return;
     setOfferReload(false);
@@ -312,6 +328,7 @@ export function PopupApp() {
             onGrantAccess={(x) => void onGrantAccess(x)}
             onCapture={(x, speed) => void onCapture(x, speed)}
             onRecord={(x) => void onRecord(x)}
+            onFixPlayer={(x) => void onFixPlayer(x)}
             onBulk={onBulk}
             onZip={onZip}
             onMinImage={(px) => void update({ imageMinPx: px })}

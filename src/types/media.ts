@@ -85,8 +85,12 @@ export type ReasonCode =
   | 'dash-clearkey'
   | 'subtitle-unsupported'
   | 'too-large'
-  /** A MediaSource player: capturing needs the page hook ("Look inside players"). */
+  /** A MediaSource player: capturing needs the page hook ("Look inside players"), which is switched off. */
   | 'mse-needs-hook'
+  /** ... the hook is on, but this site is not allowed, so the hook does not run in its frame. */
+  | 'mse-needs-access'
+  /** ... the hook is on and may run here, but the player started before it was in place: a reload is needed. */
+  | 'mse-needs-reload'
   /** A MediaSource player whose appended data cannot be recorded (the hook never saw it). */
   | 'mse-unrecordable';
 
