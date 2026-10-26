@@ -24,8 +24,10 @@ frame) and downloads, captures or records them locally with an optional FFmpeg.w
 - Never bypass DRM, authentication, paywalls, or site security. Protected content (Widevine, PlayReady, FairPlay,
   SAMPLE-AES, EME-protected playback) is flagged and refused for downloads, captures **and** recordings. Streams whose
   key is openly delivered (AES-128 HLS, ClearKey) are allowed and labelled as such. No site-specific extractors.
-- Request the minimum permissions; broad host access is optional and user-initiated only. The page hook (MAIN-world
-  script, `Look inside players`) is opt-in, read-only, registered only while enabled, and sends nothing anywhere.
+- Request the minimum permissions; broad host access is optional and user-initiated only. All-sites access ("allow all
+  embedded players") is asked for only on the user's click, once, and is revocable. The page hook (MAIN-world script,
+  `Look inside players`) is on by default but registered only for sites the user allowed and only while enabled; it is
+  read-only and sends nothing anywhere.
   Header replay is limited to the Referer/Origin the browser itself sent for that frame, for one job.
 - Validate URL schemes: the extension itself fetches **http/https only**. `blob:` and `data:` bytes are read only inside
   the page that owns them (the content script of that frame) and travel over the acknowledged ingest port; the

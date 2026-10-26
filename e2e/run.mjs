@@ -2282,13 +2282,15 @@ await step(
 );
 
 await step(
-  'page hook (opt-in): sees a manifest whose resource-timing entry was wiped, and is registered only while enabled',
+  'page hook (on by default): sees a manifest whose resource-timing entry was wiped, and is registered only while enabled',
   async () => {
+    // A fresh install has it on: the migration is recorded and the default settings register the hook for the allowed sites.
     assert(
-      (await ext(() => chrome.scripting.getRegisteredContentScripts())).length === 0,
-      'hook registered while disabled',
+      JSON.stringify(await ext(() => chrome.storage.local.get('migrations').then((r) => r.migrations))) ===
+        JSON.stringify(['hookDefaultOn']),
+      'migration not recorded on install',
     );
-    await ext(() => chrome.storage.local.set({ settings: { schemaVersion: 1, pageHook: true } }));
+    await ext(() => chrome.storage.local.set({ settings: { schemaVersion: 1 } }));
     await until(
       async () =>
         (await ext(() => chrome.scripting.getRegisteredContentScripts())).some((s) => s.id === 'vdh-hook'),
@@ -3409,7 +3411,9 @@ await step('frames the extension cannot enter are listed by origin, with an "all
   const bid = await tabOf(`${A}/pages/frames-blocked.html`);
   const { pop, st } = await scanTab(bid);
   assert(JSON.stringify(st.notes.blockedFrameOrigins) === JSON.stringify([B]), JSON.stringify(st.notes));
-  await pop.getByRole('button', { name: 'ALLOW EMBEDDED PLAYERS' }).waitFor({ timeout: 10000 });
+  await pop
+    .getByRole('button', { name: 'ALLOW ALL EMBEDDED PLAYERS', exact: true })
+    .waitFor({ timeout: 10000 });
   await shot(pop, 'popup-blocked-frame');
   await pop.close();
   await bp.close();

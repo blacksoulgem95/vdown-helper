@@ -98,7 +98,7 @@ that needs a private signing key that must not live in the repo.
    a button press.
 4. Some things are not downloads, so their card has other buttons:
    - **`CAPTURE (FAST)` / `RECORD (REAL TIME)`** — a player that feeds the video piece by piece (MSE, a `blob:` URL
-     with no file behind it). Needs _Look inside players_ (Settings). The page plays the video through (muted, at up to
+     with no file behind it). Needs _Look inside players_ (on by default) and access to the site. The page plays the video through (muted, at up to
      16×, or in real time) while the extension records what the player receives. A banner on the page says so and has
      **Cancel**; the video is put back as it was.
    - **`RECORD`** on a **live or event stream** (HLS / DASH) or on a **camera, screen share, call or canvas stream**.
@@ -110,8 +110,10 @@ that needs a private signing key that must not live in the repo.
    `… → RECORDING → MERGING → …`; only the stages a job really uses), real progress, speed and ETA when measurable,
    and pause / resume (native downloads only), cancel, retry, open and show-in-folder.
 6. If a card says **INACCESSIBLE · cross-origin**, `ALLOW SITE ACCESS` asks Chrome for access to _that one site_ and
-   rescans. If a page embeds players from other sites, the popup lists those sites and **`ALLOW EMBEDDED PLAYERS`**
-   asks for exactly them.
+   rescans. If a page embeds players from other sites, the popup lists those sites and **`ALLOW ALL EMBEDDED PLAYERS`**
+   asks Chrome **once** for access to all sites: from then on every embedded player on every site, nested to any depth,
+   is read without asking again (also in _Settings → Allow all sites and embedded players_; revocable there). With
+   _Look inside players_ on, the popup then offers `RELOAD PAGE` so the hook sees the players from the start.
 7. **Settings** (gear icon): default mode, quality preset, audio format and bitrate, naming template, sub-folder,
    concurrency, memory/encode limits, recording format and limits, _Look inside players_, notifications, auto-scan,
    network observer, clear history, reset.
@@ -125,8 +127,8 @@ The UI is available in English and Italian (follows Chrome's UI language).
 
 | Area                       | Implemented and verified                                                                                                                                                                                                                    | Not supported / not verified                                                                                                                                                      |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Where it looks             | `<video>`/`<audio>`, `<source>`, `<track>`, links, Performance timeline, open shadow roots, **every frame including nested cross-origin iframes** (per-origin permission), optional `webRequest` observer                                   | Closed shadow roots; frames of origins you did not allow; sites that check anything beyond the Referer/Origin the browser itself sent                                             |
-| Page hook (opt-in)         | _Look inside players_: sees manifests a player loads by script, EME use, and which MediaSource a `blob:` URL stands for                                                                                                                     | Needs all-sites access; off by default                                                                                                                                            |
+| Where it looks             | `<video>`/`<audio>`, `<source>`, `<track>`, links, Performance timeline, open shadow roots, **every frame including nested cross-origin iframes** (per-site access, or one grant for all sites), optional `webRequest` observer             | Closed shadow roots; frames of origins you did not allow; sites that check anything beyond the Referer/Origin the browser itself sent                                             |
+| Page hook (on by default)  | _Look inside players_: sees manifests a player loads by script, EME use, and which MediaSource a `blob:` URL stands for                                                                                                                     | Runs only on sites you allowed; can be turned off                                                                                                                                 |
 | Direct files               | MP4, WebM, MKV, MOV, OGV, FLV, AVI, WMV, ASF, 3GP, MPG, MP3, M4A, AAC, WAV, OGG, Opus, FLAC, AIFF, WMA via Chrome's download manager; the browser-sent Referer/Origin is replayed when a host demands it (then via the extension)           | Headers other than Referer/Origin, cookies for hosts you did not allow                                                                                                            |
 | HLS                        | master and media playlists, audio renditions, fMP4 and TS, byte ranges, **AES-128**, VOD download, join without re-encoding                                                                                                                 | **SAMPLE-AES** and every DRM (refused), I-frame-only streams                                                                                                                      |
 | MPEG-DASH                  | static and dynamic manifests, `SegmentTemplate` (number, time, timeline), `SegmentList`, multi-period (longest period), separate audio, text tracks, `ContentProtection` classified                                                         | Encrypted DASH of any kind (Widevine, PlayReady, FairPlay refused; **ClearKey is detected, not decrypted** — VDH-045), `SegmentBase` + `sidx` indexing                            |
@@ -180,12 +182,13 @@ Installed with the extension:
 
 **Optional** (asked for only when you use the related feature, revocable in Settings):
 
-| Permission                            | When                                                                                                                                                                                                                                            |
-| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Access to a specific site             | When a stream's host does not allow cross-origin reads (`ALLOW SITE ACCESS`, or when starting an HLS/DASH download), and for the embedded players of other sites (`ALLOW EMBEDDED PLAYERS`, exactly the listed sites). Never "all sites".       |
-| `declarativeNetRequestWithHostAccess` | Asked together with a site's access. Lets a download send the **Referer / Origin the browser itself sent** for that frame, for the length of that one job, because some hosts refuse a file without them. Nothing else is added.                |
-| `webRequest` + all-sites access       | Only if you enable **Scan pages automatically** or **Observe media requests** in Settings. The observer reads response headers (never bodies); nothing is blocked or modified.                                                                  |
-| All-sites access (page hook)          | Only if you enable **Look inside players** in Settings. A read-only script runs in every frame of the sites you allowed, at document start, so that scripts' manifests, EME use and MediaSource buffers can be seen. It sends nothing anywhere. |
+| Permission                            | When                                                                                                                                                                                                                                                                                               |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Access to a specific site             | When a stream's host does not allow cross-origin reads (`ALLOW SITE ACCESS`, or when starting an HLS/DASH download), Never "all sites" for this (see below).                                                                                                                                       |
+| `declarativeNetRequestWithHostAccess` | Asked together with a site's access. Lets a download send the **Referer / Origin the browser itself sent** for that frame, for the length of that one job, because some hosts refuse a file without them. Nothing else is added.                                                                   |
+| `webRequest` + all-sites access       | Only if you enable **Scan pages automatically** or **Observe media requests** in Settings. The observer reads response headers (never bodies); nothing is blocked or modified.                                                                                                                     |
+| All-sites access                      | Only when you press `ALLOW ALL EMBEDDED PLAYERS` in the popup or switch on **Allow all sites and embedded players** in Settings: one prompt, then every frame of every site can be scanned without asking again. Revocable at any time.                                                            |
+| Page hook (_Look inside players_)     | No permission of its own; on by default and registered only for the sites you allowed (one by one or all). A read-only script runs in their frames at document start, so that scripts' manifests, EME use and MediaSource buffers can be seen. It sends nothing anywhere; turn it off in Settings. |
 
 Content-Security-Policy for extension pages: `script-src 'self' 'wasm-unsafe-eval'; object-src 'self'`.
 `wasm-unsafe-eval` is required to instantiate FFmpeg.wasm; there is no `unsafe-eval`, no inline script and no remote
@@ -238,11 +241,11 @@ _locales/{en,it}         chrome.i18n catalogs (a test enforces identical keys an
 src/
   background/            service worker: detect.ts (scan of all frames, orchestration), pageFetch.ts (page-origin
                          fetch, capture/record calls via scripting), observer.ts (optional webRequest), hook.ts
-                         hooks.ts (registers the opt-in page hook), replay.ts (Referer/Origin for one job), runner.ts (queue,
+                         hooks.ts (registers the page hook for allowed sites), replay.ts (Referer/Origin for one job), runner.ts (queue,
                          chrome.downloads, offscreen bridge, validation of every request), jobStore.ts, tabState.ts
   content/               scanner.ts (read-only page scanner, IIFE), metadata.ts (Open Graph, JSON-LD, feeds, open
                          sites), ingest.ts (hands page-held bytes over), capture.ts (MSE capture and MediaStream
-                         recording, with the on-page banner), hook.ts (MAIN-world hook, opt-in)
+                         recording, with the on-page banner), hook.ts (MAIN-world hook)
   offscreen/             hls.ts (segment engine, AES-128, OPFS), dash.ts, live.ts (live recording), capture.ts
                          (assembles captured parts), ingest.ts (receives bytes from a page over an acknowledged
                          port), subtitle.ts, zip.ts, ffmpeg.ts (FFmpeg.wasm), jobs.ts
@@ -344,9 +347,9 @@ toolbar icon.
     Enable _Observe media requests_, open `/pages/worker.html`: the worker's manifest appears with source "Network
     observer". _Revoke all-sites access_ removes both.
 11. **Players inside players** — open the fixture page `/pages/frames-top.html` (nested cross-origin frames): the
-    popup lists the other sites with `ALLOW EMBEDDED PLAYERS`; grant them in Chrome's prompt and the players appear
-    under "Embedded: host".
-12. **Capture** — turn on _Look inside players_ (Chrome asks for all-sites access), open `/pages/mse.html` and reload:
+    popup lists the other sites with `ALLOW ALL EMBEDDED PLAYERS`; one Chrome prompt for all sites, then the players
+    (at every level) appear under "Embedded: host", and no other page asks again.
+12. **Capture** — with _Look inside players_ on (the default) and the site allowed, open `/pages/mse.html` and reload:
     the card offers `CAPTURE (FAST)` and `RECORD (REAL TIME)`. The banner shows on the page, Cancel works, and the file
     plays.
 13. **Recording** — open `/pages/stream.html` (a canvas + tone `MediaStream`): `RECORD`, wait a few seconds, then
@@ -364,21 +367,21 @@ toolbar icon.
 
 ## Troubleshooting
 
-| Symptom                                                | Cause / fix                                                                                                                                                                                           |
-| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| "Chrome did not allow access to this tab"              | Browser pages, the Web Store and `file://` cannot be scanned. On a normal page, open the extension from the toolbar _on that page_ (grants `activeTab`).                                              |
-| `NO MEDIA DETECTED` but a video plays                  | The player is in an iframe from another site (`ALLOW EMBEDDED PLAYERS`), or feeds the video through MSE (turn on _Look inside players_ in Settings), or is protected. Press play, then `RESCAN PAGE`. |
-| A card says it needs "Look inside players"             | The video is fed piece by piece (MSE). Turn that setting on, reload the page, rescan: the card then offers `CAPTURE`.                                                                                 |
-| A recording is shorter than expected                   | It stops at the limits in _Settings → Recording_, when the stream ends, or when the tab is closed or navigated away. What was recorded is always saved.                                               |
-| `INACCESSIBLE · cross-origin`                          | The host blocks reads from other origins. Use `ALLOW SITE ACCESS`.                                                                                                                                    |
-| Job fails: "Blocked by the site's cross-origin policy" | Same cause at download time. Grant access and retry.                                                                                                                                                  |
-| Job fails with `HTTP 403/410`                          | Signed URLs usually expire. Rescan and start again; if the site needs special headers it is not supported.                                                                                            |
-| `PROTECTED`                                            | DRM or SAMPLE-AES. Not supported by design.                                                                                                                                                           |
-| "Estimated size exceeds your memory limit"             | Raise _Memory limit_ (Settings), or choose TS/Original (disk-backed).                                                                                                                                 |
-| Conversion is slow / fan spins                         | FFmpeg.wasm is single-threaded. Prefer stream-copy options (MP4/MKV) over audio re-encode on long videos.                                                                                             |
-| File name looks different from the template            | Names are sanitised; characters Chrome rejects are folded to ASCII; Chrome adds `(1)` if the file exists.                                                                                             |
-| Extension errors after update                          | `chrome://extensions` → reload the extension, then reload the page you want to scan.                                                                                                                  |
-| Need logs                                              | Service worker: `chrome://extensions` → _Inspect views_. Logs never contain query strings or credentials.                                                                                             |
+| Symptom                                                | Cause / fix                                                                                                                                                                                                               |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| "Chrome did not allow access to this tab"              | Browser pages, the Web Store and `file://` cannot be scanned. On a normal page, open the extension from the toolbar _on that page_ (grants `activeTab`).                                                                  |
+| `NO MEDIA DETECTED` but a video plays                  | The player is in an iframe from another site (`ALLOW ALL EMBEDDED PLAYERS`), or feeds the video through MSE (_Look inside players_ needs the site allowed and a reload), or is protected. Press play, then `RESCAN PAGE`. |
+| A card says it needs "Look inside players"             | The video is fed piece by piece (MSE). Allow the site (or all sites), keep that setting on, reload the page, rescan: the card then offers `CAPTURE`.                                                                      |
+| A recording is shorter than expected                   | It stops at the limits in _Settings → Recording_, when the stream ends, or when the tab is closed or navigated away. What was recorded is always saved.                                                                   |
+| `INACCESSIBLE · cross-origin`                          | The host blocks reads from other origins. Use `ALLOW SITE ACCESS`.                                                                                                                                                        |
+| Job fails: "Blocked by the site's cross-origin policy" | Same cause at download time. Grant access and retry.                                                                                                                                                                      |
+| Job fails with `HTTP 403/410`                          | Signed URLs usually expire. Rescan and start again; if the site needs special headers it is not supported.                                                                                                                |
+| `PROTECTED`                                            | DRM or SAMPLE-AES. Not supported by design.                                                                                                                                                                               |
+| "Estimated size exceeds your memory limit"             | Raise _Memory limit_ (Settings), or choose TS/Original (disk-backed).                                                                                                                                                     |
+| Conversion is slow / fan spins                         | FFmpeg.wasm is single-threaded. Prefer stream-copy options (MP4/MKV) over audio re-encode on long videos.                                                                                                                 |
+| File name looks different from the template            | Names are sanitised; characters Chrome rejects are folded to ASCII; Chrome adds `(1)` if the file exists.                                                                                                                 |
+| Extension errors after update                          | `chrome://extensions` → reload the extension, then reload the page you want to scan.                                                                                                                                      |
+| Need logs                                              | Service worker: `chrome://extensions` → _Inspect views_. Logs never contain query strings or credentials.                                                                                                                 |
 
 ## Security and privacy
 
@@ -399,9 +402,9 @@ toolbar icon.
   recording is read only by this extension's own content script in the frame that owns it, only after a request the
   background validated against its own scan, and travels over an acknowledged port (one claim per job, from that tab
   and frame, size-capped, ordered). The extension never fetches a `blob:` URL itself.
-- **The page hook is read-only and off by default.** It watches `fetch` / XHR / EME / MediaSource and sends nothing
-  anywhere; the extension reads it on demand. It exists only while _Look inside players_ is on and the sites are
-  allowed.
+- **The page hook is read-only, on by default, and runs only on allowed sites.** It watches `fetch` / XHR / EME /
+  MediaSource and sends nothing anywhere; the extension reads it on demand. It exists only while _Look inside players_
+  is on and only for the sites you allowed (one by one, or all sites with one grant).
 - You are responsible for having the right to save what you download.
 
 ## Licence

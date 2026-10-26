@@ -681,10 +681,10 @@
     "message": "Player incorporati da altri siti non leggibili: $1"
   },
   "allowEmbedded": {
-    "message": "CONSENTI PLAYER INCORPORATI"
+    "message": "CONSENTI TUTTI I PLAYER INCORPORATI"
   },
   "allowEmbeddedHint": {
-    "message": "Chrome chiederà l'accesso solo a quei siti."
+    "message": "Chrome chiede una sola volta l'accesso a tutti i siti; dopo, i player incorporati di qualsiasi sito vengono letti senza chiedere di nuovo. Puoi revocarlo nelle Impostazioni."
   },
   "reasonEme": {
     "message": "La pagina usa la riproduzione protetta (EME/DRM). vdown-helper non aggira il DRM."
@@ -693,7 +693,7 @@
     "message": "Guarda dentro i player (hook nella pagina)"
   },
   "optPageHookHint": {
-    "message": "Esegue uno script di sola lettura all'inizio di ogni pagina che visiti, in ogni frame, per notare manifest e file che i player caricano da script e per riconoscere la riproduzione protetta. Non modifica nulla e non invia nulla; richiede l'accesso a tutti i siti, che puoi revocare in qualsiasi momento. Disattivato per impostazione predefinita."
+    "message": "Esegue uno script di sola lettura all'inizio delle pagine, in ogni frame, per notare manifest e file che i player caricano da script e per riconoscere la riproduzione protetta. Non modifica nulla e non invia nulla. Attivo per impostazione predefinita; funziona solo sui siti che hai consentito (uno per uno, o tutti i siti con l'interruttore qui sopra)."
   },
   "kindDashStream": {
     "message": "STREAM DASH"
@@ -976,5 +976,17 @@
   },
   "detectSiteApi": {
     "message": "API pubblica del sito"
+  },
+  "optAllSites": {
+    "message": "Consenti tutti i siti e i player incorporati"
+  },
+  "optAllSitesHint": {
+    "message": "Una sola richiesta di Chrome per l'accesso a tutti i siti, così ogni player incorporato, a qualsiasi livello di annidamento, viene letto senza chiedere di nuovo. Revocabile in qualsiasi momento."
+  },
+  "reloadForHook": {
+    "message": "Accesso concesso. Ricarica la pagina perché \"Guarda dentro i player\" possa osservare i player fin dall'inizio."
+  },
+  "reloadPage": {
+    "message": "RICARICA PAGINA"
   }
 }

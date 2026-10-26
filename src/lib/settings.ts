@@ -14,7 +14,7 @@ export const DEFAULT_SETTINGS: Settings = {
   subfolder: '',
   askWhereToSave: false,
   autoScan: false,
-  pageHook: false,
+  pageHook: true,
   networkObserver: false,
   imageMinPx: 100,
   maxConcurrentDownloads: 2,
@@ -124,6 +124,41 @@ export function resetSettings(): Promise<Settings> {
     const next = { ...DEFAULT_SETTINGS };
     await chrome.storage.local.set({ [SETTINGS_KEY]: next });
     return next;
+  });
+  writes = run.catch(() => undefined);
+  return run;
+}
+
+/** Storage key of the one-time migrations already applied to this install. */
+export const MIGRATIONS_KEY = 'migrations';
+/** "Look inside players" became on by default (VDH-049); installs that had it off get it on once. */
+export const HOOK_DEFAULT_ON = 'hookDefaultOn';
+
+/**
+ * The stored settings after the hook-default migration: switched on once, then never touched again (a user who turns it
+ * off afterwards keeps it off). Nothing stored means the defaults apply, which already have it on.
+ */
+export function migrateHookDefault(
+  stored: unknown,
+  applied: readonly string[],
+): Record<string, unknown> | undefined {
+  if (applied.includes(HOOK_DEFAULT_ON)) return undefined;
+  if (typeof stored !== 'object' || stored === null || Array.isArray(stored)) return undefined;
+  return { ...(stored as Record<string, unknown>), pageHook: true };
+}
+
+/** Run the one-time migrations on install or update. A new install only records them as applied. */
+export async function runMigrations(reason: string): Promise<void> {
+  const run = writes.then(async () => {
+    const got = await chrome.storage.local.get([MIGRATIONS_KEY, SETTINGS_KEY]);
+    const raw: unknown = got[MIGRATIONS_KEY];
+    const applied = Array.isArray(raw) ? raw.filter((m): m is string => typeof m === 'string') : [];
+    if (applied.includes(HOOK_DEFAULT_ON)) return;
+    const next = reason === 'update' ? migrateHookDefault(got[SETTINGS_KEY], applied) : undefined;
+    await chrome.storage.local.set({
+      ...(next ? { [SETTINGS_KEY]: sanitizeSettings(next) } : {}),
+      [MIGRATIONS_KEY]: [...applied, HOOK_DEFAULT_ON],
+    });
   });
   writes = run.catch(() => undefined);
   return run;
