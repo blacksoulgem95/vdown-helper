@@ -397,7 +397,11 @@ export async function writeSegments(
   let lastMapKey = state.mapKey;
   let writing: Promise<void> = Promise.resolve();
 
+  let reported = 0; // nothing written yet is not worth a report
   const report = () => {
+    // A flush that wrote nothing (a later segment finished first) has nothing new to say.
+    if (writeIdx === reported) return;
+    reported = writeIdx;
     const now = Date.now();
     meter.update(writeIdx, now);
     const p: JobProgress = {

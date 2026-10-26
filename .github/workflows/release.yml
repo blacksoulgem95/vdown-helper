@@ -6,7 +6,7 @@ name: Release
 # Version rule (scripts/next-version.mjs, tested in tests/version.test.ts):
 #   - no release yet                      -> the version in package.json (first release)
 #   - otherwise                           -> latest v* tag + patch
-#   - "#minor" / "#major" in a commit message since the last release raises the bump
+#   - "#minor" / "#major" on a line of its own (or "[minor]" / "[major]" in the subject) of a commit since the last release raises it
 #   - manual run: choose the bump in the "Run workflow" dialog
 #   - package.json ahead of the result    -> package.json wins (a human can still jump versions)
 # Nothing is committed back to main; the released version lives in the tag, the manifest and the zip.

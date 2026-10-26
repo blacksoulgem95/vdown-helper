@@ -67,13 +67,13 @@ with the zip and checksum attached. A re-run on a commit that already has a rele
 
 **The version is bumped automatically** (`scripts/next-version.mjs`):
 
-| Situation                                                                                  | Version                                                                  |
-| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
-| No release yet                                                                             | the version in `package.json` (first release: `0.1.0`)                   |
-| Normal push to `main`                                                                      | latest `v*` tag + **patch** (`0.1.0` → `0.1.1`)                          |
-| `#minor` or `#major` (or `[minor]` / `[major]`) in a commit message since the last release | minor (`0.1.5` → `0.2.0`) / major (`0.2.0` → `1.0.0`)                    |
-| _Run workflow_ by hand                                                                     | choose `auto`, `patch`, `minor` or `major`                               |
-| `package.json` is ahead of the result                                                      | `package.json` wins, so you can still jump to e.g. `1.0.0` by editing it |
+| Situation                                                                                                              | Version                                                                  |
+| ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| No release yet                                                                                                         | the version in `package.json` (first release: `0.1.0`)                   |
+| Normal push to `main`                                                                                                  | latest `v*` tag + **patch** (`0.1.0` → `0.1.1`)                          |
+| `#minor` or `#major` on a line of its own, or `[minor]` / `[major]` in the subject, of a commit since the last release | minor (`0.1.5` → `0.2.0`) / major (`0.2.0` → `1.0.0`)                    |
+| _Run workflow_ by hand                                                                                                 | choose `auto`, `patch`, `minor` or `major`                               |
+| `package.json` is ahead of the result                                                                                  | `package.json` wins, so you can still jump to e.g. `1.0.0` by editing it |
 
 Nothing is committed back to `main`: the released version lives in the tag, the zip name and the manifest inside the
 zip (`VDH_VERSION` is injected at build time), so `package.json` keeps the _first/base_ version and a local

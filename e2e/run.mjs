@@ -493,12 +493,45 @@ const studio = await ctx.newPage();
 await studio.setViewportSize({ width: 460, height: 1000 });
 await studio.goto(extUrl('sidepanel/sidepanel.html'));
 async function select(resource, forTab = tabId) {
+  // The Studio shows the resource from the tab's scan. Opening a popup rescans the tab, so wait until that scan is
+  // over and lists this resource; otherwise the Studio is (rightly) looking at a scan in progress.
+  const tabState = async () =>
+    (await ext((i) => chrome.storage.session.get(`tab:${i}`), forTab))[`tab:${forTab}`];
+  await until(
+    async () => {
+      const st = await tabState();
+      return st?.status === 'ready' && st.resources.some((r) => r.id === resource.id);
+    },
+    'the tab scan to be ready and to list the resource',
+    30000,
+    100,
+  );
   await studio.evaluate((sel) => chrome.storage.session.set({ 'studio:selection': sel }), {
     tabId: forTab,
     resourceId: resource.id,
     at: Date.now(),
   });
-  await studio.getByRole('heading', { name: resource.title }).first().waitFor({ timeout: 10000 });
+  try {
+    await studio.getByRole('heading', { name: resource.title }).first().waitFor({ timeout: 15000 });
+  } catch (e) {
+    // say what the Studio was showing, so a failure on CI explains itself
+    const st = await tabState();
+    const shown = (
+      await studio
+        .locator('body')
+        .innerText()
+        .catch(() => '')
+    )
+      .replace(/\s+/g, ' ')
+      .slice(0, 600);
+    console.log(
+      `        studio shows: ${shown}\n        tab state: ${st?.status} ${st?.resources?.length} resources, ` +
+        `has resource: ${st?.resources?.some((r) => r.id === resource.id)}, title now: ${
+          st?.resources?.find((r) => r.id === resource.id)?.title
+        }`,
+    );
+    throw e;
+  }
 }
 
 await step(

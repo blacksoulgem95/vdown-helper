@@ -39,7 +39,7 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-019](VDH-019-readme-docs.md) | README and documentation | done | P1 | docs | VDH-018 |
 | [VDH-020](VDH-020-native-companion-doc.md) | Native companion architecture doc | done | P3 | docs | VDH-019 |
 | [VDH-021](VDH-021-i18n-en-it.md) | Internationalisation (en, it) | done | P1 | ui | VDH-003 |
-| [VDH-022](VDH-022-ci-and-tooling.md) | CI workflow and lint/format tooling | in-progress | P2 | build | VDH-001 |
+| [VDH-022](VDH-022-ci-and-tooling.md) | CI workflow and lint/format tooling | done | P2 | build | VDH-001 |
 | [VDH-023](VDH-023-branding-icons.md) | Logo and icons | done | P2 | ui | VDH-001 |
 | [VDH-024](VDH-024-license-notices.md) | License and third-party notices | done | P2 | docs | VDH-012 |
 | [VDH-025](VDH-025-open-file-needs-gesture.md) | Open / show downloaded file needs a user gesture | done | P1 | ui | VDH-014 |
@@ -65,3 +65,4 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-045](VDH-045-clearkey-cenc.md) | ClearKey / CENC decryption for DASH | todo | P3 | lib | VDH-034 |
 | [VDH-046](VDH-046-verify-site-adapters.md) | Verify the open-site adapters against the real services | todo | P3 | test | VDH-041 |
 | [VDH-047](VDH-047-security-review-fixes.md) | Fixes from the independent security review | done | P0 | security | VDH-044 |
+| [VDH-048](VDH-048-ci-green-and-pr-flow.md) | CI green on GitHub, release bump rule, PR-and-merge flow | in-progress | P0 | build | VDH-022, VDH-032, VDH-047 |

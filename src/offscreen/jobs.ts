@@ -28,11 +28,15 @@ function emit(ev: OffscreenEvent): void {
   chrome.runtime.sendMessage(ev).catch(() => undefined);
 }
 
-function makeProgressSender(jobId: string) {
+export function makeProgressSender(jobId: string) {
   let last = 0;
   return (progress: JobProgress, force = false) => {
     const now = Date.now();
-    if (!force && now - last < 250) return;
+    // The report that completes a stage is never dropped: otherwise a fast download can end showing stale counters.
+    const complete =
+      progress.fraction === 1 ||
+      (progress.unitsTotal !== undefined && progress.unitsDone === progress.unitsTotal);
+    if (!force && !complete && now - last < 250) return;
     last = now;
     emit({ channel: 'vdown-offscreen-event', type: 'progress', jobId, progress });
   };

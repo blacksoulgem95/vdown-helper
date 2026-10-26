@@ -21,7 +21,7 @@ A GitHub Actions workflow that runs on `main`: verifies the project, builds the 
 - [ ] A release is created only once per version (tag `v<version>`), re-runs on the same version do not fail or overwrite it
 - [x] Every release-worthy push to `main` gets the next version automatically (patch by default, `#minor` / `#major` in a commit message or a manual run input raise it); package.json can still force a higher version
 - [x] The version computation is unit-tested (no tags, patch/minor/major, forced, package.json ahead, re-run on a tagged commit)
-- [ ] A new version produces a new tag + release (verified on GitHub)
+- [x] A new version produces a new tag + release (verified on GitHub: `v0.1.0` and `v1.0.0` were published with their zips)
 - [x] Workflow YAML valid; every `npm run` it uses exists
 
 ## Notes
@@ -30,4 +30,8 @@ Verified locally: `npm run package` in a clean clone after `npm ci` (same SHA-25
 
 Automatic bumping: `scripts/lib/version.ts` (19 tests, including a test that drives `scripts/next-version.mjs` through a real git history with tags, `#minor`, `#major`, re-runs and a package.json jump) and a simulated second release in a fresh clone (tag `v0.1.0` + one commit -> `0.1.1`, zip and manifest agree).
 
-**Not verified:** the workflow itself has not run on GitHub, so `gh release create`, the `contents: write` permission and the artifact hand-off between the two jobs are untested. It also only runs for pushes to `main`, and `main` does not contain the project yet. Close this task after the first real release appears.
+The workflow has run on GitHub: merging PR #2 published `v0.1.0` and merging PR #3 published `v1.0.0`, so `gh release create`, the `contents: write`
+permission and the artifact hand-off work. The jump to `1.0.0` was **not intended**: the VDH-032 commit message described the `#minor/#major` tokens and the
+rule matched them anywhere in the text. VDH-048 restricts the tokens to a line of their own (or a `[minor]`/`[major]` subject tag).
+
+**Still not observed:** a re-run of the workflow on an already released commit (it should publish nothing). Close this task once that has been seen.

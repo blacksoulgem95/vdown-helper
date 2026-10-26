@@ -10,7 +10,12 @@ frame) and downloads, captures or records them locally with an optional FFmpeg.w
 
 - **All work is tracked in `BACKLOG/`.** Read `.claude/rules/backlog.md` before starting any task.
 - Develop on the branch named in the session instructions; commit per backlog stage with the task
-  ID in the subject (`VDH-005: HLS parser`). Do not open a PR unless asked.
+  ID in the subject (`VDH-005: HLS parser`).
+- **Every completed stage goes to `main` through a new PR, which is then merged** (the owner's standing instruction): open a
+  new PR from the session branch (never reuse a merged one), wait for CI (`check` and `e2e`) to be green on its head, then
+  merge it with a merge commit. A red or conflicting PR is fixed first, never merged red. Merging to `main` publishes a
+  release: patch by default; put `#minor` / `#major` on a line of its own in the merge commit message (or `[minor]` /
+  `[major]` in a commit subject) for a bigger bump, and never write those tokens in a message that is only describing them.
 
 ## Hard constraints (never relax these)
 
