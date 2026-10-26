@@ -25,6 +25,8 @@ What automation cannot prove. Follow the manual test procedure in the README in 
 
 - [ ] Options -> "Allow all sites and embedded players" shows Chrome's all-sites prompt; "Look inside players" (on by default) then runs everywhere; revoking access removes it
 - [ ] "Allow all embedded players" in the popup shows one all-sites prompt, then nested players (every level) appear and other pages no longer ask (VDH-049)
+- [ ] After that grant with _Look inside players_ on, the popup offers `RELOAD PAGE`, and after the reload an MSE player in a nested frame offers capture (VDH-049)
+- [ ] Settings -> _Allow all sites and embedded players_ switches on through Chrome's prompt and off again; the hook switch never prompts (VDH-049)
 - [ ] Updating from 1.1.x switches _Look inside players_ on once, with no new permission prompt and without disabling the extension (VDH-049)
 - [ ] Recording a MediaStream (a webcam test page, a screen share, a WebRTC call page) with "Recording format" set to MP4: the file plays and has sound; with WebM it still works
 - [ ] MediaStream recording keeps the "recording" banner visible in a real window, Stop in the banner and in the queue both save, and closing the tab keeps what was recorded
