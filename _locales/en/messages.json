@@ -1,0 +1,677 @@
+{
+  "extName": {
+    "message": "vdown-helper"
+  },
+  "extDescription": {
+    "message": "Detect. Decode. Download. Finds videos on the page you are viewing and downloads them locally."
+  },
+  "notifyDoneTitle": {
+    "message": "Download complete"
+  },
+  "notifyFailTitle": {
+    "message": "Download failed"
+  },
+  "tagline": {
+    "message": "Detect. Decode. Download."
+  },
+  "signature": {
+    "message": "YOUR MEDIA. YOUR CONTROL."
+  },
+  "scanning": {
+    "message": "SCANNING"
+  },
+  "ready": {
+    "message": "READY"
+  },
+  "statusError": {
+    "message": "ERROR"
+  },
+  "settings": {
+    "message": "Settings"
+  },
+  "version": {
+    "message": "Version"
+  },
+  "currentPage": {
+    "message": "CURRENT PAGE"
+  },
+  "untitled": {
+    "message": "Untitled page"
+  },
+  "detected": {
+    "message": "DETECTED"
+  },
+  "readyCount": {
+    "message": "$1 ready"
+  },
+  "rescanPage": {
+    "message": "RESCAN PAGE"
+  },
+  "scanAgain": {
+    "message": "SCAN AGAIN"
+  },
+  "scanningPage": {
+    "message": "Scanning page…"
+  },
+  "noteBlob": {
+    "message": "$1 stream source(s) use blob: URLs (MSE players). The page assembles them in memory, so there is no file to download. The optional network observer in Settings can find the real manifest."
+  },
+  "noteFrames": {
+    "message": "$1 embedded frame(s) from other sites could not be inspected."
+  },
+  "detectedMedia": {
+    "message": "Detected media"
+  },
+  "emptyTitle": {
+    "message": "NO MEDIA DETECTED"
+  },
+  "emptyBody": {
+    "message": "No downloadable video or audio was found on this page. Start playback, then scan again. Some players hide their sources from extensions."
+  },
+  "emptyErrorTitle": {
+    "message": "SCAN UNAVAILABLE"
+  },
+  "errUnsupportedPage": {
+    "message": "This page can't be scanned (browser pages, the Web Store and local files are off-limits)."
+  },
+  "errNoAccess": {
+    "message": "Chrome did not allow access to this tab. Browser pages (chrome://), the Web Store and local files can't be scanned. On other pages, open the extension from the toolbar on that page, or allow site access in Settings."
+  },
+  "errTabClosed": {
+    "message": "The tab was closed."
+  },
+  "errScanFailed": {
+    "message": "The scan failed. Reload the page and try again."
+  },
+  "download": {
+    "message": "DOWNLOAD"
+  },
+  "configure": {
+    "message": "CONFIGURE"
+  },
+  "working": {
+    "message": "WORKING…"
+  },
+  "allowAccess": {
+    "message": "ALLOW SITE ACCESS"
+  },
+  "details": {
+    "message": "DETAILS"
+  },
+  "copyUrl": {
+    "message": "Copy URL"
+  },
+  "sizeUnknown": {
+    "message": "SIZE UNKNOWN"
+  },
+  "statusDownloadable": {
+    "message": "DOWNLOADABLE"
+  },
+  "statusProtected": {
+    "message": "PROTECTED"
+  },
+  "statusInaccessible": {
+    "message": "INACCESSIBLE"
+  },
+  "statusUnsupported": {
+    "message": "UNSUPPORTED"
+  },
+  "statusUnverified": {
+    "message": "UNVERIFIED"
+  },
+  "kindHlsMaster": {
+    "message": "HLS MASTER"
+  },
+  "kindHlsMedia": {
+    "message": "HLS PLAYLIST"
+  },
+  "kindFile": {
+    "message": "DIRECT FILE"
+  },
+  "kindPlainM3u": {
+    "message": "M3U LIST"
+  },
+  "kindDash": {
+    "message": "DASH"
+  },
+  "kindPlaylist": {
+    "message": "PLAYLIST"
+  },
+  "kindBlob": {
+    "message": "BLOB STREAM"
+  },
+  "variantsCount": {
+    "message": "$1 variants"
+  },
+  "detailSource": {
+    "message": "Source"
+  },
+  "detailDetectedBy": {
+    "message": "Detected by"
+  },
+  "detailStatus": {
+    "message": "Status"
+  },
+  "detailCodecs": {
+    "message": "Codecs"
+  },
+  "detailFps": {
+    "message": "Frame rate"
+  },
+  "detailSegments": {
+    "message": "Segments"
+  },
+  "detailEncryption": {
+    "message": "Encryption"
+  },
+  "detailAudio": {
+    "message": "Audio"
+  },
+  "detailVariants": {
+    "message": "Variants"
+  },
+  "detectDomElement": {
+    "message": "Media element"
+  },
+  "detectDomSource": {
+    "message": "Source element"
+  },
+  "detectDomLink": {
+    "message": "Page link"
+  },
+  "detectPerformance": {
+    "message": "Performance entry"
+  },
+  "detectNetwork": {
+    "message": "Network observer"
+  },
+  "detectManual": {
+    "message": "Manual rescan"
+  },
+  "reasonOk": {
+    "message": "Ready to download."
+  },
+  "reasonNotProbed": {
+    "message": "Not verified yet."
+  },
+  "reasonBlob": {
+    "message": "Blob (MSE) stream: there is no file URL to download."
+  },
+  "reasonDrm": {
+    "message": "Protected by DRM. vdown-helper does not bypass DRM."
+  },
+  "reasonSampleAes": {
+    "message": "SAMPLE-AES encrypted stream. Only plain AES-128 HLS is supported."
+  },
+  "reasonCors": {
+    "message": "The site blocks cross-origin access to this resource. Allow site access to retry."
+  },
+  "reasonHttp": {
+    "message": "The server refused the request"
+  },
+  "reasonNetwork": {
+    "message": "The server did not respond in time."
+  },
+  "reasonDash": {
+    "message": "MPEG-DASH manifests are not supported."
+  },
+  "reasonPlainM3u": {
+    "message": "This is an ordinary M3U playlist, not an HLS stream."
+  },
+  "reasonMalformed": {
+    "message": "The playlist is malformed or has no playable streams."
+  },
+  "reasonLive": {
+    "message": "Live or event stream: only completed (VOD) streams can be downloaded."
+  },
+  "reasonUnsafe": {
+    "message": "The URL uses a scheme that is not allowed."
+  },
+  "reasonUnsupportedFormat": {
+    "message": "This is not a supported media format."
+  },
+  "reasonKeyInaccessible": {
+    "message": "The decryption key cannot be fetched."
+  },
+  "reasonNoSegments": {
+    "message": "No media segments were found."
+  },
+  "reasonAes128": {
+    "message": "AES-128 encrypted HLS: decryptable with the same key the page uses."
+  },
+  "reasonHeadersUnreadable": {
+    "message": "File details are hidden by the site's cross-origin policy; Chrome can still download it."
+  },
+  "errUnsafeUrl": {
+    "message": "That URL is not allowed."
+  },
+  "errProtected": {
+    "message": "This stream is protected by DRM or unsupported encryption and cannot be downloaded."
+  },
+  "errNoPermission": {
+    "message": "Permission needed: grant it in Settings."
+  },
+  "errBlocked": {
+    "message": "The playlist could not be read: the site blocks cross-origin access. Allow site access and try again."
+  },
+  "errHttp": {
+    "message": "The server answered HTTP $1."
+  },
+  "errParse": {
+    "message": "The playlist could not be understood."
+  },
+  "errGeneric": {
+    "message": "Something went wrong. Please try again."
+  },
+  "errAccessDenied": {
+    "message": "Site access was not granted, so the stream can't be fetched."
+  },
+  "errSidePanel": {
+    "message": "Chrome could not open the Studio panel."
+  },
+  "issueNoAudio": {
+    "message": "This source has no audio track to extract."
+  },
+  "issueNoVideo": {
+    "message": "This source has no video track."
+  },
+  "issueVideoCodec": {
+    "message": "The video codec can't be placed in that container without re-encoding, which is not supported. Pick another container."
+  },
+  "issueAudioCodec": {
+    "message": "The audio codec doesn't fit that container."
+  },
+  "issueTooLarge": {
+    "message": "The estimated size exceeds your in-browser processing memory limit. Raise the limit in Settings or choose a disk-backed format (TS or original). Very large conversions need a native tool: a companion-app design is documented in docs/native-companion.md (not included)."
+  },
+  "issueTooLong": {
+    "message": "The media is longer than your encoding time limit."
+  },
+  "issueLive": {
+    "message": "Live streams can't be downloaded."
+  },
+  "issueUnsupported": {
+    "message": "This source type is not supported."
+  },
+  "queue": {
+    "message": "DOWNLOAD QUEUE"
+  },
+  "queuedOk": {
+    "message": "Queued. Track progress in the download queue."
+  },
+  "clearHistory": {
+    "message": "Clear history"
+  },
+  "attempt": {
+    "message": "attempt $1"
+  },
+  "paused": {
+    "message": "PAUSED"
+  },
+  "eta": {
+    "message": "ETA"
+  },
+  "pause": {
+    "message": "Pause"
+  },
+  "resume": {
+    "message": "Resume"
+  },
+  "cancel": {
+    "message": "Cancel"
+  },
+  "retry": {
+    "message": "Retry"
+  },
+  "openFile": {
+    "message": "Open file"
+  },
+  "showInFolder": {
+    "message": "Show in folder"
+  },
+  "remove": {
+    "message": "Remove from list"
+  },
+  "segmentsProgress": {
+    "message": "$1/$2 segments"
+  },
+  "segmentsCount": {
+    "message": "$1 segments"
+  },
+  "notEncrypted": {
+    "message": "not encrypted"
+  },
+  "stageDetected": {
+    "message": "DETECTED"
+  },
+  "stagePreparing": {
+    "message": "PREPARING"
+  },
+  "stageDownloading": {
+    "message": "DOWNLOADING"
+  },
+  "stageMerging": {
+    "message": "MERGING"
+  },
+  "stageEncoding": {
+    "message": "ENCODING"
+  },
+  "stageCompleted": {
+    "message": "COMPLETED"
+  },
+  "stageFailed": {
+    "message": "FAILED"
+  },
+  "stageCancelled": {
+    "message": "CANCELLED"
+  },
+  "jobErrCors": {
+    "message": "Blocked by the site's cross-origin policy. Allow site access and retry."
+  },
+  "jobErrHttp": {
+    "message": "The server refused a request"
+  },
+  "jobErrNetwork": {
+    "message": "Network error"
+  },
+  "jobErrMemory": {
+    "message": "Out of memory or browser storage"
+  },
+  "jobErrFfmpeg": {
+    "message": "Conversion failed"
+  },
+  "jobErrDecrypt": {
+    "message": "Decryption failed"
+  },
+  "jobErrChrome": {
+    "message": "Chrome reported a download error"
+  },
+  "jobErrInterrupted": {
+    "message": "Interrupted by a browser restart"
+  },
+  "jobErrInvalid": {
+    "message": "The request is not valid"
+  },
+  "studioTitle": {
+    "message": "STUDIO"
+  },
+  "studioEmptyTitle": {
+    "message": "NOTHING SELECTED"
+  },
+  "studioEmptyBody": {
+    "message": "Pick CONFIGURE on a detected media card in the popup to set quality, tracks, format and file name here."
+  },
+  "studioPlaylist": {
+    "message": "Playlist"
+  },
+  "studioOutputMode": {
+    "message": "OUTPUT MODE"
+  },
+  "modeVideoAudio": {
+    "message": "Video + Audio"
+  },
+  "modeVideoAudioDesc": {
+    "message": "Video with its audio. Separate streams are merged."
+  },
+  "modeAudioOnly": {
+    "message": "Audio only"
+  },
+  "modeAudioOnlyDesc": {
+    "message": "Extract the audio track as MP3, M4A, AAC or WAV."
+  },
+  "modeVideoOnly": {
+    "message": "Video only"
+  },
+  "modeVideoOnlyDesc": {
+    "message": "The video stream without audio."
+  },
+  "modeOriginal": {
+    "message": "Original quality"
+  },
+  "modeOriginalDesc": {
+    "message": "Keep the source stream as is, no conversion when possible."
+  },
+  "studioVariants": {
+    "message": "STREAM VARIANTS"
+  },
+  "studioAudioTrack": {
+    "message": "Audio track"
+  },
+  "studioAudioTrackHint": {
+    "message": "Merged with the video using stream copy."
+  },
+  "studioAudioTrackOnlyHint": {
+    "message": "Only this track is downloaded."
+  },
+  "studioContainer": {
+    "message": "Output container"
+  },
+  "containerOriginal": {
+    "message": "Original (no conversion when possible)"
+  },
+  "studioAudioFormat": {
+    "message": "Audio format"
+  },
+  "studioAudioReencode": {
+    "message": "Audio re-encode bitrate"
+  },
+  "noBitrateCopy": {
+    "message": "Stream copy: no bitrate choice, no quality loss."
+  },
+  "noBitrateLossless": {
+    "message": "Uncompressed: no bitrate setting."
+  },
+  "studioFilename": {
+    "message": "File name"
+  },
+  "studioFinalName": {
+    "message": "Saved as"
+  },
+  "studioSubfolderHint": {
+    "message": "Sub-folder inside Chrome's Downloads folder. Change it in Settings."
+  },
+  "studioSummary": {
+    "message": "WHAT WILL HAPPEN"
+  },
+  "studioEstimate": {
+    "message": "Estimated size"
+  },
+  "studioEstimateNote": {
+    "message": "before audio re-encode"
+  },
+  "studioFfmpegWarning": {
+    "message": "This job runs FFmpeg locally in your browser: expect high CPU use and memory up to your $1 MB limit. Long videos can take a while."
+  },
+  "studioAccessNeeded": {
+    "message": "To fetch the stream, vdown-helper needs access to these sites (only these, nothing else):"
+  },
+  "studioStart": {
+    "message": "START DOWNLOAD"
+  },
+  "studioNeverAuto": {
+    "message": "Nothing downloads until you press the button."
+  },
+  "pipeNative": {
+    "message": "Direct browser download: Chrome saves the file as is."
+  },
+  "pipeConcat": {
+    "message": "Segments are fetched and joined byte for byte on disk. No re-encoding, no FFmpeg."
+  },
+  "pipeFfmpegCopy": {
+    "message": "Segments are fetched, then FFmpeg.wasm copies the streams into the new container. No re-encoding."
+  },
+  "pipeTranscodeAudio": {
+    "message": "Video is copied untouched; audio is re-encoded (transcoded) with FFmpeg.wasm."
+  },
+  "pipeTranscode": {
+    "message": "Audio is transcoded with FFmpeg.wasm (re-encoding, some quality loss)."
+  },
+  "secDownloads": {
+    "message": "Downloads"
+  },
+  "optDefaultMode": {
+    "message": "Default download mode"
+  },
+  "optPreferredQuality": {
+    "message": "Preferred quality"
+  },
+  "optPreferredQualityHint": {
+    "message": "Picks the best variant at or below this height. Never upscales."
+  },
+  "qualityHighest": {
+    "message": "Highest available"
+  },
+  "optAudioFormat": {
+    "message": "Default audio format"
+  },
+  "optAudioBitrate": {
+    "message": "Audio bitrate"
+  },
+  "optNaming": {
+    "message": "Naming template"
+  },
+  "optNamingHint": {
+    "message": "Tokens: $1"
+  },
+  "optSubfolder": {
+    "message": "Download sub-folder"
+  },
+  "optSubfolderHint": {
+    "message": "Relative to Chrome's Downloads folder. Chrome does not allow saving elsewhere without the Save as dialog."
+  },
+  "optAskWhere": {
+    "message": "Ask where to save each file"
+  },
+  "optAskWhereHint": {
+    "message": "Shows Chrome's Save as dialog."
+  },
+  "optMaxConcurrent": {
+    "message": "Maximum concurrent downloads"
+  },
+  "secDetection": {
+    "message": "Detection"
+  },
+  "secDetectionHint": {
+    "message": "By default vdown-helper only looks at the page when you open it. These options need access to all sites, which you can revoke at any time."
+  },
+  "optAutoScan": {
+    "message": "Scan pages automatically"
+  },
+  "optAutoScanHint": {
+    "message": "Scans a tab when it finishes loading and shows the count on the toolbar icon."
+  },
+  "optObserver": {
+    "message": "Observe media requests"
+  },
+  "optObserverHint": {
+    "message": "Reads response headers (never bodies) to spot manifests and files that players load behind the scenes. Nothing is blocked or modified."
+  },
+  "revokeAccess": {
+    "message": "Revoke all-sites access"
+  },
+  "permDenied": {
+    "message": "The permission was not granted."
+  },
+  "permRevoked": {
+    "message": "Access revoked."
+  },
+  "secProcessing": {
+    "message": "Processing"
+  },
+  "secProcessingHint": {
+    "message": "Limits for segment downloading and in-browser FFmpeg conversions."
+  },
+  "optSegmentConcurrency": {
+    "message": "Parallel segment fetches"
+  },
+  "optMaxMemory": {
+    "message": "Memory limit (MB)"
+  },
+  "optMaxMemoryHint": {
+    "message": "Largest FFmpeg job allowed. Default 2048."
+  },
+  "optMaxEncode": {
+    "message": "Max media length for FFmpeg (s)"
+  },
+  "optMaxEncodeHint": {
+    "message": "0 = no limit."
+  },
+  "processingWarning": {
+    "message": "Conversions run locally on your CPU and keep their result in browser memory. Large files may be slow or fail; plain TS/original downloads are written to disk instead."
+  },
+  "secNotifications": {
+    "message": "Notifications"
+  },
+  "optNotifyDone": {
+    "message": "Notify when a download completes"
+  },
+  "optNotifyFail": {
+    "message": "Notify when a download fails"
+  },
+  "secPermissions": {
+    "message": "Permissions"
+  },
+  "secPermissionsHint": {
+    "message": "vdown-helper asks for the minimum and never sends URLs or browsing data to any server."
+  },
+  "permActiveTab": {
+    "message": "Temporary access to the tab you open the extension on."
+  },
+  "permScripting": {
+    "message": "Runs the read-only page scanner when you ask."
+  },
+  "permDownloads": {
+    "message": "Saves files with Chrome's download manager."
+  },
+  "permDownloadsOpen": {
+    "message": "Opens or reveals a finished download."
+  },
+  "permStorage": {
+    "message": "Keeps settings, the queue and scan results on this device."
+  },
+  "permOffscreen": {
+    "message": "Hidden page that joins segments and runs FFmpeg.wasm."
+  },
+  "permNotifications": {
+    "message": "Optional desktop notifications."
+  },
+  "permSidePanel": {
+    "message": "Shows the Studio configuration panel."
+  },
+  "permOptionalName": {
+    "message": "optional"
+  },
+  "permOptional": {
+    "message": "All-sites access and network observation, only if you turn them on above. Per-site access is requested when a stream needs it."
+  },
+  "secData": {
+    "message": "Data"
+  },
+  "historyCleared": {
+    "message": "Download history cleared."
+  },
+  "resetSettings": {
+    "message": "Reset settings"
+  },
+  "settingsReset": {
+    "message": "Settings restored to defaults."
+  },
+  "privacyNote": {
+    "message": "Everything stays on this device. Clearing history does not delete downloaded files."
+  },
+  "secLimits": {
+    "message": "Limits & responsible use"
+  },
+  "limitsText": {
+    "message": "vdown-helper only downloads what the page already serves you and what you are allowed to save. It does not bypass DRM, logins, paywalls or other protections, and it cannot see streams that a site assembles privately in memory (blob/MSE). Cross-origin rules mean some streams need per-site access. Encrypted HLS is supported only when it is plain AES-128 whose key the page itself fetches. Very large conversions are refused rather than risking a browser crash; a native companion app is only documented, not included."
+  },
+  "stagesLabel": {
+    "message": "Progress stages"
+  },
+  "errFileMissing": {
+    "message": "The file was moved or deleted, so it can't be opened."
+  },
+  "errFileUnavailable": {
+    "message": "This download has no file to open."
+  }
+}

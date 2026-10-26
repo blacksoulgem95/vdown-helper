@@ -1,0 +1,677 @@
+{
+  "extName": {
+    "message": "vdown-helper"
+  },
+  "extDescription": {
+    "message": "Rileva. Decodifica. Scarica. Trova i video nella pagina che stai visualizzando e li scarica in locale."
+  },
+  "notifyDoneTitle": {
+    "message": "Download completato"
+  },
+  "notifyFailTitle": {
+    "message": "Download non riuscito"
+  },
+  "tagline": {
+    "message": "Rileva. Decodifica. Scarica."
+  },
+  "signature": {
+    "message": "I TUOI MEDIA. IL TUO CONTROLLO."
+  },
+  "scanning": {
+    "message": "SCANSIONE"
+  },
+  "ready": {
+    "message": "PRONTO"
+  },
+  "statusError": {
+    "message": "ERRORE"
+  },
+  "settings": {
+    "message": "Impostazioni"
+  },
+  "version": {
+    "message": "Versione"
+  },
+  "currentPage": {
+    "message": "PAGINA CORRENTE"
+  },
+  "untitled": {
+    "message": "Pagina senza titolo"
+  },
+  "detected": {
+    "message": "RILEVATI"
+  },
+  "readyCount": {
+    "message": "$1 pronti"
+  },
+  "rescanPage": {
+    "message": "RISCANSIONA PAGINA"
+  },
+  "scanAgain": {
+    "message": "SCANSIONA DI NUOVO"
+  },
+  "scanningPage": {
+    "message": "Scansione della pagina…"
+  },
+  "noteBlob": {
+    "message": "$1 sorgenti usano URL blob: (player MSE). La pagina le assembla in memoria, quindi non c'è un file da scaricare. L'osservatore di rete opzionale nelle Impostazioni può trovare il manifest reale."
+  },
+  "noteFrames": {
+    "message": "$1 frame incorporati da altri siti non hanno potuto essere ispezionati."
+  },
+  "detectedMedia": {
+    "message": "Media rilevati"
+  },
+  "emptyTitle": {
+    "message": "NESSUN MEDIA RILEVATO"
+  },
+  "emptyBody": {
+    "message": "Nessun video o audio scaricabile trovato in questa pagina. Avvia la riproduzione e riscansiona. Alcuni player nascondono le sorgenti alle estensioni."
+  },
+  "emptyErrorTitle": {
+    "message": "SCANSIONE NON DISPONIBILE"
+  },
+  "errUnsupportedPage": {
+    "message": "Questa pagina non può essere scansionata (pagine del browser, Web Store e file locali non sono accessibili)."
+  },
+  "errNoAccess": {
+    "message": "Chrome non ha consentito l'accesso a questa scheda. Le pagine del browser (chrome://), il Web Store e i file locali non possono essere scansionati. Sulle altre pagine, apri l'estensione dalla barra degli strumenti su quella pagina, oppure consenti l'accesso ai siti nelle Impostazioni."
+  },
+  "errTabClosed": {
+    "message": "La scheda è stata chiusa."
+  },
+  "errScanFailed": {
+    "message": "La scansione non è riuscita. Ricarica la pagina e riprova."
+  },
+  "download": {
+    "message": "SCARICA"
+  },
+  "configure": {
+    "message": "CONFIGURA"
+  },
+  "working": {
+    "message": "IN CORSO…"
+  },
+  "allowAccess": {
+    "message": "CONSENTI ACCESSO AL SITO"
+  },
+  "details": {
+    "message": "DETTAGLI"
+  },
+  "copyUrl": {
+    "message": "Copia URL"
+  },
+  "sizeUnknown": {
+    "message": "DIMENSIONE SCONOSCIUTA"
+  },
+  "statusDownloadable": {
+    "message": "SCARICABILE"
+  },
+  "statusProtected": {
+    "message": "PROTETTO"
+  },
+  "statusInaccessible": {
+    "message": "INACCESSIBILE"
+  },
+  "statusUnsupported": {
+    "message": "NON SUPPORTATO"
+  },
+  "statusUnverified": {
+    "message": "NON VERIFICATO"
+  },
+  "kindHlsMaster": {
+    "message": "HLS MASTER"
+  },
+  "kindHlsMedia": {
+    "message": "PLAYLIST HLS"
+  },
+  "kindFile": {
+    "message": "FILE DIRETTO"
+  },
+  "kindPlainM3u": {
+    "message": "LISTA M3U"
+  },
+  "kindDash": {
+    "message": "DASH"
+  },
+  "kindPlaylist": {
+    "message": "PLAYLIST"
+  },
+  "kindBlob": {
+    "message": "STREAM BLOB"
+  },
+  "variantsCount": {
+    "message": "$1 varianti"
+  },
+  "detailSource": {
+    "message": "Sorgente"
+  },
+  "detailDetectedBy": {
+    "message": "Rilevato da"
+  },
+  "detailStatus": {
+    "message": "Stato"
+  },
+  "detailCodecs": {
+    "message": "Codec"
+  },
+  "detailFps": {
+    "message": "Frame rate"
+  },
+  "detailSegments": {
+    "message": "Segmenti"
+  },
+  "detailEncryption": {
+    "message": "Cifratura"
+  },
+  "detailAudio": {
+    "message": "Audio"
+  },
+  "detailVariants": {
+    "message": "Varianti"
+  },
+  "detectDomElement": {
+    "message": "Elemento media"
+  },
+  "detectDomSource": {
+    "message": "Elemento source"
+  },
+  "detectDomLink": {
+    "message": "Link nella pagina"
+  },
+  "detectPerformance": {
+    "message": "Voce Performance"
+  },
+  "detectNetwork": {
+    "message": "Osservatore di rete"
+  },
+  "detectManual": {
+    "message": "Riscansione manuale"
+  },
+  "reasonOk": {
+    "message": "Pronto per il download."
+  },
+  "reasonNotProbed": {
+    "message": "Non ancora verificato."
+  },
+  "reasonBlob": {
+    "message": "Stream blob (MSE): non esiste un URL di file da scaricare."
+  },
+  "reasonDrm": {
+    "message": "Protetto da DRM. vdown-helper non aggira il DRM."
+  },
+  "reasonSampleAes": {
+    "message": "Stream cifrato SAMPLE-AES. È supportato solo HLS AES-128 semplice."
+  },
+  "reasonCors": {
+    "message": "Il sito blocca l'accesso cross-origin a questa risorsa. Consenti l'accesso al sito per riprovare."
+  },
+  "reasonHttp": {
+    "message": "Il server ha rifiutato la richiesta"
+  },
+  "reasonNetwork": {
+    "message": "Il server non ha risposto in tempo."
+  },
+  "reasonDash": {
+    "message": "I manifest MPEG-DASH non sono supportati."
+  },
+  "reasonPlainM3u": {
+    "message": "Questa è una normale playlist M3U, non uno stream HLS."
+  },
+  "reasonMalformed": {
+    "message": "La playlist è malformata o non contiene stream riproducibili."
+  },
+  "reasonLive": {
+    "message": "Stream live o evento: si possono scaricare solo stream completi (VOD)."
+  },
+  "reasonUnsafe": {
+    "message": "L'URL usa uno schema non consentito."
+  },
+  "reasonUnsupportedFormat": {
+    "message": "Questo non è un formato media supportato."
+  },
+  "reasonKeyInaccessible": {
+    "message": "Impossibile recuperare la chiave di decifratura."
+  },
+  "reasonNoSegments": {
+    "message": "Nessun segmento media trovato."
+  },
+  "reasonAes128": {
+    "message": "HLS cifrato AES-128: decifrabile con la stessa chiave usata dalla pagina."
+  },
+  "reasonHeadersUnreadable": {
+    "message": "I dettagli del file sono nascosti dalla policy cross-origin del sito; Chrome può comunque scaricarlo."
+  },
+  "errUnsafeUrl": {
+    "message": "Questo URL non è consentito."
+  },
+  "errProtected": {
+    "message": "Questo stream è protetto da DRM o da una cifratura non supportata e non può essere scaricato."
+  },
+  "errNoPermission": {
+    "message": "Permesso necessario: concedilo nelle Impostazioni."
+  },
+  "errBlocked": {
+    "message": "Impossibile leggere la playlist: il sito blocca l'accesso cross-origin. Consenti l'accesso al sito e riprova."
+  },
+  "errHttp": {
+    "message": "Il server ha risposto HTTP $1."
+  },
+  "errParse": {
+    "message": "La playlist non è comprensibile."
+  },
+  "errGeneric": {
+    "message": "Qualcosa è andato storto. Riprova."
+  },
+  "errAccessDenied": {
+    "message": "L'accesso al sito non è stato concesso, quindi lo stream non può essere recuperato."
+  },
+  "errSidePanel": {
+    "message": "Chrome non ha potuto aprire il pannello Studio."
+  },
+  "issueNoAudio": {
+    "message": "Questa sorgente non ha una traccia audio da estrarre."
+  },
+  "issueNoVideo": {
+    "message": "Questa sorgente non ha una traccia video."
+  },
+  "issueVideoCodec": {
+    "message": "Il codec video non può essere inserito in quel contenitore senza ricodifica, che non è supportata. Scegli un altro contenitore."
+  },
+  "issueAudioCodec": {
+    "message": "Il codec audio non è compatibile con quel contenitore."
+  },
+  "issueTooLarge": {
+    "message": "La dimensione stimata supera il limite di memoria per l'elaborazione nel browser. Aumenta il limite nelle Impostazioni oppure scegli un formato su disco (TS o originale). Le conversioni molto grandi richiedono uno strumento nativo: un progetto di app companion è descritto in docs/native-companion.md (non incluso)."
+  },
+  "issueTooLong": {
+    "message": "Il media è più lungo del limite di codifica impostato."
+  },
+  "issueLive": {
+    "message": "Gli stream live non possono essere scaricati."
+  },
+  "issueUnsupported": {
+    "message": "Questo tipo di sorgente non è supportato."
+  },
+  "queue": {
+    "message": "CODA DOWNLOAD"
+  },
+  "queuedOk": {
+    "message": "In coda. Segui l'avanzamento nella coda dei download."
+  },
+  "clearHistory": {
+    "message": "Cancella cronologia"
+  },
+  "attempt": {
+    "message": "tentativo $1"
+  },
+  "paused": {
+    "message": "IN PAUSA"
+  },
+  "eta": {
+    "message": "ETA"
+  },
+  "pause": {
+    "message": "Pausa"
+  },
+  "resume": {
+    "message": "Riprendi"
+  },
+  "cancel": {
+    "message": "Annulla"
+  },
+  "retry": {
+    "message": "Riprova"
+  },
+  "openFile": {
+    "message": "Apri file"
+  },
+  "showInFolder": {
+    "message": "Mostra nella cartella"
+  },
+  "remove": {
+    "message": "Rimuovi dall'elenco"
+  },
+  "segmentsProgress": {
+    "message": "$1/$2 segmenti"
+  },
+  "segmentsCount": {
+    "message": "$1 segmenti"
+  },
+  "notEncrypted": {
+    "message": "non cifrato"
+  },
+  "stageDetected": {
+    "message": "RILEVATO"
+  },
+  "stagePreparing": {
+    "message": "PREPARAZIONE"
+  },
+  "stageDownloading": {
+    "message": "DOWNLOAD"
+  },
+  "stageMerging": {
+    "message": "UNIONE"
+  },
+  "stageEncoding": {
+    "message": "CODIFICA"
+  },
+  "stageCompleted": {
+    "message": "COMPLETATO"
+  },
+  "stageFailed": {
+    "message": "FALLITO"
+  },
+  "stageCancelled": {
+    "message": "ANNULLATO"
+  },
+  "jobErrCors": {
+    "message": "Bloccato dalla policy cross-origin del sito. Consenti l'accesso al sito e riprova."
+  },
+  "jobErrHttp": {
+    "message": "Il server ha rifiutato una richiesta"
+  },
+  "jobErrNetwork": {
+    "message": "Errore di rete"
+  },
+  "jobErrMemory": {
+    "message": "Memoria o spazio del browser esauriti"
+  },
+  "jobErrFfmpeg": {
+    "message": "Conversione non riuscita"
+  },
+  "jobErrDecrypt": {
+    "message": "Decifratura non riuscita"
+  },
+  "jobErrChrome": {
+    "message": "Chrome ha segnalato un errore di download"
+  },
+  "jobErrInterrupted": {
+    "message": "Interrotto dal riavvio del browser"
+  },
+  "jobErrInvalid": {
+    "message": "La richiesta non è valida"
+  },
+  "studioTitle": {
+    "message": "STUDIO"
+  },
+  "studioEmptyTitle": {
+    "message": "NESSUNA SELEZIONE"
+  },
+  "studioEmptyBody": {
+    "message": "Scegli CONFIGURA su una scheda media nel popup per impostare qui qualità, tracce, formato e nome file."
+  },
+  "studioPlaylist": {
+    "message": "Playlist"
+  },
+  "studioOutputMode": {
+    "message": "MODALITÀ DI USCITA"
+  },
+  "modeVideoAudio": {
+    "message": "Video + Audio"
+  },
+  "modeVideoAudioDesc": {
+    "message": "Video con il suo audio. Gli stream separati vengono uniti."
+  },
+  "modeAudioOnly": {
+    "message": "Solo audio"
+  },
+  "modeAudioOnlyDesc": {
+    "message": "Estrai la traccia audio come MP3, M4A, AAC o WAV."
+  },
+  "modeVideoOnly": {
+    "message": "Solo video"
+  },
+  "modeVideoOnlyDesc": {
+    "message": "Lo stream video senza audio."
+  },
+  "modeOriginal": {
+    "message": "Qualità originale"
+  },
+  "modeOriginalDesc": {
+    "message": "Mantieni lo stream sorgente così com'è, senza conversione quando possibile."
+  },
+  "studioVariants": {
+    "message": "VARIANTI DELLO STREAM"
+  },
+  "studioAudioTrack": {
+    "message": "Traccia audio"
+  },
+  "studioAudioTrackHint": {
+    "message": "Unita al video con copia degli stream."
+  },
+  "studioAudioTrackOnlyHint": {
+    "message": "Viene scaricata solo questa traccia."
+  },
+  "studioContainer": {
+    "message": "Contenitore di uscita"
+  },
+  "containerOriginal": {
+    "message": "Originale (senza conversione quando possibile)"
+  },
+  "studioAudioFormat": {
+    "message": "Formato audio"
+  },
+  "studioAudioReencode": {
+    "message": "Bitrate ricodifica audio"
+  },
+  "noBitrateCopy": {
+    "message": "Copia dello stream: nessuna scelta di bitrate, nessuna perdita di qualità."
+  },
+  "noBitrateLossless": {
+    "message": "Non compresso: nessun bitrate da impostare."
+  },
+  "studioFilename": {
+    "message": "Nome file"
+  },
+  "studioFinalName": {
+    "message": "Salvato come"
+  },
+  "studioSubfolderHint": {
+    "message": "Sottocartella dentro la cartella Download di Chrome. Modificala nelle Impostazioni."
+  },
+  "studioSummary": {
+    "message": "COSA SUCCEDERÀ"
+  },
+  "studioEstimate": {
+    "message": "Dimensione stimata"
+  },
+  "studioEstimateNote": {
+    "message": "prima della ricodifica audio"
+  },
+  "studioFfmpegWarning": {
+    "message": "Questa operazione esegue FFmpeg in locale nel browser: aspettati un uso elevato di CPU e memoria fino al tuo limite di $1 MB. I video lunghi possono richiedere tempo."
+  },
+  "studioAccessNeeded": {
+    "message": "Per recuperare lo stream, vdown-helper ha bisogno dell'accesso a questi siti (solo questi, nient'altro):"
+  },
+  "studioStart": {
+    "message": "AVVIA DOWNLOAD"
+  },
+  "studioNeverAuto": {
+    "message": "Nulla viene scaricato finché non premi il pulsante."
+  },
+  "pipeNative": {
+    "message": "Download diretto del browser: Chrome salva il file così com'è."
+  },
+  "pipeConcat": {
+    "message": "I segmenti vengono recuperati e uniti byte per byte su disco. Nessuna ricodifica, nessun FFmpeg."
+  },
+  "pipeFfmpegCopy": {
+    "message": "I segmenti vengono recuperati, poi FFmpeg.wasm copia gli stream nel nuovo contenitore. Nessuna ricodifica."
+  },
+  "pipeTranscodeAudio": {
+    "message": "Il video viene copiato senza modifiche; l'audio viene ricodificato con FFmpeg.wasm."
+  },
+  "pipeTranscode": {
+    "message": "L'audio viene transcodificato con FFmpeg.wasm (ricodifica, qualche perdita di qualità)."
+  },
+  "secDownloads": {
+    "message": "Download"
+  },
+  "optDefaultMode": {
+    "message": "Modalità di download predefinita"
+  },
+  "optPreferredQuality": {
+    "message": "Qualità preferita"
+  },
+  "optPreferredQualityHint": {
+    "message": "Sceglie la migliore variante pari o inferiore a questa altezza. Nessun upscaling."
+  },
+  "qualityHighest": {
+    "message": "Massima disponibile"
+  },
+  "optAudioFormat": {
+    "message": "Formato audio predefinito"
+  },
+  "optAudioBitrate": {
+    "message": "Bitrate audio"
+  },
+  "optNaming": {
+    "message": "Modello di nome file"
+  },
+  "optNamingHint": {
+    "message": "Token: $1"
+  },
+  "optSubfolder": {
+    "message": "Sottocartella di download"
+  },
+  "optSubfolderHint": {
+    "message": "Relativa alla cartella Download di Chrome. Chrome non permette di salvare altrove senza la finestra Salva con nome."
+  },
+  "optAskWhere": {
+    "message": "Chiedi dove salvare ogni file"
+  },
+  "optAskWhereHint": {
+    "message": "Mostra la finestra Salva con nome di Chrome."
+  },
+  "optMaxConcurrent": {
+    "message": "Download simultanei massimi"
+  },
+  "secDetection": {
+    "message": "Rilevamento"
+  },
+  "secDetectionHint": {
+    "message": "Per impostazione predefinita vdown-helper guarda la pagina solo quando lo apri. Queste opzioni richiedono l'accesso a tutti i siti, che puoi revocare in qualsiasi momento."
+  },
+  "optAutoScan": {
+    "message": "Scansiona le pagine automaticamente"
+  },
+  "optAutoScanHint": {
+    "message": "Scansiona una scheda al termine del caricamento e mostra il conteggio sull'icona."
+  },
+  "optObserver": {
+    "message": "Osserva le richieste media"
+  },
+  "optObserverHint": {
+    "message": "Legge le intestazioni delle risposte (mai i contenuti) per individuare manifest e file caricati dai player. Nulla viene bloccato o modificato."
+  },
+  "revokeAccess": {
+    "message": "Revoca l'accesso a tutti i siti"
+  },
+  "permDenied": {
+    "message": "Il permesso non è stato concesso."
+  },
+  "permRevoked": {
+    "message": "Accesso revocato."
+  },
+  "secProcessing": {
+    "message": "Elaborazione"
+  },
+  "secProcessingHint": {
+    "message": "Limiti per il download dei segmenti e le conversioni FFmpeg nel browser."
+  },
+  "optSegmentConcurrency": {
+    "message": "Segmenti in parallelo"
+  },
+  "optMaxMemory": {
+    "message": "Limite di memoria (MB)"
+  },
+  "optMaxMemoryHint": {
+    "message": "Lavoro FFmpeg più grande consentito. Predefinito 2048."
+  },
+  "optMaxEncode": {
+    "message": "Durata massima per FFmpeg (s)"
+  },
+  "optMaxEncodeHint": {
+    "message": "0 = nessun limite."
+  },
+  "processingWarning": {
+    "message": "Le conversioni usano la CPU locale e tengono il risultato nella memoria del browser. I file grandi possono essere lenti o fallire; i download TS/originali vengono invece scritti su disco."
+  },
+  "secNotifications": {
+    "message": "Notifiche"
+  },
+  "optNotifyDone": {
+    "message": "Notifica al completamento di un download"
+  },
+  "optNotifyFail": {
+    "message": "Notifica quando un download fallisce"
+  },
+  "secPermissions": {
+    "message": "Permessi"
+  },
+  "secPermissionsHint": {
+    "message": "vdown-helper richiede il minimo indispensabile e non invia mai URL o dati di navigazione a nessun server."
+  },
+  "permActiveTab": {
+    "message": "Accesso temporaneo alla scheda su cui apri l'estensione."
+  },
+  "permScripting": {
+    "message": "Esegue lo scanner di sola lettura della pagina quando lo richiedi."
+  },
+  "permDownloads": {
+    "message": "Salva i file con il gestore di download di Chrome."
+  },
+  "permDownloadsOpen": {
+    "message": "Apre o mostra un download completato."
+  },
+  "permStorage": {
+    "message": "Conserva impostazioni, coda e risultati su questo dispositivo."
+  },
+  "permOffscreen": {
+    "message": "Pagina nascosta che unisce i segmenti ed esegue FFmpeg.wasm."
+  },
+  "permNotifications": {
+    "message": "Notifiche desktop opzionali."
+  },
+  "permSidePanel": {
+    "message": "Mostra il pannello di configurazione Studio."
+  },
+  "permOptionalName": {
+    "message": "opzionali"
+  },
+  "permOptional": {
+    "message": "Accesso a tutti i siti e osservazione di rete, solo se li attivi qui sopra. L'accesso al singolo sito viene richiesto quando uno stream ne ha bisogno."
+  },
+  "secData": {
+    "message": "Dati"
+  },
+  "historyCleared": {
+    "message": "Cronologia dei download cancellata."
+  },
+  "resetSettings": {
+    "message": "Ripristina impostazioni"
+  },
+  "settingsReset": {
+    "message": "Impostazioni ripristinate ai valori predefiniti."
+  },
+  "privacyNote": {
+    "message": "Tutto resta su questo dispositivo. Cancellare la cronologia non elimina i file scaricati."
+  },
+  "secLimits": {
+    "message": "Limiti e uso responsabile"
+  },
+  "limitsText": {
+    "message": "vdown-helper scarica solo ciò che la pagina ti serve già e che hai il diritto di salvare. Non aggira DRM, login, paywall o altre protezioni e non può vedere gli stream che un sito assembla privatamente in memoria (blob/MSE). Le regole cross-origin implicano che alcuni stream richiedano l'accesso al singolo sito. L'HLS cifrato è supportato solo se AES-128 semplice con chiave recuperata dalla pagina stessa. Le conversioni molto grandi vengono rifiutate per non rischiare un crash del browser; un'app companion nativa è solo documentata, non inclusa."
+  },
+  "stagesLabel": {
+    "message": "Fasi di avanzamento"
+  },
+  "errFileMissing": {
+    "message": "Il file è stato spostato o eliminato, quindi non può essere aperto."
+  },
+  "errFileUnavailable": {
+    "message": "Questo download non ha un file da aprire."
+  }
+}
