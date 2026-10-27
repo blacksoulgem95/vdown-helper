@@ -1,7 +1,7 @@
 ---
 id: VDH-052
 title: GitHub Pages site and Chrome Web Store images (en + it)
-status: in-progress
+status: done
 priority: P1
 area: docs
 depends_on: [VDH-050, VDH-044]
@@ -20,17 +20,19 @@ PNG/JPEG without alpha.
 
 ## Acceptance criteria
 
-- [ ] `npm run store:assets` renders, per language, 5 screenshots (1280 x 800), the small tile (440 x 280) and the marquee
+- [x] `npm run store:assets` renders, per language, 5 screenshots (1280 x 800), the small tile (440 x 280) and the marquee
       (1400 x 560) from the real extension on a labelled demo page; every file is checked to be that size and 24-bit RGB with no alpha
-- [ ] The site (`site/`) is built by `npm run site:build` from one template and an en/it string table (keys in sync, unit-tested),
+- [x] The site (`site/`) is built by `npm run site:build` from one template and an en/it string table (keys in sync, unit-tested),
       loads nothing from third parties, and works without JavaScript
-- [ ] The primary button points at the Chrome Web Store once `site/config.json` has its URL; until then it says "coming soon" and
+- [x] The primary button points at the Chrome Web Store once `site/config.json` has its URL; until then it says "coming soon" and
       offers the GitHub release with a 3-step install
-- [ ] Copy follows `docs/store-policy.md`: no service names, no "all sites" promise, honest about DRM and the user's responsibility
-- [ ] A Pages workflow deploys `site/` from `main`; site/store-only changes do not publish an extension release
-- [ ] CI green on the PR head
+- [x] Copy follows `docs/store-policy.md`: no service names, no "all sites" promise, honest about DRM and the user's responsibility
+- [x] A Pages workflow deploys `site/` from `main`; site/store-only changes do not publish an extension release
+- [x] CI green on the PR head
 
 ## Notes
+
+- PR #8 merged as `2507446` after CI (`check`, `e2e`) green on `8c8d283` (runs 40340268758, 40340258255) and the full local suite (E2E 112/112); `main` CI run 40430131398 green; Release run 40430131437 published `v1.2.0`. Pages run 40430131463 deployed the site after the owner enabled GitHub Pages.
 
 - GitHub Pages must be switched on once by the owner: Settings -> Pages -> Source: GitHub Actions.
 - No testimonials, ratings or user counts: there are none yet, and inventing them is not allowed.

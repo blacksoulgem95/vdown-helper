@@ -1,7 +1,7 @@
 ---
 id: VDH-055
 title: Streams saved as .txt on Linux (untyped staged file)
-status: in-progress
+status: done
 priority: P0
 area: offscreen
 depends_on: [VDH-047]
@@ -19,11 +19,13 @@ the name ends up `.txt`. The ZIP path handed over an untyped file the same way.
 
 ## Acceptance criteria
 
-- [ ] Every blob handed to Chrome carries the MIME type of its content, never an empty one (unit)
-- [ ] Reproduced with a minimal extension: empty type -> `.txt`, `video/mp2t` -> `.ts` (Chromium on Linux)
-- [ ] `npm run store:assets` drives a real HLS download with Chrome naming the file and fails unless it ends in `.ts`
-- [ ] CI green on the PR head
+- [x] Every blob handed to Chrome carries the MIME type of its content, never an empty one (unit)
+- [x] Reproduced with a minimal extension: empty type -> `.txt`, `video/mp2t` -> `.ts` (Chromium on Linux)
+- [x] `npm run store:assets` drives a real HLS download with Chrome naming the file and fails unless it ends in `.ts`
+- [x] CI green on the PR head
 
 ## Notes
+
+- PR #8 merged as `2507446` after CI (`check`, `e2e`) green on `8c8d283` (runs 40340268758, 40340258255) and the full local suite (E2E 112/112); `main` CI run 40430131398 green; Release run 40430131437 published `v1.2.0`.
 
 - Real-world Windows/macOS behaviour is not reproduced here -> VDH-028.
