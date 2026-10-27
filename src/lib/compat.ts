@@ -18,6 +18,12 @@ export type PlanIssue =
   | 'live-stream'
   | 'unsupported-source';
 
+/**
+ * Not a reason to refuse, only something the user should know before starting. 'large-for-memory': the conversion
+ * runs in browser memory and may not fit; if it does not, the stream is saved as it was downloaded (nothing is lost).
+ */
+export type PlanWarning = 'large-for-memory';
+
 export type Pipeline =
   /** Chrome downloads the URL itself. */
   | 'native'
@@ -83,6 +89,7 @@ export interface Plan {
   extension: string;
   /** Whether an audio bitrate choice affects the result. */
   usesBitrate: boolean;
+  warnings?: PlanWarning[];
 }
 
 const MP4_VIDEO: ReadonlySet<VideoFamily> = new Set(['h264', 'hevc', 'av1', 'vp9', 'mpeg4']);
@@ -306,10 +313,14 @@ export function planOutput(i: PlanInput): Plan {
 /** Applies resource limits and marks the plan valid when no issue remains. */
 function finalize(plan: Plan, i: PlanInput): Plan {
   const issues = [...plan.issues];
+  const warnings = [...(plan.warnings ?? [])];
   const limitBytes = i.limits.maxMemoryMb * 1024 * 1024;
-  // Native downloads and plain concatenation are staged on disk; only FFmpeg holds its output in memory.
+  // Native downloads and plain concatenation are staged on disk; only FFmpeg holds its output in memory. A single
+  // stream is downloaded to disk in full first, so a conversion that cannot fit falls back to saving that file: warn,
+  // never refuse. Two tracks (separate audio) can only become one file through FFmpeg, so there it stays a refusal.
   if (plan.requiresFfmpeg && i.estimatedBytes !== undefined && i.estimatedBytes > limitBytes) {
-    issues.push('too-large');
+    if (i.separateAudio) issues.push('too-large');
+    else warnings.push('large-for-memory');
   }
   if (
     plan.requiresFfmpeg &&
@@ -319,7 +330,7 @@ function finalize(plan: Plan, i: PlanInput): Plan {
   ) {
     issues.push('too-long-to-encode');
   }
-  return { ...plan, issues, valid: issues.length === 0 };
+  return { ...plan, issues, ...(warnings.length ? { warnings } : {}), valid: issues.length === 0 };
 }
 
 /** Audio bitrate options that are meaningful for the given plan. Empty when the choice would have no effect. */

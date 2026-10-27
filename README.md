@@ -220,9 +220,11 @@ code (`npm run check:dist` enforces this).
   recording of a MediaStream is what the browser's `MediaRecorder` encodes. Closing or leaving the tab keeps what had
   been recorded so far. Live recordings leave a visible hole (and a message) where the server had already dropped a
   segment.
-- **Browser memory.** HLS/DASH joined as TS/fMP4 is staged on disk (OPFS), but FFmpeg.wasm holds its output in memory.
-  The default cap is **2048 MB** (Settings); jobs estimated above it are refused with an explanation instead of
-  crashing the tab. ZIP archives obey the same cap. wasm FFmpeg is single-threaded and slow: expect high CPU use on
+- **Browser memory.** HLS/DASH streams are downloaded to disk (OPFS) and saved as **MP4 by default** (re-packaged by
+  FFmpeg.wasm, never re-encoded). FFmpeg.wasm works in browser memory (WebAssembly gets a few GB at most and holds the
+  whole input and output), so the cap in Settings (default **2048 MB**) only warns: a single stream that does not fit is
+  saved as it was downloaded (`.ts`), complete, with a note on the job. Joining **separate** video and audio can only be
+  done in memory, so that one case is refused above the cap. ZIP archives obey the same cap. wasm FFmpeg is single-threaded and slow: expect high CPU use on
   long videos.
 - **Browser-managed downloads.** Chrome chooses the Downloads folder (you can add a sub-folder, or ask "Save as").
   Pause/resume exists only for native downloads; segment/FFmpeg jobs can be cancelled and retried but not paused.
@@ -360,8 +362,8 @@ toolbar icon.
    shows `RECORD`, not `DOWNLOAD`.
 7. **Encryption** — the AES-128 card downloads and the video plays (a wrong key would produce garbage).
 8. **Retry** — "flaky" playlist fails with `HTTP 404`; run `curl -X POST <site>/__flaky/enable`, press retry.
-9. **Large download** — set _Memory limit_ to 128 MB in Settings, then convert anything ≥ 128 MB with MP4 → refused with
-   the explanation; the same stream as TS/original still downloads (disk-backed). With a real multi-GB VOD, confirm the
+9. **Large download** — set _Memory limit_ to 128 MB in Settings, then download anything ≥ 128 MB as MP4 → a warning,
+   then the complete stream is saved as `.ts` with a note on the job (nothing is lost). With a real multi-GB VOD, confirm the
    tab stays responsive and cancel works.
 10. **Opt-in features** — enable _Scan pages automatically_: grant the prompt, reload a page, the icon shows a count.
     Enable _Observe media requests_, open `/pages/worker.html`: the worker's manifest appears with source "Network
@@ -397,7 +399,7 @@ toolbar icon.
 | Job fails: "Blocked by the site's cross-origin policy" | Same cause at download time. Grant access and retry.                                                                                                                                                                      |
 | Job fails with `HTTP 403/410`                          | Signed URLs usually expire. Rescan and start again; if the site needs special headers it is not supported.                                                                                                                |
 | `PROTECTED`                                            | DRM or SAMPLE-AES. Not supported by design.                                                                                                                                                                               |
-| "Estimated size exceeds your memory limit"             | Raise _Memory limit_ (Settings), or choose TS/Original (disk-backed).                                                                                                                                                     |
+| A stream was saved as `.ts` instead of MP4             | It was too large to re-package in browser memory. The video is complete; most players open `.ts`. Raising _Memory limit_ (Settings) lets larger streams become MP4.                                                       |
 | Conversion is slow / fan spins                         | FFmpeg.wasm is single-threaded. Prefer stream-copy options (MP4/MKV) over audio re-encode on long videos.                                                                                                                 |
 | File name looks different from the template            | Names are sanitised; characters Chrome rejects are folded to ASCII; Chrome adds `(1)` if the file exists.                                                                                                                 |
 | Extension errors after update                          | `chrome://extensions` → reload the extension, then reload the page you want to scan.                                                                                                                                      |

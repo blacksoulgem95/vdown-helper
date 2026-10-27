@@ -168,6 +168,8 @@ export interface DownloadJob {
   skipped?: number;
   /** A live recording: segments the server no longer had when they were due (gaps in the recording). */
   gaps?: number;
+  /** Saved as downloaded (e.g. .ts) because converting it did not fit in browser memory. */
+  keptOriginal?: boolean;
   /** Number of times the user retried. */
   attempts: number;
 }

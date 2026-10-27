@@ -15,12 +15,14 @@ import {
   buildZipRequest,
   defaultChoices,
   planFromRequest,
+  workableChoices,
   type Choices,
 } from './request';
 import { planZip } from './zip';
 import { mayExtensionFetch, parseUrl } from './security';
 
-export type StartOutcome = { ok: true; jobId: string } | { ok: false; error: string; needsAccess?: string[] };
+export type StartOutcome =
+  { ok: true; jobId: string; warning?: string } | { ok: false; error: string; needsAccess?: string[] };
 
 const originPatterns = (origins: string[]) => origins.map((o) => `${o}/*`);
 
@@ -104,7 +106,7 @@ export function issueText(issue: string): string {
     case 'audio-codec-container':
       return t('issueAudioCodec');
     case 'too-large':
-      return t('issueTooLarge');
+      return t('issueTooLargeMerge'); // a single stream only warns; two tracks must be joined in memory
     case 'too-long-to-encode':
       return t('issueTooLong');
     case 'protected':
@@ -211,9 +213,19 @@ export async function startFromChoices(
   return res.ok ? { ok: true, jobId: res.jobId } : { ok: false, error: describeError(res.error) };
 }
 
-/** One-click download with the user's defaults. */
+/** One-click download with the user's defaults: MP4 when it can hold the stream, otherwise the original container. */
 export async function quickDownload(resource: MediaResource, settings: Settings): Promise<StartOutcome> {
-  return startFromChoices(resource, settings, defaultChoices(resource, settings));
+  const preferred = defaultChoices(resource, settings);
+  const insp = await inspectForChoices(resource, settings, preferred, true);
+  if (!insp.ok) return { ok: false, error: describeError(insp.error) };
+  const choices = workableChoices(resource, settings, preferred, insp.inspections.video);
+  const out = await startFromChoices(resource, settings, choices, insp.inspections);
+  if (!out.ok) return out;
+  const plan = planFromRequest(buildRequest(resource, settings, choices, insp.inspections.video), {
+    maxMemoryMb: settings.maxMemoryMb,
+    maxEncodeDurationSec: settings.maxEncodeDurationSec,
+  });
+  return plan.warnings?.includes('large-for-memory') ? { ...out, warning: t('warnLargeForMemory') } : out;
 }
 
 export { audioOptions };

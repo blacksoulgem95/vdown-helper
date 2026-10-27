@@ -125,6 +125,8 @@ export type OffscreenEvent =
       gaps?: number;
       /** Extension of the produced file when the pipeline decides it late (a capture). */
       extension?: string;
+      /** The conversion could not be done in browser memory: the stream is saved as it was downloaded. */
+      keptOriginal?: boolean;
       /** A capture split into parts at a quality switch: the other parts, each its own download. */
       extraParts?: Array<{ jobId: string; blobUrl: string; bytes: number; extension: string }>;
     }

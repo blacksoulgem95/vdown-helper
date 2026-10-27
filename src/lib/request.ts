@@ -68,7 +68,9 @@ export function defaultChoices(resource: MediaResource, settings: Settings): Cho
   if (resource.mediaType === 'audio' && (mode === 'video-audio' || mode === 'video-only')) mode = 'original';
   return {
     mode,
-    container: 'original',
+    // Only a segmented stream (HLS/DASH, often MPEG-TS) gets the user's container (MP4 by default): a plain file is saved
+    // as it is, and "Original quality" means the source as it is.
+    container: mode !== 'original' && isSegmented(resource) ? settings.defaultContainer : 'original',
     audioFormat: settings.defaultAudioFormat,
     audioBitrate: settings.defaultAudioBitrate,
     variantIndex: Math.max(variantIndex, 0),
@@ -76,6 +78,29 @@ export function defaultChoices(resource: MediaResource, settings: Settings): Cho
     subtitleOutput: defaultSubtitleOutput(resource),
     filename: '',
   };
+}
+
+const isSegmented = (r: MediaResource): boolean =>
+  r.kind === 'hls-master' || r.kind === 'hls-media' || r.kind === 'dash';
+
+/**
+ * The choices, or the same with the original container when the preferred one cannot work for this stream: MP4 cannot
+ * hold its codecs, or the stream is too large or too long to re-package in browser memory. A one-click download then still
+ * saves the stream (as TS) instead of failing.
+ */
+export function workableChoices(
+  resource: MediaResource,
+  settings: Settings,
+  choices: Choices,
+  inspection?: VariantInspection,
+): Choices {
+  if (choices.container === 'original') return choices;
+  // A stream of fragmented MP4 is saved as .mp4 already: re-packaging it would only cost memory.
+  if (choices.container === 'mp4' && inspection?.fragmented) return { ...choices, container: 'original' };
+  const limits = { maxMemoryMb: settings.maxMemoryMb, maxEncodeDurationSec: settings.maxEncodeDurationSec };
+  if (planFromRequest(buildRequest(resource, settings, choices, inspection), limits).valid) return choices;
+  const kept: Choices = { ...choices, container: 'original' };
+  return planFromRequest(buildRequest(resource, settings, kept, inspection), limits).valid ? kept : choices;
 }
 
 /** Keep the original unless the format is not one we can name (then a converted SRT is the only honest result). */

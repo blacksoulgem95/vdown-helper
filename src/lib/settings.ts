@@ -7,6 +7,7 @@ export const SETTINGS_KEY = 'settings';
 export const DEFAULT_SETTINGS: Settings = {
   schemaVersion: 1,
   defaultMode: 'video-audio',
+  defaultContainer: 'mp4',
   preferredQuality: 'highest',
   defaultAudioFormat: 'mp3',
   defaultAudioBitrate: 192,
@@ -67,6 +68,7 @@ export function sanitizeSettings(raw: unknown): Settings {
   return {
     schemaVersion: 1,
     defaultMode: oneOf(r['defaultMode'], MODES, d.defaultMode),
+    defaultContainer: oneOf(r['defaultContainer'], ['mp4', 'original'] as const, d.defaultContainer),
     preferredQuality: oneOf(r['preferredQuality'], QUALITIES, d.preferredQuality),
     defaultAudioFormat: oneOf(r['defaultAudioFormat'], AUDIO_FORMATS, d.defaultAudioFormat),
     defaultAudioBitrate: oneOf(r['defaultAudioBitrate'], BITRATES, d.defaultAudioBitrate),

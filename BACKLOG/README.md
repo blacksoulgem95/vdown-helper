@@ -69,9 +69,11 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-049](VDH-049-hook-default-and-all-embedded.md) | Page hook on by default, one grant for all embedded players | done | P1 | security | VDH-033 |
 | [VDH-050](VDH-050-popup-funnel.md) | Popup funnel - from opening the popup to the right download in one click | done | P1 | ui | VDH-049 |
 | [VDH-051](VDH-051-mse-player-fix-action.md) | MediaSource players say what is missing and offer the one fix | done | P1 | ui | VDH-049 |
-| [VDH-052](VDH-052-site-and-store-assets.md) | GitHub Pages site and Chrome Web Store images (en + it) | in-progress | P1 | docs | VDH-050, VDH-044 |
-| [VDH-053](VDH-053-observer-misses-requests.md) | Network observer missed requests (sleeping worker, lost writes) | in-progress | P0 | background | VDH-012 |
-| [VDH-054](VDH-054-paste-stream-link.md) | Add a stream link by hand (.m3u8, .m3u, .mpd, media files) | in-progress | P1 | ui | VDH-050 |
-| [VDH-055](VDH-055-ts-saved-as-txt.md) | Streams saved as .txt on Linux (untyped staged file) | in-progress | P0 | offscreen | VDH-047 |
-| [VDH-056](VDH-056-frame-note-and-colon-names.md) | No false "frames could not be inspected" note; colons in titles become " - " in file names | in-progress | P2 | ui | VDH-033 |
-| [VDH-057](VDH-057-settings-flash-defaults.md) | Settings page showed the defaults until the stored settings loaded | in-progress | P2 | ui | VDH-010 |
+| [VDH-052](VDH-052-site-and-store-assets.md) | GitHub Pages site and Chrome Web Store images (en + it) | done | P1 | docs | VDH-050, VDH-044 |
+| [VDH-053](VDH-053-observer-misses-requests.md) | Network observer missed requests (sleeping worker, lost writes) | done | P0 | background | VDH-012 |
+| [VDH-054](VDH-054-paste-stream-link.md) | Add a stream link by hand (.m3u8, .m3u, .mpd, media files) | done | P1 | ui | VDH-050 |
+| [VDH-055](VDH-055-ts-saved-as-txt.md) | Streams saved as .txt on Linux (untyped staged file) | done | P0 | offscreen | VDH-047 |
+| [VDH-056](VDH-056-frame-note-and-colon-names.md) | No false "frames could not be inspected" note; colons in titles become " - " in file names | done | P2 | ui | VDH-033 |
+| [VDH-057](VDH-057-settings-flash-defaults.md) | Settings page showed the defaults until the stored settings loaded | done | P2 | ui | VDH-010 |
+| [VDH-058](VDH-058-frames-wipe-and-scan-hang.md) | A loading frame wiped the page's results; a frame that never finishes loading hung the scan | in-progress | P0 | background | VDH-033 |
+| [VDH-059](VDH-059-mp4-by-default-warn-on-size.md) | Streams saved as MP4 by default; size only warns, never blocks | in-progress | P1 | lib | VDH-050 |

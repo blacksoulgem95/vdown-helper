@@ -64,7 +64,12 @@ export function PopupApp() {
       setFb(r.id, undefined);
       try {
         const out = await quickDownload(r, settings);
-        setFb(r.id, out.ok ? { tone: 'acid', text: t('queuedOk') } : { tone: 'danger', text: out.error });
+        setFb(
+          r.id,
+          out.ok
+            ? { tone: 'acid', text: out.warning ? `${t('queuedOk')} ${out.warning}` : t('queuedOk') }
+            : { tone: 'danger', text: out.error },
+        );
       } finally {
         setBusy(undefined);
       }

@@ -11,7 +11,14 @@ import { bitrateOptions, type Plan } from '@/lib/compat';
 import { t } from '@/lib/i18n';
 import { formatBitrate, formatBytes, formatDuration, qualityTag, resolutionLabel } from '@/lib/media';
 import { send } from '@/lib/messaging';
-import { audioOptions, buildRequest, defaultChoices, planFromRequest, type Choices } from '@/lib/request';
+import {
+  audioOptions,
+  buildRequest,
+  defaultChoices,
+  planFromRequest,
+  workableChoices,
+  type Choices,
+} from '@/lib/request';
 import { redactUrl, parseUrl } from '@/lib/security';
 import {
   inspectForChoices,
@@ -114,6 +121,9 @@ function StudioForm({ resource }: { resource: MediaResource }) {
   const [starting, setStarting] = useState(false);
   const [result, setResult] = useState<{ tone: 'acid' | 'danger'; text: string } | undefined>();
 
+  // Once the stream is inspected, a preferred container that cannot hold it gives way to the original (once, before
+  // the user changes anything).
+  const [fitted, setFitted] = useState(false);
   // Settings load asynchronously: apply the user's defaults once, before they touch anything.
   useEffect(() => {
     if (loaded && !initialised) {
@@ -149,6 +159,13 @@ function StudioForm({ resource }: { resource: MediaResource }) {
     // Re-inspect only when the URLs involved change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resource.id, draft.sourceUrl, draft.audioUrl]);
+
+  useEffect(() => {
+    if (!initialised || fitted || inspecting) return;
+    if (isSegmented && !inspections.video) return;
+    setChoices((c) => workableChoices(resource, settings, c, inspections.video));
+    setFitted(true);
+  }, [initialised, fitted, inspecting, isSegmented, inspections, resource, settings]);
 
   const [origins, setOrigins] = useState<string[]>([]);
   useEffect(() => {
@@ -456,6 +473,14 @@ function StudioForm({ resource }: { resource: MediaResource }) {
             <span className="flex gap-1.5">
               <Cpu size={14} className="mt-px shrink-0" aria-hidden="true" />
               <span>{t('studioFfmpegWarning', settings.maxMemoryMb)}</span>
+            </span>
+          </Notice>
+        )}
+        {valid && plan.warnings?.includes('large-for-memory') && (
+          <Notice tone="magenta">
+            <span className="flex gap-1.5">
+              <TriangleAlert size={14} className="mt-px shrink-0" aria-hidden="true" />
+              <span>{t('warnLargeForMemory')}</span>
             </span>
           </Notice>
         )}

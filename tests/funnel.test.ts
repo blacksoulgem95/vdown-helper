@@ -3,6 +3,9 @@ import { cardHeadline, jobErrorText } from '@/components/labels';
 import { popupQueue } from '@/lib/queue';
 import { bestMatch, rankResources } from '@/lib/resources';
 import { emptyCause } from '@/lib/tabs';
+import { defaultChoices, workableChoices } from '@/lib/request';
+import { DEFAULT_SETTINGS } from '@/lib/settings';
+import type { VariantInspection } from '@/types/messages';
 import type { DownloadJob, JobStage } from '@/types/download';
 import type { HlsVariant } from '@/types/hls';
 import { makeResource } from './helpers';
@@ -132,5 +135,52 @@ describe('emptyCause (VDH-050)', () => {
     expect(emptyCause({ error: false, blockedFrames: 2, reloadPending: true })).toBe('blocked-frames');
     expect(emptyCause({ error: false, blockedFrames: 0, reloadPending: true })).toBe('reload');
     expect(emptyCause({ error: false, blockedFrames: 0, reloadPending: false })).toBe('nothing');
+  });
+});
+
+describe('MP4 by default for streams (VDH-059)', () => {
+  const settings = { ...DEFAULT_SETTINGS };
+  const ts = { durationSec: 60, segmentCount: 10, fragmented: false } as unknown as VariantInspection;
+  const hls = makeResource('https://cdn.example/hls/master.m3u8', {
+    kind: 'hls-master',
+    format: 'hls',
+    variants: [
+      {
+        uri: 'https://cdn.example/hls/720.m3u8',
+        bandwidth: 2e6,
+        height: 720,
+        codecs: 'avc1.64001f,mp4a.40.2',
+      } as HlsVariant,
+    ],
+  });
+  it('a stream defaults to MP4; a plain file and "Original quality" keep the original', () => {
+    expect(defaultChoices(hls, settings).container).toBe('mp4');
+    expect(defaultChoices(hls, { ...settings, defaultContainer: 'original' }).container).toBe('original');
+    expect(defaultChoices(hls, { ...settings, defaultMode: 'original' }).container).toBe('original');
+    const file = makeResource('https://cdn.example/a.webm', { format: 'webm' });
+    expect(defaultChoices(file, settings).container).toBe('original');
+  });
+  it('keeps MP4 for H.264/AAC, even when large (it only warns); falls back when MP4 cannot hold the codecs', () => {
+    const c = defaultChoices(hls, settings);
+    expect(workableChoices(hls, settings, c, ts).container).toBe('mp4');
+    const huge = { ...ts, estimatedBytes: 50 * 1024 ** 3 } as unknown as VariantInspection;
+    expect(workableChoices(hls, settings, c, huge).container).toBe('mp4');
+    const odd = makeResource('https://cdn.example/hls/master.m3u8', {
+      kind: 'hls-master',
+      format: 'hls',
+      variants: [
+        {
+          uri: 'https://cdn.example/hls/v.m3u8',
+          bandwidth: 2e6,
+          height: 720,
+          codecs: 'vp8,vorbis',
+        } as HlsVariant,
+      ],
+    });
+    expect(workableChoices(odd, settings, defaultChoices(odd, settings), ts).container).toBe('original');
+  });
+  it('a fragmented-MP4 stream is already .mp4: no re-packaging', () => {
+    const frag = { ...ts, fragmented: true } as unknown as VariantInspection;
+    expect(workableChoices(hls, settings, defaultChoices(hls, settings), frag).container).toBe('original');
   });
 });
