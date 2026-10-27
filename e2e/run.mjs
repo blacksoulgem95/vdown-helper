@@ -369,6 +369,13 @@ await step(
     await until(async () => (await jobs()).length > before, 'the best match queued with one click', 15000);
     const job = (await jobs()).find((j) => j.request.resourceId === r.id);
     assert(job, 'the queued job is the best match');
+    // One click on an HLS stream of MPEG-TS gives a real MP4 (re-packaged, not re-encoded), not a .ts file.
+    const done = await jobFinished((j) => j.id === job.id, 120000);
+    assert(done.stage === 'completed', `${done.stage} ${JSON.stringify(done.error)}`);
+    assert(done.request.filename.endsWith('.mp4'), `saved as ${done.request.filename}`);
+    const p = probe(fileOf(done));
+    assert(/mp4/.test(p.format) && p.codecs.includes('h264'), `${p.format} ${p.codecs}`);
+    assert(decodeErrors(fileOf(done)) === '', 'the MP4 must decode cleanly');
   },
 );
 
@@ -1158,7 +1165,7 @@ await step("a failing native download reports Chrome's reason", async () => {
 });
 
 await step(
-  'memory guard: a stream bigger than the limit is stopped at runtime with a clear error (no crash)',
+  'memory guard: a stream too large to convert in memory is saved as downloaded (.ts) with a note, never lost',
   async () => {
     await ext(() => chrome.storage.local.set({ settings: { schemaVersion: 1, maxMemoryMb: 128 } }));
     const res = await send({
@@ -1169,30 +1176,14 @@ await step(
       container: 'mp4',
     });
     assert(res.ok, JSON.stringify(res));
-    const job = await jobFinished((j) => j.request.filename === 'big.mp4', 120000);
+    const job = await jobFinished((j) => j.request.filename.startsWith('big.'), 180000);
     assert(
-      job.stage === 'failed' && job.error.code === 'too-large',
-      `got ${job.stage} ${JSON.stringify(job.error)}`,
+      job.stage === 'completed' && job.keptOriginal === true && job.request.filename === 'big.ts',
+      `got ${job.stage} ${job.request.filename} ${JSON.stringify(job.error)}`,
     );
-    const row = queuePopup.locator('li', { hasText: 'big.mp4' });
-    assert(
-      (await row.getByRole('alert').innerText()).includes('memory limit'),
-      'message should explain the memory limit',
-    );
-    // The same stream as plain TS is disk-backed and is not limited.
-    const ts = await send({
-      ...baseRequest,
-      resourceId: 'big',
-      sourceUrl: `${A}/big/index.m3u8`,
-      filename: 'big.ts',
-      container: 'ts',
-    });
-    assert(ts.ok, JSON.stringify(ts));
-    const done = await jobFinished((j) => j.request.filename === 'big.ts', 120000);
-    assert(
-      done.stage === 'completed' && statSync(fileOf(done)).size === 140 * 1024 * 1024,
-      `TS passthrough ${done.stage} ${JSON.stringify(done.error)}`,
-    );
+    assert(statSync(fileOf(job)).size === 140 * 1024 * 1024, 'the whole stream must be saved');
+    const row = queuePopup.locator('li', { hasText: 'big.ts' });
+    assert((await row.innerText()).includes('too large to convert to MP4'), 'the job must say why it is .ts');
     await ext(() => chrome.storage.local.set({ settings: { schemaVersion: 1 } }));
   },
 );
@@ -3539,6 +3530,62 @@ for (const kind of ['hls', 'dash']) {
     },
   );
 }
+
+await step(
+  "a frame added after load keeps the page's results, and a frame that never finishes loading cannot hang the scan",
+  async () => {
+    const lp = await ctx.newPage();
+    await lp.goto(`${A}/pages/frames-late.html`);
+    const lid = await tabOf(`${A}/pages/frames-late.html`);
+    const first = await scanTab(lid);
+    const mp4 = first.st.resources.find((r) => r.url.endsWith('/media/sample.mp4'));
+    assert(mp4, `top clip not found: ${first.st.resources.map((r) => r.url).join(', ')}`);
+    await first.pop.close();
+
+    // 1. A player frame appears after load (the tab goes "loading" again): the page's results must stay.
+    assert(await lp.evaluate((u) => window.addFrame(u), `${C}/pages/frames-mid.html`), 'frame did not load');
+    await lp.waitForTimeout(800);
+    const kept = await stateFor(lid);
+    assert(
+      kept?.resources?.some((r) => r.id === mp4.id),
+      `the page's results were wiped when a frame loaded: ${JSON.stringify(kept && { status: kept.status, n: kept.resources.length })}`,
+    );
+
+    // 2. A frame that never finishes loading: the scan still ends, with what could be read.
+    await lp.evaluate((u) => window.addFrame(u), `${A}/__hangpage`);
+    const t0 = Date.now();
+    const pop = await openPopup(lid);
+    try {
+      await pop.getByRole('status').filter({ hasText: 'READY' }).waitFor({ timeout: 55000 });
+    } catch (e) {
+      const s = await stateFor(lid);
+      console.log(
+        `        state after the wait: ${JSON.stringify(s && { status: s.status, error: s.error, n: s.resources.length })}`,
+      );
+      console.log(`        popup says: ${(await pop.locator('header').innerText()).replace(/\s+/g, ' ')}`);
+      console.log(
+        `        worker log: ${consoleLog
+          .slice(-5)
+          .map((c) => c.text)
+          .join(' | ')}`,
+      );
+      throw e;
+    }
+    const st = await stateFor(lid);
+    assert(st.status === 'ready', `status ${st.status} ${st.error ?? ''}`);
+    assert(
+      st.resources.some((r) => r.id === mp4.id),
+      'top clip missing after the scan',
+    );
+    assert(
+      st.resources.some((r) => r.url === `${C}/media/sample.mp4`),
+      `the late player frame was not scanned: ${st.resources.map((r) => r.url).join(', ')}`,
+    );
+    console.log(`        scan with a never-loading frame took ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+    await pop.close();
+    await lp.close();
+  },
+);
 
 await step('frames the extension cannot enter are listed by origin, with an "allow" button', async () => {
   const bp = await ctx.newPage();

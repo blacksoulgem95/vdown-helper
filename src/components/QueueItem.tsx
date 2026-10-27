@@ -92,6 +92,11 @@ export function QueueItem({
           {t('jobSkipped', job.skipped)}
         </p>
       ) : null}
+      {done && job.keptOriginal ? (
+        <p role="status" className="mt-1.5 text-[11px] leading-snug text-magenta">
+          {t('jobKeptOriginal')}
+        </p>
+      ) : null}
       {done && job.gaps ? (
         <p role="status" className="mt-1.5 text-[11px] leading-snug text-magenta">
           {t('jobGaps', job.gaps)}

@@ -228,7 +228,9 @@ async function execute(
 ): Promise<void> {
   const { signal } = entry.abort;
   const send = makeProgressSender(jobId);
-  const maxBytes = plan.requiresFfmpeg ? plan.maxMemoryMb * MB : undefined;
+  // Two tracks can only become one file in FFmpeg's memory, so their download is capped there. A single stream is
+  // downloaded to disk in full: if it is then too large to convert, it is saved as it is (see keepOriginal below).
+  const maxBytes = plan.requiresFfmpeg && req.audioUrl !== undefined ? plan.maxMemoryMb * MB : undefined;
   const credentialedOrigins = req.credentialedOrigins ?? [];
   // A recording is not a download: its stage (RECORDING) starts when the page has begun to record.
   if (plan.pipeline !== 'record' && plan.pipeline !== 'live') stage(jobId, 'downloading');
@@ -484,32 +486,62 @@ async function execute(
     return;
   }
 
+  // A single stream that cannot be converted in browser memory is saved as it was downloaded, with a note on the job.
+  // The staged stream is named after what it holds (video.ts, or video.mp4 for fragmented MP4).
+  const original = videoFile.name.split('.').pop() === 'mp4' ? 'mp4' : 'ts';
+  const keepOriginal = () => {
+    entry.blobUrl = URL.createObjectURL(typed(videoFile, original));
+    emit({
+      channel: 'vdown-offscreen-event',
+      type: 'ready',
+      jobId,
+      blobUrl: entry.blobUrl,
+      bytes: videoFile.size,
+      extension: original,
+      keptOriginal: true,
+    });
+  };
+  const canKeep = !audioFile && (req.isHls || req.isDash === true);
+  if (canKeep && videoFile.size > plan.maxMemoryMb * MB) {
+    log.warn('too large to convert in browser memory: keeping the stream as downloaded');
+    return keepOriginal();
+  }
+
   // 3. FFmpeg: copy/merge ("merging") or audio re-encode ("encoding").
   const reencodes = plan.audio === 'transcode' || plan.video === 'transcode';
   stage(jobId, reencodes ? 'encoding' : 'merging');
   const output = `out.${plan.extension}`;
   const inputs = audioFile ? [videoFile, audioFile] : [videoFile];
-  const data = await runFfmpeg({
-    inputs,
-    output,
-    signal,
-    ...(durationSec !== undefined ? { durationSec } : {}),
-    onProgress: (fraction) => send(fraction === undefined ? {} : { fraction }),
-    args: (paths) =>
-      buildFfmpegArgs({
-        mode: req.mode,
-        extension: plan.extension,
-        video: plan.video,
-        audio: plan.audio,
-        videoPath: paths[0] as string,
-        ...(paths[1] ? { audioPath: paths[1] } : {}),
-        audioFormat: req.audioFormat,
-        audioBitrate: req.audioBitrate,
-        output,
-      }),
-  });
+  let data: Uint8Array;
+  try {
+    data = await runFfmpeg({
+      inputs,
+      output,
+      signal,
+      ...(durationSec !== undefined ? { durationSec } : {}),
+      onProgress: (fraction) => send(fraction === undefined ? {} : { fraction }),
+      args: (paths) =>
+        buildFfmpegArgs({
+          mode: req.mode,
+          extension: plan.extension,
+          video: plan.video,
+          audio: plan.audio,
+          videoPath: paths[0] as string,
+          ...(paths[1] ? { audioPath: paths[1] } : {}),
+          audioFormat: req.audioFormat,
+          audioBitrate: req.audioBitrate,
+          output,
+        }),
+    });
+    if (data.byteLength === 0) throw new PipelineError('ffmpeg', 'FFmpeg produced an empty file');
+  } catch (e) {
+    if (signal.aborted || asPipelineError(e) instanceof CancelledError) throw new CancelledError();
+    // The download is on disk: a conversion that fails (out of memory, an odd stream) still leaves a usable file.
+    if (!canKeep) throw e;
+    log.warn('conversion failed, keeping the stream as downloaded:', asPipelineError(e).message);
+    return keepOriginal();
+  }
   if (signal.aborted) throw new CancelledError();
-  if (data.byteLength === 0) throw new PipelineError('ffmpeg', 'FFmpeg produced an empty file');
   // The staged inputs are no longer needed; the result lives in memory until Chrome has saved it.
   const blob = new Blob([data as Uint8Array<ArrayBuffer>], {
     type: MIME_BY_EXTENSION[plan.extension] ?? 'application/octet-stream',

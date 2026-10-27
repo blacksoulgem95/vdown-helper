@@ -177,11 +177,19 @@ describe('HLS', () => {
 });
 
 describe('resource limits', () => {
-  it('blocks FFmpeg jobs over the memory limit, but not native downloads or disk-backed concatenation', () => {
+  it('warns (never blocks) when one stream may not fit in memory to convert; blocks only joining two tracks', () => {
     const big = 3 * 1024 ** 3;
     const hls = { isHls: true, sourceFormat: 'hls' as const, estimatedBytes: big };
-    expect(planOutput(input({ ...hls, container: 'mp4' })).issues).toContain('too-large');
-    expect(planOutput(input({ ...hls, container: 'ts' })).valid).toBe(true);
+    // one stream: downloaded to disk in full, so a conversion that cannot fit falls back to saving it as it is
+    const mp4 = planOutput(input({ ...hls, container: 'mp4' }));
+    expect(mp4.valid).toBe(true);
+    expect(mp4.warnings).toEqual(['large-for-memory']);
+    // separate video and audio can only become one file in FFmpeg's memory
+    expect(planOutput(input({ ...hls, container: 'mp4', separateAudio: true })).issues).toContain(
+      'too-large',
+    );
+    // disk-backed paths never warn
+    expect(planOutput(input({ ...hls, container: 'ts' })).warnings).toBeUndefined();
     expect(planOutput(input({ estimatedBytes: big })).valid).toBe(true);
   });
   it('blocks encodes longer than the configured limit', () => {

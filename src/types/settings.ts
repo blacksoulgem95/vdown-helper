@@ -5,6 +5,11 @@ export type QualityPreset = 'highest' | '2160' | '1440' | '1080' | '720' | '480'
 export interface Settings {
   schemaVersion: 1;
   defaultMode: OutputMode;
+  /**
+   * Container of a one-click video download. 'mp4' re-packages the stream (never re-encodes it) so the file plays
+   * everywhere; when MP4 cannot hold the codecs or the stream is too large to re-package in memory, the original is kept.
+   */
+  defaultContainer: 'mp4' | 'original';
   preferredQuality: QualityPreset;
   defaultAudioFormat: AudioFormat;
   defaultAudioBitrate: AudioBitrate;

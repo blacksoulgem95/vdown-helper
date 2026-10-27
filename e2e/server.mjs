@@ -118,6 +118,13 @@ export function startServers(root, pagesDir) {
       path = path.slice('/__norange'.length);
       ignoreRange = true;
     }
+    // /__hangpage: an HTML page that starts but never finishes loading (a frame that stays "loading" forever, like a
+    // player page that keeps a connection open).
+    if (path === '/__hangpage') {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.write('<!doctype html><html><head><title>never finishes</title></head><body><p>loading…</p>');
+      return;
+    }
     // /__stall/<path>: sends the first bytes, then goes silent.
     if (origin === 'A' && path.startsWith('/__stall/')) {
       res.writeHead(200, { 'Content-Type': 'video/mp2t', 'Content-Length': 1000000 });

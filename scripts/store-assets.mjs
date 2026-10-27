@@ -209,12 +209,12 @@ async function capture(lang, raw) {
       'a finished download',
       120000,
     );
-    // Chrome names the file as a user would get it: it must keep the extension the extension asked for.
+    // Chrome names the file as a user would get it: a stream is saved as MP4 by default (re-packaged, not re-encoded).
     const saved = await until(
       () => readdirSync(downloads).find((f) => f.includes('[1080p]') && !f.endsWith('.crdownload')),
       'the saved file',
     );
-    if (!saved.endsWith('.ts')) throw new Error(`the stream was saved as "${saved}", expected .ts`);
+    if (!saved.endsWith('.mp4')) throw new Error(`the stream was saved as "${saved}", expected .mp4`);
     await pop.close();
     pop = await openPopup(demo.id);
     await shot(pop, 'popup-after');

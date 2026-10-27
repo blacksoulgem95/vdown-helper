@@ -1045,5 +1045,26 @@
   },
   "addLinkButton": {
     "message": "ADD"
+  },
+  "jobKeptOriginal": {
+    "message": "Saved as downloaded (.ts): it was too large to convert to MP4 in browser memory. The video is complete; most players open it."
+  },
+  "warnLargeForMemory": {
+    "message": "Large stream: converting it to MP4 happens in browser memory. If it does not fit, it is saved as .ts instead — nothing is lost."
+  },
+  "optDefaultContainer": {
+    "message": "Default video container"
+  },
+  "optDefaultContainerHint": {
+    "message": "MP4 plays everywhere: streams are re-packaged, never re-encoded. When MP4 cannot hold a stream, the original container is kept."
+  },
+  "containerMp4Default": {
+    "message": "MP4 (recommended)"
+  },
+  "containerKeepDefault": {
+    "message": "Keep the original (e.g. .ts)"
+  },
+  "issueTooLargeMerge": {
+    "message": "Joining separate video and audio happens in browser memory, and this stream is larger than the memory limit in Settings."
   }
 }

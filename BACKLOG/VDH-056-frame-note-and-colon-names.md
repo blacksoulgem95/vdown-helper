@@ -1,7 +1,7 @@
 ---
 id: VDH-056
 title: No false "frames could not be inspected" note; colons in titles become " - " in file names
-status: in-progress
+status: done
 priority: P2
 area: ui
 depends_on: [VDH-033]
@@ -21,6 +21,10 @@ Both found while making the store screenshots.
 
 ## Acceptance criteria
 
-- [ ] The note counts only frames nobody could read (unit: one embed scanned and one ad frame not; A -> C -> D all scanned)
-- [ ] "Live: the show" -> "Live - the show"; other illegal characters unchanged (unit)
-- [ ] CI green on the PR head
+- [x] The note counts only frames nobody could read (unit: one embed scanned and one ad frame not; A -> C -> D all scanned)
+- [x] "Live: the show" -> "Live - the show"; other illegal characters unchanged (unit)
+- [x] CI green on the PR head
+
+## Notes
+
+- PR #8 merged as `2507446` after CI (`check`, `e2e`) green on `8c8d283` (runs 40340268758, 40340258255) and the full local suite (E2E 112/112); `main` CI run 40430131398 green; Release run 40430131437 published `v1.2.0`.

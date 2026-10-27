@@ -477,6 +477,7 @@ export async function handleOffscreenEvent(ev: OffscreenEvent): Promise<void> {
             chromeDownloadId: downloadId,
             ...(ev.skipped && part.id === ev.jobId ? { skipped: ev.skipped } : {}),
             ...(ev.gaps && part.id === ev.jobId ? { gaps: ev.gaps } : {}),
+            ...(ev.keptOriginal && part.id === ev.jobId ? { keptOriginal: true } : {}),
           }));
           startPolling();
         } catch (e) {

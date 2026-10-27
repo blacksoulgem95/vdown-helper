@@ -142,6 +142,16 @@ export function OptionsApp() {
                   ]}
                 />
                 <SelectField
+                  label={t('optDefaultContainer')}
+                  hint={t('optDefaultContainerHint')}
+                  value={settings.defaultContainer}
+                  onChange={(e) => void update({ defaultContainer: e.target.value as 'mp4' | 'original' })}
+                  options={[
+                    { value: 'mp4', label: t('containerMp4Default') },
+                    { value: 'original', label: t('containerKeepDefault') },
+                  ]}
+                />
+                <SelectField
                   label={t('optPreferredQuality')}
                   hint={t('optPreferredQualityHint')}
                   value={settings.preferredQuality}

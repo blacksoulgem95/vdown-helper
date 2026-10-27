@@ -2,7 +2,8 @@ import { registerHandlers } from '@/lib/messaging';
 import { SETTINGS_KEY, loadSettings, runMigrations } from '@/lib/settings';
 import { isExtensionPage, isSafeFetchUrl, log } from '@/lib/security';
 import type { OffscreenEvent } from '@/types/messages';
-import { inspectVariant, rescanTab, scanTab } from './detect';
+import { forgetTab, inspectVariant, rescanTab, scanTab } from './detect';
+import { sameDocument } from '@/lib/deadline';
 import { addManual, manualUrl } from './manual';
 import { listJobs } from './jobStore';
 import { syncHook } from './hooks';
@@ -56,9 +57,18 @@ chrome.downloads.onChanged.addListener((delta) => {
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.status === 'loading') {
-    void clearTabState(tabId);
-    void chrome.action.setBadgeText({ tabId, text: '' }).catch(() => undefined);
+  // A new page in the tab: forget the old one. Only a change of the top document's address counts: Chrome also reports
+  // the tab as "loading" while a frame loads (a player appearing after a click), and that used to wipe the page's results,
+  // the requests the network observer had seen and the links the user had added.
+  if (changeInfo.url !== undefined) {
+    const url = changeInfo.url;
+    void (async () => {
+      const previous = (await getTabState(tabId))?.pageUrl;
+      if (previous !== undefined && sameDocument(previous, url)) return;
+      forgetTab(tabId);
+      await clearTabState(tabId);
+      await chrome.action.setBadgeText({ tabId, text: '' }).catch(() => undefined);
+    })();
   }
   if (changeInfo.status === 'complete' && tab.url && isSafeFetchUrl(tab.url)) {
     void (async () => {
