@@ -63,6 +63,7 @@ describe('redaction', () => {
 describe('sanitizeFilename', () => {
   it('replaces illegal characters and collapses whitespace', () => {
     expect(sanitizeFilename('a<b>c:d"e/f\\g|h?i*j   k')).toBe('a_b_c_d_e_f_g_h_i_j k');
+    expect(sanitizeFilename('Live: the show · Site')).toBe('Live - the show · Site');
   });
   it('strips control and bidi override characters', () => {
     expect(sanitizeFilename('ab\u0000c\u202ed.mp4')).toBe('ab_c_d.mp4');

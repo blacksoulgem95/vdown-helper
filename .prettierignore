@@ -5,3 +5,6 @@ BACKLOG
 e2e/.tmp
 docs/screenshots
 _locales
+site/dist
+store/.tmp
+store-assets

@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="{{lang}}">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{t:meta.title}}</title>
+    <meta name="description" content="{{t:meta.description}}" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#080a12" />
+    <link rel="canonical" href="{{canonical}}" />
+    <link rel="alternate" hreflang="en" href="{{siteUrl}}" />
+    <link rel="alternate" hreflang="it" href="{{siteUrl}}it/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="{{t:meta.title}}" />
+    <meta property="og:description" content="{{t:meta.description}}" />
+    <meta property="og:image" content="{{siteUrl}}shots/{{lang}}/marquee.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="{{root}}assets/logo.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="{{root}}assets/site.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">{{t:nav.features}}</a>
+    <header class="nav">
+      <div class="wrap nav-in">
+        <a class="brand" href="{{root}}{{homePath}}"
+          ><img src="{{root}}assets/logo.svg" width="28" height="28" alt="" /><span>vdown-helper</span></a
+        >
+        <nav aria-label="vdown-helper">
+          <a href="#features">{{t:nav.features}}</a>
+          <a href="#privacy">{{t:nav.privacy}}</a>
+          <a href="#install">{{t:nav.install}}</a>
+          <a href="#faq">{{t:nav.faq}}</a>
+        </nav>
+        <a
+          class="lang"
+          href="{{switchHref}}"
+          hreflang="{{switchLang}}"
+          lang="{{switchLang}}"
+          aria-label="{{t:nav.switchLabel}}"
+          >{{t:nav.switch}}</a
+        >
+        <a class="btn btn-sm" href="{{ctaHref}}">{{t:cta.small}}</a>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="wrap hero-in">
+          <div class="hero-copy">
+            <p class="badge"><span class="dot"></span>{{t:hero.badge}}</p>
+            <h1>{{t:hero.title1}}<br /><span class="hl">{{t:hero.title2}}</span></h1>
+            <p class="lead">{{t:hero.body}}</p>
+            <div class="ctas">
+              <a class="btn btn-lg" href="{{ctaHref}}">{{ctaLabel}}</a>
+              <a class="btn btn-ghost btn-lg" href="#features">{{t:cta.how}} ↓</a>
+            </div>
+            <p class="note">{{t:cta.note}}</p>
+            <!--if:nostore-->
+            <p class="note soon">{{t:cta.storeSoon}}</p>
+            <!--endif:nostore-->
+          </div>
+          <div class="hero-art">
+            <img
+              src="{{shots}}hero.webp"
+              width="1300"
+              height="760"
+              alt="{{t:hero.alt}}"
+              fetchpriority="high"
+            />
+          </div>
+        </div>
+      </section>
+
+      <section class="proof" aria-label="vdown-helper">
+        <div class="wrap proof-in">
+          <div><b>0</b><span>{{t:proof.trackers}}</span></div>
+          <div><b>0</b><span>{{t:proof.accounts}}</span></div>
+          <div><b>0</b><span>{{t:proof.reencode}}</span></div>
+          <div><b>{{checks}}</b><span>{{t:proof.checks}}</span></div>
+        </div>
+      </section>
+
+      <section class="pain">
+        <div class="wrap narrow">
+          <h2>{{t:pain.title}}</h2>
+          <p>{{t:pain.body}}</p>
+        </div>
+      </section>
+
+      <section id="features" class="features">
+        <div class="wrap">
+          <article class="row">
+            <div class="copy">
+              <p class="eyebrow">01 · {{t:f1.eyebrow}}</p>
+              <h3>{{t:f1.title}}</h3>
+              <p>{{t:f1.body}}</p>
+            </div>
+            <figure class="ui">
+              <img
+                src="{{shots}}popup-detect.webp"
+                width="840"
+                height="1200"
+                loading="lazy"
+                alt="{{t:f1.alt}}"
+              />
+            </figure>
+          </article>
+          <article class="row flip">
+            <div class="copy">
+              <p class="eyebrow">02 · {{t:f2.eyebrow}}</p>
+              <h3>{{t:f2.title}}</h3>
+              <p>{{t:f2.body}}</p>
+            </div>
+            <figure class="ui ui-tall">
+              <img src="{{shots}}studio.webp" width="880" height="2000" loading="lazy" alt="{{t:f2.alt}}" />
+            </figure>
+          </article>
+          <article class="row">
+            <div class="copy">
+              <p class="eyebrow">03 · {{t:f3.eyebrow}}</p>
+              <h3>{{t:f3.title}}</h3>
+              <p>{{t:f3.body}}</p>
+            </div>
+            <figure class="ui">
+              <img
+                src="{{shots}}popup-queue.webp"
+                width="840"
+                height="1200"
+                loading="lazy"
+                alt="{{t:f3.alt}}"
+              />
+            </figure>
+          </article>
+          <article class="row flip">
+            <div class="copy">
+              <p class="eyebrow">04 · {{t:f4.eyebrow}}</p>
+              <h3>{{t:f4.title}}</h3>
+              <p>{{t:f4.body}}</p>
+            </div>
+            <figure class="ui">
+              <img
+                src="{{shots}}popup-live.webp"
+                width="840"
+                height="1200"
+                loading="lazy"
+                alt="{{t:f4.alt}}"
+              />
+            </figure>
+          </article>
+          <article class="row">
+            <div class="copy">
+              <p class="eyebrow">05 · {{t:f5.eyebrow}}</p>
+              <h3>{{t:f5.title}}</h3>
+              <p>{{t:f5.body}}</p>
+            </div>
+            <figure class="ui">
+              <img
+                src="{{shots}}popup-members.webp"
+                width="840"
+                height="1200"
+                loading="lazy"
+                alt="{{t:f5.alt}}"
+              />
+            </figure>
+          </article>
+        </div>
+      </section>
+
+      <section class="grid-sec">
+        <div class="wrap">
+          <h2 class="center">{{t:grid.title}}</h2>
+          <ul class="grid">
+            <li>
+              <h4>{{t:grid.files}}</h4>
+              <p>{{t:grid.filesBody}}</p>
+            </li>
+            <li>
+              <h4>{{t:grid.hls}}</h4>
+              <p>{{t:grid.hlsBody}}</p>
+            </li>
+            <li>
+              <h4>{{t:grid.dash}}</h4>
+              <p>{{t:grid.dashBody}}</p>
+            </li>
+            <li>
+              <h4>{{t:grid.mse}}</h4>
+              <p>{{t:grid.mseBody}}</p>
+            </li>
+            <li>
+              <h4>{{t:grid.live}}</h4>
+              <p>{{t:grid.liveBody}}</p>
+            </li>
+            <li>
+              <h4>{{t:grid.streams}}</h4>
+              <p>{{t:grid.streamsBody}}</p>
+            </li>
+            <li>
+              <h4>{{t:grid.subs}}</h4>
+              <p>{{t:grid.subsBody}}</p>
+            </li>
+            <li>
+              <h4>{{t:grid.zip}}</h4>
+              <p>{{t:grid.zipBody}}</p>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="privacy" class="privacy">
+        <div class="wrap">
+          <p class="eyebrow center">{{t:privacy.eyebrow}}</p>
+          <h2 class="center">{{t:privacy.title}}</h2>
+          <ul class="pillars">
+            <li>
+              <h4>{{t:privacy.p1}}</h4>
+              <p>{{t:privacy.p1b}}</p>
+            </li>
+            <li>
+              <h4>{{t:privacy.p2}}</h4>
+              <p>{{t:privacy.p2b}}</p>
+            </li>
+            <li>
+              <h4>{{t:privacy.p3}}</h4>
+              <p>{{t:privacy.p3b}}</p>
+            </li>
+            <li>
+              <h4>{{t:privacy.p4}}</h4>
+              <p>{{t:privacy.p4b}}</p>
+            </li>
+          </ul>
+          <div class="limits">
+            <h3>{{t:limits.title}}</h3>
+            <ul>
+              <li>{{t:limits.drm}}</li>
+              <li>{{t:limits.auth}}</li>
+              <li>{{t:limits.extractors}}</li>
+              <li>{{t:limits.rights}}</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section id="install" class="install">
+        <div class="wrap">
+          <h2 class="center">{{t:install.title}}</h2>
+          <!--if:store-->
+          <div class="store">
+            <h3>{{t:install.storeTitle}}</h3>
+            <p>{{t:install.storeBody}}</p>
+            <a class="btn btn-lg" href="{{storeUrl}}">{{t:cta.store}}</a>
+          </div>
+          <!--endif:store-->
+          <!--if:nostore-->
+          <p class="center note">{{t:cta.storeSoon}}</p>
+          <ol class="steps">
+            <li>
+              <span class="n">1</span>
+              <h4>{{t:install.s1}}</h4>
+              <p>{{t:install.s1b}}</p>
+              <a class="btn" href="{{downloadUrl}}">{{t:cta.download}}</a>
+            </li>
+            <li>
+              <span class="n">2</span>
+              <h4>{{t:install.s2}}</h4>
+              <p>{{t:install.s2b}}</p>
+            </li>
+            <li>
+              <span class="n">3</span>
+              <h4>{{t:install.s3}}</h4>
+              <p>{{t:install.s3b}}</p>
+              <code>chrome://extensions</code>
+            </li>
+          </ol>
+          <p class="center"><a class="link" href="{{releasesUrl}}">{{t:install.all}} →</a></p>
+          <!--endif:nostore-->
+        </div>
+      </section>
+
+      <section id="faq" class="faq">
+        <div class="wrap narrow">
+          <h2 class="center">{{t:faq.title}}</h2>
+          <details>
+            <summary>{{t:faq.q1}}</summary>
+            <p>{{t:faq.a1}}</p>
+          </details>
+          <details>
+            <summary>{{t:faq.q2}}</summary>
+            <p>{{t:faq.a2}}</p>
+          </details>
+          <details>
+            <summary>{{t:faq.q3}}</summary>
+            <p>{{t:faq.a3}}</p>
+          </details>
+          <details>
+            <summary>{{t:faq.q4}}</summary>
+            <p>{{t:faq.a4}}</p>
+          </details>
+          <details>
+            <summary>{{t:faq.q5}}</summary>
+            <p>{{t:faq.a5}}</p>
+          </details>
+          <details>
+            <summary>{{t:faq.q6}}</summary>
+            <p>{{t:faq.a6}}</p>
+          </details>
+          <details>
+            <summary>{{t:faq.q7}}</summary>
+            <p>{{t:faq.a7}}</p>
+          </details>
+        </div>
+      </section>
+
+      <section class="final">
+        <div class="wrap narrow center">
+          <h2>{{t:final.title}}</h2>
+          <p class="lead">{{t:final.body}}</p>
+          <a class="btn btn-lg" href="{{ctaHref}}">{{ctaLabel}}</a>
+          <p class="note">{{t:cta.note}}</p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <div class="wrap foot-in">
+        <div class="brand">
+          <img src="{{root}}assets/logo.svg" width="22" height="22" alt="" /><span>vdown-helper</span>
+        </div>
+        <nav aria-label="links">
+          <a href="{{repoUrl}}">{{t:footer.source}}</a>
+          <a href="{{releasesUrl}}">{{t:footer.releases}}</a>
+          <a href="{{repoUrl}}/blob/main/LICENSE">{{t:footer.license}}</a>
+          <a href="{{switchHref}}" hreflang="{{switchLang}}" lang="{{switchLang}}">{{t:nav.switch}}</a>
+        </nav>
+        <p>{{t:footer.disclaimer}}</p>
+        <p class="clean">{{t:footer.clean}}</p>
+      </div>
+    </footer>
+  </body>
+</html>

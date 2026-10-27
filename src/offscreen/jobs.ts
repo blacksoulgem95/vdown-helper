@@ -191,6 +191,17 @@ async function recordLive(
   });
 }
 
+/**
+ * A staged file with the MIME type of what it holds. Files on disk (OPFS) carry no type, and Chrome then sniffs the
+ * bytes: an MPEG-TS file looks like nothing it knows, becomes text/plain, and on Linux "video.ts" was saved as
+ * "video.txt". The Blob only references the file; nothing is copied.
+ */
+export function typed(file: Blob, extension: string): Blob {
+  const type =
+    extension === 'zip' ? 'application/zip' : (MIME_BY_EXTENSION[extension] ?? 'application/octet-stream');
+  return file.type === type ? file : new Blob([file], { type });
+}
+
 /** The file extension of a recorder's output type. */
 export function recordingExtension(mime: string): string {
   const mp4 = /mp4/i.test(mime);
@@ -371,7 +382,7 @@ async function execute(
   if (plan.pipeline === 'zip') {
     const zipped = await buildZip(jobId, req, plan.maxMemoryMb, signal, send);
     if (signal.aborted) throw new CancelledError();
-    entry.blobUrl = URL.createObjectURL(zipped.file);
+    entry.blobUrl = URL.createObjectURL(typed(zipped.file, 'zip'));
     emit({
       channel: 'vdown-offscreen-event',
       type: 'ready',
@@ -462,7 +473,7 @@ async function execute(
 
   // 2. Concatenation needs no processing: hand the disk-backed file straight to Chrome.
   if (!plan.requiresFfmpeg) {
-    entry.blobUrl = URL.createObjectURL(videoFile);
+    entry.blobUrl = URL.createObjectURL(typed(videoFile, plan.extension));
     emit({
       channel: 'vdown-offscreen-event',
       type: 'ready',

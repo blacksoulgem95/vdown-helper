@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en" data-it-title="Dentro l'insieme di Mandelbrot · Demo Gallery">
+  <head>
+    <meta charset="utf-8" />
+    <title>Into the Mandelbrot set · Demo Gallery</title>
+    <meta property="og:title" content="Into the Mandelbrot set" />
+    <link rel="stylesheet" href="demo.css" />
+  </head>
+  <body>
+    <header>
+      <div class="brand">Demo<span>Gallery</span></div>
+      <span class="demo" data-it="Pagina demo">Demo page</span>
+      <nav>
+        <span data-it="Esplora">Explore</span><span data-it="Raccolte">Collections</span
+        ><span data-it="Info">About</span>
+      </nav>
+    </header>
+    <main>
+      <section>
+        <video
+          id="v"
+          controls
+          muted
+          preload="metadata"
+          title="Into the Mandelbrot set"
+          data-it-attr-title="Dentro l'insieme di Mandelbrot"
+          poster="/demo/poster.jpg"
+          src="/demo/aurora-1080.mp4"
+        >
+          <track kind="subtitles" src="/demo/subs/en.vtt" srclang="en" label="English" default />
+          <track kind="subtitles" src="/demo/subs/it.vtt" srclang="it" label="Italiano" />
+        </video>
+        <h1 data-it="Dentro l'insieme di Mandelbrot">Into the Mandelbrot set</h1>
+        <div
+          class="meta"
+          data-it="Uno zoom calcolato, 24 secondi · 1080p · sottotitoli in inglese e italiano"
+        >
+          A computed zoom, 24 seconds · 1080p · English and Italian subtitles
+        </div>
+        <div class="chips">
+          <span class="chip" data-it="Matematica">Mathematics</span
+          ><span class="chip" data-it="Generativo">Generative</span
+          ><span class="chip" data-it="Nessuna telecamera">No camera used</span>
+        </div>
+      </section>
+      <aside>
+        <div class="card">
+          <h2 data-it="Dietro le quinte">Behind the scenes</h2>
+          <iframe id="embed" title="Behind the scenes"></iframe>
+          <p data-it="Riprodotto dal player di un sito partner, incorporato in questa pagina.">
+            Played by a partner site's player, embedded in this page.
+          </p>
+        </div>
+        <div class="card">
+          <h2 data-it="Colonna sonora">Soundtrack</h2>
+          <audio controls preload="metadata" src="/demo/soundtrack.mp3" title="Soundtrack"></audio>
+        </div>
+      </aside>
+      <p
+        class="note"
+        data-it="Questa pagina serve a mostrare vdown-helper al lavoro. Ogni clip, suono e sottotitolo è stato generato per la demo."
+      >
+        This page exists to show vdown-helper at work. Every clip, sound and subtitle on it was generated for
+        the demo.
+      </p>
+    </main>
+    <script>
+      // Like a streaming player, the page asks for its HLS manifest (three qualities) from script.
+      fetch('/demo/hls/master.m3u8').then(() => (window.ready = true));
+      const embed = new URLSearchParams(location.search).get('embed');
+      if (embed) document.getElementById('embed').src = `${embed}/pages/demo-embed.html`;
+    </script>
+    <script src="demo-i18n.js"></script>
+  </body>
+</html>

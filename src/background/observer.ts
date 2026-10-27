@@ -1,5 +1,6 @@
 import { extensionOf, formatFromMime } from '@/lib/media';
 import { isSafeFetchUrl, normalizeUrl } from '@/lib/security';
+import { loadSettings } from '@/lib/settings';
 import type { RawCandidate } from '@/types/media';
 
 /**
@@ -65,48 +66,83 @@ export async function getObserved(tabId: number): Promise<RawCandidate[]> {
   }));
 }
 
-async function record(tabId: number, o: Observed): Promise<void> {
-  const stored = await chrome.storage.session.get(key(tabId));
-  const list = (stored[key(tabId)] as Observed[] | undefined) ?? [];
-  const k = normalizeUrl(o.url);
-  if (list.some((x) => normalizeUrl(x.url) === k)) return;
-  list.push(o);
-  await chrome.storage.session.set({ [key(tabId)]: list.slice(-MAX_PER_TAB) });
+let writes: Promise<unknown> = Promise.resolve();
+
+/**
+ * Remember one request. Writes run one after another: a player asks for its master playlist and the variants within
+ * milliseconds, and overlapping read-modify-writes of the same list used to drop some of them (often the master).
+ */
+function record(tabId: number, o: Observed): Promise<void> {
+  const run = writes.then(async () => {
+    const stored = await chrome.storage.session.get(key(tabId));
+    const list = (stored[key(tabId)] as Observed[] | undefined) ?? [];
+    const k = normalizeUrl(o.url);
+    if (list.some((x) => normalizeUrl(x.url) === k)) return;
+    list.push(o);
+    await chrome.storage.session.set({ [key(tabId)]: list.slice(-MAX_PER_TAB) });
+  });
+  writes = run.catch(() => undefined);
+  return run;
 }
 
 type HeadersListener = Parameters<typeof chrome.webRequest.onHeadersReceived.addListener>[0];
 
+/** Whether the user wants the observer; undefined until the settings have been read on this worker start. */
+let wanted: boolean | undefined;
+
 const listener: HeadersListener = (d) => {
   if (d.tabId < 0 || !isSafeFetchUrl(d.url)) return undefined;
   const ct = d.responseHeaders?.find((h) => h.name.toLowerCase() === 'content-type')?.value ?? '';
-  if (relevant(d.url, ct)) {
-    const o: Observed = ct
-      ? { url: d.url, mime: ct.split(';')[0]?.trim() ?? '', frameId: d.frameId }
-      : { url: d.url, frameId: d.frameId };
-    void record(d.tabId, o);
-  }
+  if (!relevant(d.url, ct)) return undefined;
+  const o: Observed = ct
+    ? { url: d.url, mime: ct.split(';')[0]?.trim() ?? '', frameId: d.frameId }
+    : { url: d.url, frameId: d.frameId };
+  void (async () => {
+    // The request that woke the worker arrives before the settings are read: read them, then decide.
+    if (wanted === undefined) wanted = (await loadSettings()).networkObserver;
+    if (wanted) await record(d.tabId, o);
+  })().catch(() => undefined);
   return undefined;
 };
+
+const FILTER: chrome.webRequest.RequestFilter = {
+  urls: ['<all_urls>'],
+  types: ['media', 'xmlhttprequest', 'other'],
+};
+
+function attach(): boolean {
+  const api = chrome.webRequest?.onHeadersReceived;
+  if (!api) return false;
+  if (!registered) {
+    api.addListener(listener, FILTER, ['responseHeaders']);
+    registered = true;
+  }
+  return true;
+}
+
+/**
+ * Called synchronously at the top level of the service worker. A listener added later (after an await) is not one
+ * Chrome wakes a sleeping worker for, so requests made while the worker slept were never seen. The optional
+ * `webRequest` permission is held only while the observer is on (Settings removes it when it is switched off), so
+ * this listener exists only then.
+ */
+export function initObserver(): void {
+  attach();
+}
 
 /**
  * Start or stop observing. Returns whether the observer is now active. Starting requires the optional
  * `webRequest` permission; without it this is a no-op that returns false.
  */
 export function setObserverEnabled(enabled: boolean): boolean {
+  wanted = enabled;
+  if (enabled) return attach();
   const api = chrome.webRequest?.onHeadersReceived;
-  if (!api) return false;
-  if (enabled && !registered) {
-    api.addListener(listener, { urls: ['<all_urls>'], types: ['media', 'xmlhttprequest', 'other'] }, [
-      'responseHeaders',
-    ]);
-    registered = true;
-  } else if (!enabled && registered) {
-    api.removeListener(listener);
-    registered = false;
-  }
-  return registered;
+  if (api && registered) api.removeListener(listener);
+  registered = false;
+  return false;
 }
 
 export function isObserving(): boolean {
-  return registered;
+  return registered && wanted === true;
 }

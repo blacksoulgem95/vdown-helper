@@ -86,6 +86,7 @@ A privacy policy URL is normally required for extensions that handle "website co
 - [ ] Single purpose text above; listing text without any service names or promises of "all sites".
 - [ ] Permission justifications copied from the tables above (install-time and optional).
 - [ ] Privacy policy URL; data-use certification matching the statement above.
-- [ ] Screenshots from `docs/screenshots/` (current ones show the popup and the Studio only).
+- [ ] Images from `store-assets/<lang>/` (`npm run store:assets`): five 1280 x 800 screenshots, the 440 x 280 tile and the
+      1400 x 560 marquee, in English and Italian; 24-bit PNG without alpha.
 - [ ] The package from the Release workflow (`vdown-helper-<version>.zip`), checksum recorded.
 - [ ] Decision on the GPL component recorded by the project owner.

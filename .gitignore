@@ -7,3 +7,5 @@ playwright-report/
 e2e/.tmp/
 .DS_Store
 release/
+site/dist/
+store/.tmp/

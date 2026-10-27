@@ -2120,6 +2120,62 @@ await step('blob: an audio blob converts through FFmpeg.wasm, an image blob is s
   await blobsPage.close();
 });
 
+await step(
+  'a stream link pasted by hand is scanned like the page: it gets a card and downloads',
+  async () => {
+    const p2 = await ctx.newPage();
+    await p2.goto(`${A}/pages/empty.html?manual=1`);
+    const t2 = await ext(
+      async (u) => (await chrome.tabs.query({})).find((t) => t.url?.startsWith(u))?.id,
+      `${A}/pages/empty.html?manual=1`,
+    );
+    const pop = await openPopup(t2);
+    await pop.getByRole('heading', { name: 'NO MEDIA DETECTED' }).waitFor({ timeout: 30000 });
+    await pop.getByRole('button', { name: 'Add a stream link' }).click();
+    // an unsafe scheme is refused with an explanation
+    await pop.getByRole('textbox').fill('javascript:alert(1)');
+    await pop.evaluate(() => document.querySelector('form').requestSubmit());
+    await pop.getByRole('alert').waitFor({ timeout: 10000 });
+    await pop.getByRole('textbox').fill(`${A}/hls/master.m3u8`);
+    await pop.getByRole('button', { name: 'ADD', exact: true }).click();
+    const st = await until(
+      async () => {
+        const s = (await ext((id) => chrome.storage.session.get(`tab:${id}`), t2))[`tab:${t2}`];
+        return s?.status === 'ready' && s.resources.some((r) => r.url.endsWith('/hls/master.m3u8'))
+          ? s
+          : undefined;
+      },
+      'the pasted link in the scan',
+      30000,
+    );
+    const r = st.resources.find((x) => x.url.endsWith('/hls/master.m3u8'));
+    assert(
+      r.detectedBy.includes('manual-rescan') && r.kind === 'hls-master',
+      JSON.stringify([r.detectedBy, r.kind]),
+    );
+    assert(r.downloadability.status === 'downloadable', JSON.stringify(r.downloadability));
+    await pop
+      .locator(`[data-resource-id="${r.id}"]`)
+      .getByRole('button', { name: 'DOWNLOAD', exact: true })
+      .waitFor();
+    // a rescan keeps it; navigating away forgets it
+    await pop.getByRole('button', { name: 'RESCAN PAGE' }).click();
+    await until(
+      async () => {
+        const s = (await ext((id) => chrome.storage.session.get(`tab:${id}`), t2))[`tab:${t2}`];
+        return s?.status === 'ready' && s.resources.some((x) => x.id === r.id);
+      },
+      'the link to survive a rescan',
+      30000,
+    );
+    await pop.close();
+    await p2.goto(`${A}/pages/empty.html?manual=2`);
+    const left = (await ext((id) => chrome.storage.session.get(`manual:${id}`), t2))[`manual:${t2}`];
+    assert(left === undefined, `pasted links must be forgotten on navigation: ${JSON.stringify(left)}`);
+    await p2.close();
+  },
+);
+
 await step('empty page shows the empty state and SCAN AGAIN', async () => {
   const p2 = await ctx.newPage();
   await p2.goto(`${A}/pages/empty.html`);

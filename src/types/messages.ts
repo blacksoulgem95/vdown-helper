@@ -45,6 +45,8 @@ export interface VariantInspection {
 /** UI/background request protocol. Each key maps request payload -> response. */
 export interface RequestMap {
   scan: { req: { tabId: number }; res: Result<{ state: TabState }> };
+  /** A link the user pasted (an .m3u8/.mpd or a media file): remembered for the tab, then the tab is scanned again. */
+  'add-url': { req: { tabId: number; url: string }; res: Result<{ state: TabState }> };
   'get-state': { req: { tabId: number }; res: Result<{ state: TabState | null }> };
   'inspect-variant': {
     req: { tabId: number; url: string; frameId?: number };

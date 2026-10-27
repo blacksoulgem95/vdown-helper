@@ -20,7 +20,7 @@ export async function setTabState(state: TabState): Promise<void> {
 }
 
 export async function clearTabState(tabId: number): Promise<void> {
-  await chrome.storage.session.remove([key(tabId), `net:${tabId}`]);
+  await chrome.storage.session.remove([key(tabId), `net:${tabId}`, `manual:${tabId}`]);
 }
 
 export function emptyState(tabId: number, pageUrl = '', pageTitle = ''): TabState {

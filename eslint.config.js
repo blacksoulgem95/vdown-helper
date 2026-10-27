@@ -7,6 +7,8 @@ export default tseslint.config(
   {
     ignores: [
       'dist/**',
+      'site/dist/**',
+      'store/.tmp/**',
       'node_modules/**',
       'coverage/**',
       'test-results/**',

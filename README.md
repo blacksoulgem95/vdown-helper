@@ -28,10 +28,11 @@ logins, paywalls or any other protection (see [Limitations](#limitations-read-th
 6. [Limitations (read this)](#limitations-read-this)
 7. [Architecture](#architecture)
 8. [Development and tests](#development-and-tests)
-9. [Manual test procedure](#manual-test-procedure)
-10. [Troubleshooting](#troubleshooting)
-11. [Security and privacy](#security-and-privacy)
-12. [Licence](#licence)
+9. [Website and store images](#website-and-store-images)
+10. [Manual test procedure](#manual-test-procedure)
+11. [Troubleshooting](#troubleshooting)
+12. [Security and privacy](#security-and-privacy)
+13. [Licence](#licence)
 
 ---
 
@@ -319,6 +320,25 @@ What the automated run does **not** prove (verify manually, see [VDH-028](BACKLO
 
 The E2E players (hls.js, dash.js) and Playwright are development dependencies; they are never in `dist/`
 (`check:dist` asserts it) and their licences are listed in `THIRD_PARTY_NOTICES.md`.
+
+## Website and store images
+
+The website (`site/`, English and Italian) and the Chrome Web Store images are generated from the real extension:
+
+```bash
+npm run store:assets   # drives the built extension on labelled demo pages (store/pages, media made by ffmpeg)
+npm run site:build     # site/dist: index.html, it/index.html, assets, shots
+```
+
+- `store-assets/<lang>/`: five screenshots of 1280 x 800, the small promo tile (440 x 280) and the marquee (1400 x 560),
+  each checked to be 24-bit RGB PNG without alpha, ready to upload. `store-assets/<lang>/site/` holds the site's WebP images.
+- The demo pages say on the page that they are demos; every clip, sound and subtitle on them is generated locally. The
+  Download in the screenshots is a real one, saved by Chrome under the name a user would get.
+- Copy lives in `store/copy.json` (images) and `site/i18n/{en,it}.json` (site); both follow `docs/store-policy.md`.
+- `site/config.json`: put the Chrome Web Store URL in `storeUrl` once the listing exists; until then the main button leads to
+  the three-step install from `releases/latest/download/vdown-helper-chrome.zip`.
+- Deployment: `.github/workflows/pages.yml` publishes `site/dist` on every change to `main`. **One-time setup:** Settings ->
+  Pages -> Source: GitHub Actions. Site and image changes do not publish an extension release.
 
 ## Manual test procedure
 
