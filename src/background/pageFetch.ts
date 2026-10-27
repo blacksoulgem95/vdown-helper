@@ -1,3 +1,4 @@
+import { DeadlineError, withDeadline } from '@/lib/deadline';
 import type { Fetcher } from '@/lib/analyze';
 import { fetchText, probeHeaders, type ProbeResult } from '@/lib/netprobe';
 import type { ScanReport } from '@/types/media';
@@ -11,8 +12,38 @@ type ApiCall = 'scan' | 'probeHeaders' | 'fetchText';
  * Inject the (read-only) scanner into every frame Chrome lets us into: the top frame (activeTab), same-origin
  * frames, and, where the user granted access, cross-origin and nested frames. Frames we may not enter are skipped.
  */
+// By default Chrome injects into a frame only once that frame has finished loading, so one frame that never finishes (a
+// player streaming over a kept-open connection, a stalled ad) held the whole scan forever. The scanner works on whatever
+// the document has so far, and every call has a deadline.
+const INJECT_MS = 10_000;
+const SCAN_ALL_MS = 15_000;
+const SCAN_TOP_MS = 10_000;
+const CALL_MS = 15_000;
+
 export async function injectScanner(tabId: number): Promise<void> {
-  await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ['content.js'] });
+  try {
+    await withDeadline(
+      chrome.scripting.executeScript({
+        target: { tabId, allFrames: true },
+        files: ['content.js'],
+        injectImmediately: true,
+      }),
+      INJECT_MS,
+      'injecting the scanner',
+    );
+  } catch (e) {
+    // Some frame is stuck: the top frame alone still gives the page's own media.
+    if (!(e instanceof DeadlineError)) throw e;
+    await withDeadline(
+      chrome.scripting.executeScript({
+        target: { tabId, frameIds: [0] },
+        files: ['content.js'],
+        injectImmediately: true,
+      }),
+      INJECT_MS,
+      'injecting the scanner in the page',
+    );
+  }
 }
 
 async function callPage<T>(
@@ -21,30 +52,44 @@ async function callPage<T>(
   name: ApiCall,
   arg?: string,
 ): Promise<T> {
-  const [res] = await chrome.scripting.executeScript({
-    target: { tabId, frameIds: [frameId ?? 0] },
-    // Self-contained: serialised and run in the page's isolated world.
-    func: (n: string, a?: string) => {
-      const api = (globalThis as unknown as { __vdh?: Record<string, (x?: string) => unknown> }).__vdh;
-      if (!api || typeof api[n] !== 'function') throw new Error('scanner-missing');
-      return api[n](a);
-    },
-    args: arg === undefined ? [name] : [name, arg],
-  });
+  const [res] = await withDeadline(
+    chrome.scripting.executeScript({
+      target: { tabId, frameIds: [frameId ?? 0] },
+      injectImmediately: true,
+      // Self-contained: serialised and run in the page's isolated world.
+      func: (n: string, a?: string) => {
+        const api = (globalThis as unknown as { __vdh?: Record<string, (x?: string) => unknown> }).__vdh;
+        if (!api || typeof api[n] !== 'function') throw new Error('scanner-missing');
+        return api[n](a);
+      },
+      args: arg === undefined ? [name] : [name, arg],
+    }),
+    CALL_MS,
+    name,
+  );
   return res?.result as T;
 }
 
 /** One report per frame that could be scanned; each carries the frame id it came from. */
 export async function pageScanAll(tabId: number): Promise<ScanReport[]> {
-  const results = await chrome.scripting.executeScript({
-    target: { tabId, allFrames: true },
-    func: () => {
-      const api = (globalThis as unknown as { __vdh?: { scan?: () => unknown; scanAsync?: () => unknown } })
-        .__vdh;
-      // scanAsync also reads the blob: sources the page holds; both return a scan report
-      return api?.scanAsync ? api.scanAsync() : api?.scan ? api.scan() : null;
-    },
-  });
+  const run = (target: chrome.scripting.InjectionTarget) =>
+    chrome.scripting.executeScript({
+      target,
+      injectImmediately: true,
+      func: () => {
+        const api = (globalThis as unknown as { __vdh?: { scan?: () => unknown; scanAsync?: () => unknown } })
+          .__vdh;
+        // scanAsync also reads the blob: sources the page holds; both return a scan report
+        return api?.scanAsync ? api.scanAsync() : api?.scan ? api.scan() : null;
+      },
+    });
+  let results: Awaited<ReturnType<typeof run>>;
+  try {
+    results = await withDeadline(run({ tabId, allFrames: true }), SCAN_ALL_MS, 'scanning every frame');
+  } catch (e) {
+    if (!(e instanceof DeadlineError)) throw e;
+    results = await withDeadline(run({ tabId, frameIds: [0] }), SCAN_TOP_MS, 'scanning the page');
+  }
   return results.filter((r) => r.result).map((r) => ({ ...(r.result as ScanReport), frameId: r.frameId }));
 }
 
@@ -145,6 +190,7 @@ export async function pumpHeld(
   try {
     const [res] = await chrome.scripting.executeScript({
       target: { tabId, frameIds: [frameId] },
+      injectImmediately: true,
       func: (j: string, h: string) => {
         const api = (globalThis as unknown as { __vdh?: { pumpHeld?: (a: string, b: string) => unknown } })
           .__vdh;
@@ -182,6 +228,7 @@ export async function runCapture(
   try {
     const [res] = await chrome.scripting.executeScript({
       target: { tabId, frameIds: [frameId] },
+      injectImmediately: true,
       func: (j: string, h: string, s: 'fast' | 'realtime', l: CaptureLabels) => {
         const api = (
           globalThis as unknown as {
@@ -208,6 +255,7 @@ export async function stopCapture(tabId: number, frameId: number, jobId: string)
   try {
     await chrome.scripting.executeScript({
       target: { tabId, frameIds: [frameId] },
+      injectImmediately: true,
       func: (j: string) => {
         const api = (globalThis as unknown as { __vdh?: { stopCapture?: (a: string) => unknown } }).__vdh;
         api?.stopCapture?.(j);
@@ -238,6 +286,7 @@ export async function runRecord(
   try {
     const [res] = await chrome.scripting.executeScript({
       target: { tabId, frameIds: [frameId] },
+      injectImmediately: true,
       func: (j: string, h: string, o: typeof options, l: RecordLabels) => {
         const api = (
           globalThis as unknown as {
@@ -268,6 +317,7 @@ export async function finishRecordingInPage(tabId: number, frameId: number, jobI
   try {
     await chrome.scripting.executeScript({
       target: { tabId, frameIds: [frameId] },
+      injectImmediately: true,
       func: (j: string) => {
         const api = (globalThis as unknown as { __vdh?: { finishRecording?: (a: string) => unknown } }).__vdh;
         api?.finishRecording?.(j);

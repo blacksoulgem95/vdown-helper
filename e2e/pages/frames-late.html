@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Frames added after load</title>
+  </head>
+  <body>
+    <h1>A page that adds its player frames after it has loaded</h1>
+    <video controls muted title="Top clip" src="/media/sample.mp4"></video>
+    <script>
+      // Like a "click to continue" overlay: the frames appear only after the page is done.
+      window.addFrame = (src) =>
+        new Promise((resolve) => {
+          const f = document.createElement('iframe');
+          f.src = src;
+          f.onload = () => resolve(true);
+          document.body.append(f);
+          setTimeout(() => resolve(false), 3000); // a frame that never finishes never fires onload
+        });
+    </script>
+  </body>
+</html>

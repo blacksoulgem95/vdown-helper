@@ -1,4 +1,5 @@
 import { loadSettings } from '@/lib/settings';
+import { withDeadline } from '@/lib/deadline';
 import { log } from '@/lib/security';
 import { parseHookReport, type HookReport } from '@/lib/hookData';
 
@@ -64,14 +65,20 @@ export interface FrameHookReport {
 /** Read what the hook saw, from every frame that has it. Frames without the hook simply return nothing. */
 export async function readHookReports(tabId: number): Promise<FrameHookReport[]> {
   try {
-    const results = await chrome.scripting.executeScript({
-      target: { tabId, allFrames: true },
-      world: 'MAIN',
-      func: () => {
-        const hook = (window as unknown as { __vdhHook?: { drain?: () => unknown } }).__vdhHook;
-        return hook && typeof hook.drain === 'function' ? hook.drain() : null;
-      },
-    });
+    // Read the hook's findings without waiting for frames that never finish loading, and never for long.
+    const results = await withDeadline(
+      chrome.scripting.executeScript({
+        target: { tabId, allFrames: true },
+        injectImmediately: true,
+        world: 'MAIN',
+        func: () => {
+          const hook = (window as unknown as { __vdhHook?: { drain?: () => unknown } }).__vdhHook;
+          return hook && typeof hook.drain === 'function' ? hook.drain() : null;
+        },
+      }),
+      10_000,
+      'reading the page hook',
+    );
     return results
       .filter((r) => r.result)
       .map((r) => ({ frameId: r.frameId, report: parseHookReport(r.result) }));

@@ -11,6 +11,7 @@ import { inspectDashRepresentation, inspectMediaPlaylist } from '@/lib/inspect';
 import { parseHls } from '@/lib/hls/parser';
 import { parseDash, mainPeriodIndex } from '@/lib/dash/parser';
 import { parseDashRef } from '@/lib/dash/ref';
+import { DeadlineError, withDeadline } from '@/lib/deadline';
 import { isSafeFetchUrl, log } from '@/lib/security';
 import { loadSettings } from '@/lib/settings';
 import { tabOf } from '@/lib/tabs';
@@ -20,7 +21,7 @@ import { readHookReports } from './hooks';
 import { getManual } from './manual';
 import { getObserved, isObserving } from './observer';
 import { combinedFetcher, hasHostAccess, injectScanner, pageScanAll } from './pageFetch';
-import { emptyState, getTabState, setTabState } from './tabState';
+import { emptyState, getTabState, setTabState as saveTabState } from './tabState';
 
 const inFlight = new Map<number, Promise<TabState>>();
 
@@ -95,7 +96,21 @@ export function mergeNotes(reports: ScanReport[]): ScanNotes {
   };
 }
 
-async function runScan(tabId: number, automatic: boolean): Promise<TabState> {
+/**
+ * Scans are numbered per tab. A scan writes the tab's state only while it is the latest one: a scan that outlived its
+ * deadline, or was overtaken by a new page in the tab, cannot overwrite newer results when it finally returns.
+ */
+const generation = new Map<number, number>();
+const SCAN_DEADLINE_MS = 45_000;
+
+/** The tab shows a different document: forget scans in progress so none of them writes results for the old page. */
+export function forgetTab(tabId: number): void {
+  generation.set(tabId, (generation.get(tabId) ?? 0) + 1);
+  inFlight.delete(tabId);
+}
+
+async function runScan(tabId: number, automatic: boolean, gen: number): Promise<TabState> {
+  const setTabState = (s: TabState) => (generation.get(tabId) === gen ? saveTabState(s) : Promise.resolve());
   let tab: chrome.tabs.Tab;
   try {
     tab = await chrome.tabs.get(tabId);
@@ -220,7 +235,29 @@ export async function rescanTab(tabId: number): Promise<TabState> {
 export function scanTab(tabId: number, automatic = false): Promise<TabState> {
   const running = inFlight.get(tabId);
   if (running) return running;
-  const p = runScan(tabId, automatic).finally(() => inFlight.delete(tabId));
+  const gen = (generation.get(tabId) ?? 0) + 1;
+  generation.set(tabId, gen);
+  const p = withDeadline(runScan(tabId, automatic, gen), SCAN_DEADLINE_MS, 'the scan')
+    .catch(async (e: unknown) => {
+      if (!(e instanceof DeadlineError)) throw e;
+      // Never "scanning" forever: say so, keep what the tab already showed, and let a rescan start fresh.
+      log.warn('scan timed out');
+      const previous = await getTabState(tabId);
+      const timedOut: TabState = {
+        ...(previous ?? emptyState(tabId)),
+        tabId,
+        status: 'error',
+        error: 'scan-timeout',
+      };
+      if (generation.get(tabId) === gen) {
+        generation.set(tabId, gen + 1); // the stuck scan may still finish: it must not write over this
+        await saveTabState(timedOut);
+      }
+      return timedOut;
+    })
+    .finally(() => {
+      if (inFlight.get(tabId) === p) inFlight.delete(tabId);
+    });
   inFlight.set(tabId, p);
   return p;
 }
