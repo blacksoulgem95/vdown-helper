@@ -452,8 +452,9 @@ await step(
     );
     await popup.waitForTimeout(500); // the popup picks the change up from storage.onChanged
     const r = byPath(state, '/hls/master.m3u8');
+    const earlier = new Set((await jobs()).map((j) => j.id)); // the funnel step already saved this stream as MP4
     await popup.locator(`[data-resource-id="${r.id}"]`).getByRole('button', { name: 'DOWNLOAD' }).click();
-    const job = await jobFinished((j) => j.request.resourceId === r.id);
+    const job = await jobFinished((j) => j.request.resourceId === r.id && !earlier.has(j.id));
     await ext(() => chrome.storage.local.set({ settings: { schemaVersion: 1 } }));
     assert(job.stage === 'completed', `stage ${job.stage}: ${JSON.stringify(job.error)}`);
     assert(job.request.filename.endsWith('.ts'), `ext ${job.request.filename}`);
