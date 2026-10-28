@@ -8,20 +8,11 @@
 //   npm run store:assets            (needs ffmpeg/ffprobe on PATH, like the E2E suite)
 //   npm run store:assets -- --no-build --lang=en
 import { execFileSync, spawn } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { chromium } from 'playwright';
 import { chromiumExecutable } from './browser.mjs';
+import { EXTENSION_ID } from './lib/extension-id.mjs';
 import { ensureFixtures } from '../e2e/fixtures.mjs';
 import { startServers } from '../e2e/server.mjs';
 import { ensureDemoMedia } from '../store/demo-media.mjs';
@@ -127,12 +118,8 @@ async function capture(lang, raw) {
     // Back to Chrome's own behaviour (the profile's download folder, the names the extension asks for): Playwright
     // otherwise takes over downloads and names them at random.
     await session.send('Browser.setDownloadBehavior', { behavior: 'default' });
-    // Chrome runs component extensions of its own. An unpacked extension's id is derived from its folder path.
-    const id = createHash('sha256')
-      .update(realpathSync(extDir))
-      .digest('hex')
-      .slice(0, 32)
-      .replace(/./g, (c) => String.fromCharCode(97 + parseInt(c, 16)));
+    // Chrome runs component extensions of its own; ours has the ID its manifest key pins.
+    const id = EXTENSION_ID;
     const ours = (w) => w.url().startsWith(`chrome-extension://${id}/`);
     const sw =
       ctx.serviceWorkers().find(ours) ??

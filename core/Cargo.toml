@@ -1,0 +1,12 @@
+[package]
+name = "vdh-core"
+version = "0.1.0"
+description = "vdown-helper's pure logic, shared by the extension (wasm) and the desktop app"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true

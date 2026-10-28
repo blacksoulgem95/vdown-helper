@@ -19,6 +19,7 @@ import {
 import { join, resolve } from 'node:path';
 import { chromium } from 'playwright';
 import { chromiumExecutable } from '../scripts/browser.mjs';
+import { EXTENSION_ID } from '../scripts/lib/extension-id.mjs';
 import { ensureFixtures } from './fixtures.mjs';
 import { startServers } from './server.mjs';
 
@@ -97,6 +98,7 @@ ctx.on('weberror', (e) =>
 
 let sw = ctx.serviceWorkers()[0] ?? (await ctx.waitForEvent('serviceworker', { timeout: 20000 }));
 const extId = new URL(sw.url()).host;
+assert(extId === EXTENSION_ID, `the manifest key must pin the extension ID, got ${extId}`);
 const extUrl = (p) => `chrome-extension://${extId}/${p}`;
 
 // A long-lived extension page: reads storage and observes job stages without needing the service worker awake.

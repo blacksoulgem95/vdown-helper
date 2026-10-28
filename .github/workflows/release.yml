@@ -24,6 +24,8 @@ on:
       - 'scripts/build-site.mjs'
       - 'scripts/store-assets.mjs'
       - '.github/workflows/pages.yml'
+      - 'desktop/**' # the desktop app has its own releases (desktop-v*)
+      - '.github/workflows/desktop.yml'
   workflow_dispatch:
     inputs:
       bump:

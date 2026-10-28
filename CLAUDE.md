@@ -13,7 +13,7 @@ frame) and downloads, captures or records them locally with an optional FFmpeg.w
   ID in the subject (`VDH-005: HLS parser`).
 - **Every completed stage goes to `main` through a new PR, which is then merged** (the owner's standing instruction): open a
   new PR from the session branch (never reuse a merged one), **run the full suite locally on the PR's exact head**
-  (`typecheck`, `lint`, `format:check`, `test`, `build`, `check:dist`, `test:e2e`), wait for CI (`check` and `e2e`) to be
+  (`typecheck`, `lint`, `format:check`, `test`, `build`, `check:dist`, `test:e2e`, plus the `cargo` checks once Rust exists), wait for CI (`check`, `e2e` and the `Desktop` workflow) to be
   green on that head, then merge it with a merge commit. A red or conflicting PR is fixed first, never merged red. Merging to `main` publishes a
   release: patch by default; put `#minor` / `#major` on a line of its own in the merge commit message (or `[minor]` /
   `[major]` in a commit subject) for a bigger bump, and never write those tokens in a message that is only describing them.
@@ -37,6 +37,19 @@ frame) and downloads, captures or records them locally with an optional FFmpeg.w
 - No simulated progress, no mock data outside tests or an explicitly labelled dev fixture.
 - Every user-visible string goes through the i18n helper (`en` and `it` catalogs must stay in sync).
 
+### Desktop app exceptions (`desktop/`, design in `docs/desktop.md`)
+
+The rules above hold for the app too (DRM refused with the shared `vdh-core` verdicts, no extractors, no telemetry,
+sanitised filenames, no simulated progress, en/it), with these agreed exceptions:
+
+- The app **may re-encode video**, only when the user picks a re-encode option. The extension never does.
+- The **update check** (GitHub Releases, no identifiers, no browsing data, toggle in Settings, install only after the
+  user confirms) is the one network call that is not media the user chose.
+- The extension may pass **cookies of origins the user granted, for one job**; the app keeps them in memory only and
+  never writes or logs them.
+- The app fetches any http(s) address a job names, local network included (the extension keeps its own guard).
+- ffmpeg runs as a separate process with argument vectors built by `vdh-core`, never through a shell.
+
 ## Commands
 
 ```bash
@@ -49,13 +62,15 @@ npm test               # vitest (unit)
 npm run test:e2e       # real Chromium + fixtures; needs ffmpeg/ffprobe on PATH
 npm run serve:fixtures # the E2E sites, for manual testing
 node scripts/backlog.mjs set VDH-0xx done   # update a task status + the BACKLOG index
+cargo fmt --check && cargo clippy --workspace -- -D warnings && cargo test --workspace   # Rust core / desktop
 ```
 
 ## Layout
 
 `src/background` (service worker) · `src/content` (read-only scanner) · `src/offscreen` (segments + FFmpeg.wasm) ·
 `src/popup` / `src/options` / `src/sidepanel` (React UIs) · `src/lib` (pure logic, the unit-tested core) ·
-`e2e/` (Playwright) · `docs/` (incl. `store-policy.md`) · `BACKLOG/`. See README for the architecture and the
+`e2e/` (Playwright) · `core/` (Rust shared core) · `desktop/` (Tauri app) · `docs/` (incl. `store-policy.md`,
+`desktop.md`) · `BACKLOG/`. See README for the architecture and the
 verification limits.
 
 ## Things that are easy to get wrong

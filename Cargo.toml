@@ -1,0 +1,21 @@
+# Rust side of vdown-helper: the shared core (compiled to wasm for the extension, used natively by the desktop app) and,
+# later, the desktop app. Design: docs/desktop.md.
+[workspace]
+resolver = "3"
+members = ["core"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+repository = "https://github.com/blacksoulgem95/vdown-helper"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[profile.release]
+lto = true
+codegen-units = 1

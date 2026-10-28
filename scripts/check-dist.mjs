@@ -2,6 +2,7 @@
 // Exit code 1 on any problem. Run after `npm run build`.
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { EXTENSION_ID, idFromKey } from './lib/extension-id.mjs';
 
 const dist = resolve(import.meta.dirname, '..', 'dist');
 const problems = [];
@@ -23,6 +24,9 @@ if (!existsSync(dist)) {
 const manifest = JSON.parse(read('manifest.json'));
 if (manifest.manifest_version !== 3) fail('manifest_version must be 3');
 if (!/^\d+(\.\d+){0,3}$/.test(manifest.version)) fail(`invalid version ${manifest.version}`);
+// The desktop app's native host names this ID; a missing or different key would cut the link.
+if (typeof manifest.key !== 'string' || idFromKey(manifest.key) !== EXTENSION_ID)
+  fail(`manifest key must give the extension ID ${EXTENSION_ID}`);
 
 for (const [size, p] of Object.entries(manifest.icons ?? {})) need(p, `icon ${size}`);
 for (const p of Object.values(manifest.action?.default_icon ?? {})) need(p, 'action icon');

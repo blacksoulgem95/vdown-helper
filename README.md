@@ -143,7 +143,7 @@ The UI is available in English and Italian (follows Chrome's UI language).
 | Processing                 | stream-copy remux, merge of separate video+audio, video-only, audio extract to **M4A/AAC (copy when AAC)**, **MP3/WAV (transcode)** at 128/192/256/320 kbps                                                                                 | Re-encoding **video** (never done), upscaling, hardware encoders, files larger than the memory limit                                                                              |
 | UI                         | popup with tabs, Studio side panel, options, EN/IT, keyboard operable, reduced-motion aware                                                                                                                                                 | Thumbnails for streams (only a page-provided poster)                                                                                                                              |
 | Safety                     | URL scheme allow-list, file-name sanitiser, no remote code, redacted logs, validated messages, least-privilege permissions, DRM refused in the UI and again in the background                                                               | —                                                                                                                                                                                 |
-| Companion                  | architecture documented in [`docs/native-companion.md`](docs/native-companion.md)                                                                                                                                                           | **The companion app itself is not built**                                                                                                                                         |
+| Companion                  | desktop app in development: [`docs/desktop.md`](docs/desktop.md)                                                                                                                                                                            | **Not released yet**                                                                                                                                                              |
 
 ## Output modes: copy vs transcode
 
@@ -229,8 +229,8 @@ code (`npm run check:dist` enforces this).
 - **Browser-managed downloads.** Chrome chooses the Downloads folder (you can add a sub-folder, or ask "Save as").
   Pause/resume exists only for native downloads; segment/FFmpeg jobs can be cancelled and retried but not paused.
   Chrome may reject unusual file names; the extension then retries with an ASCII-only name.
-- **Native messaging.** Not used. A companion app for very large files is documented
-  ([`docs/native-companion.md`](docs/native-companion.md)) but **not built**.
+- **Native messaging.** Not used yet. A desktop app (Rust, Windows / macOS / Linux) that takes over very large files,
+  re-encoding and long downloads is in development: [`docs/desktop.md`](docs/desktop.md).
 - **Estimated sizes** for HLS/DASH are `bandwidth × duration` and are always shown with `≈`.
 - **Chrome Web Store.** A general-purpose downloader can be rejected under the store's policies. See
   [`docs/store-policy.md`](docs/store-policy.md) for the permission justifications and an honest risk assessment. The
@@ -261,7 +261,8 @@ src/
 scripts/                 build.mjs, check-dist.mjs, make-icons.mjs, backlog.mjs, package.mjs, next-version.mjs
 e2e/                     Playwright suite, fixture generator, local servers and test pages
 BACKLOG/                 task files (status tracked per .claude/rules/backlog.md)
-docs/                    native-companion.md, store-policy.md
+docs/                    desktop.md (desktop app design), store-policy.md
+core/                    vdh-core: Rust shared core (docs/desktop.md)
 ```
 
 Flow: popup → `scan` → service worker injects `content.js` in every frame it may enter → candidates (each knows its
