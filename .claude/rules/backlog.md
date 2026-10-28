@@ -13,7 +13,7 @@ Work on this project is tracked as Markdown tasks in `BACKLOG/`. This rule alway
   title: HLS playlist parser
   status: todo # todo | in-progress | blocked | done | wontfix
   priority: P1 # P0 critical, P1 high, P2 normal, P3 low
-  area: lib # lib | background | content | ui | build | docs | test | security
+  area: lib # lib | background | content | ui | desktop | build | docs | test | security
   depends_on: [VDH-004]
   ---
   ```

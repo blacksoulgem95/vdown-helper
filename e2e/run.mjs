@@ -19,6 +19,7 @@ import {
 import { join, resolve } from 'node:path';
 import { chromium } from 'playwright';
 import { chromiumExecutable } from '../scripts/browser.mjs';
+import { EXTENSION_ID } from '../scripts/lib/extension-id.mjs';
 import { ensureFixtures } from './fixtures.mjs';
 import { startServers } from './server.mjs';
 
@@ -97,6 +98,7 @@ ctx.on('weberror', (e) =>
 
 let sw = ctx.serviceWorkers()[0] ?? (await ctx.waitForEvent('serviceworker', { timeout: 20000 }));
 const extId = new URL(sw.url()).host;
+assert(extId === EXTENSION_ID, `the manifest key must pin the extension ID, got ${extId}`);
 const extUrl = (p) => `chrome-extension://${extId}/${p}`;
 
 // A long-lived extension page: reads storage and observes job stages without needing the service worker awake.
@@ -446,9 +448,16 @@ await step('DIRECT MP4: native Chrome download completes and the file is a valid
 await step(
   'HLS master (muxed audio): segments are joined on disk into a valid, fully decodable TS',
   async () => {
+    // One click saves streams as MP4 (VDH-059, covered by the funnel step); "keep the original" is the byte-for-byte join.
+    await ext(() =>
+      chrome.storage.local.set({ settings: { schemaVersion: 1, defaultContainer: 'original' } }),
+    );
+    await popup.waitForTimeout(500); // the popup picks the change up from storage.onChanged
     const r = byPath(state, '/hls/master.m3u8');
+    const earlier = new Set((await jobs()).map((j) => j.id)); // the funnel step already saved this stream as MP4
     await popup.locator(`[data-resource-id="${r.id}"]`).getByRole('button', { name: 'DOWNLOAD' }).click();
-    const job = await jobFinished((j) => j.request.resourceId === r.id);
+    const job = await jobFinished((j) => j.request.resourceId === r.id && !earlier.has(j.id));
+    await ext(() => chrome.storage.local.set({ settings: { schemaVersion: 1 } }));
     assert(job.stage === 'completed', `stage ${job.stage}: ${JSON.stringify(job.error)}`);
     assert(job.request.filename.endsWith('.ts'), `ext ${job.request.filename}`);
     const file = fileOf(job);
@@ -2161,8 +2170,13 @@ await step(
     );
     await pop.close();
     await p2.goto(`${A}/pages/empty.html?manual=2`);
-    const left = (await ext((id) => chrome.storage.session.get(`manual:${id}`), t2))[`manual:${t2}`];
-    assert(left === undefined, `pasted links must be forgotten on navigation: ${JSON.stringify(left)}`);
+    // The clear runs after tabs.onUpdated has compared the old and new address (VDH-058), so wait for it.
+    await until(
+      async () =>
+        (await ext((id) => chrome.storage.session.get(`manual:${id}`), t2))[`manual:${t2}`] === undefined,
+      'pasted links to be forgotten on navigation',
+      10000,
+    );
     await p2.close();
   },
 );

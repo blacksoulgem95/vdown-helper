@@ -276,7 +276,7 @@
     "message": "Il codec audio non è compatibile con quel contenitore."
   },
   "issueTooLarge": {
-    "message": "La dimensione stimata supera il limite di memoria per l'elaborazione nel browser. Aumenta il limite nelle Impostazioni oppure scegli un formato su disco (TS o originale). Le conversioni molto grandi richiedono uno strumento nativo: un progetto di app companion è descritto in docs/native-companion.md (non incluso)."
+    "message": "La dimensione stimata supera il limite di memoria per l'elaborazione nel browser. Aumenta il limite nelle Impostazioni oppure scegli un formato su disco (TS o originale). Le conversioni molto grandi richiedono uno strumento nativo: l'app desktop di vdown-helper è in sviluppo (docs/desktop.md)."
   },
   "issueTooLong": {
     "message": "Il media è più lungo del limite di codifica impostato."

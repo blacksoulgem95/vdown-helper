@@ -75,5 +75,15 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-055](VDH-055-ts-saved-as-txt.md) | Streams saved as .txt on Linux (untyped staged file) | done | P0 | offscreen | VDH-047 |
 | [VDH-056](VDH-056-frame-note-and-colon-names.md) | No false "frames could not be inspected" note; colons in titles become " - " in file names | done | P2 | ui | VDH-033 |
 | [VDH-057](VDH-057-settings-flash-defaults.md) | Settings page showed the defaults until the stored settings loaded | done | P2 | ui | VDH-010 |
-| [VDH-058](VDH-058-frames-wipe-and-scan-hang.md) | A loading frame wiped the page's results; a frame that never finishes loading hung the scan | in-progress | P0 | background | VDH-033 |
-| [VDH-059](VDH-059-mp4-by-default-warn-on-size.md) | Streams saved as MP4 by default; size only warns, never blocks | in-progress | P1 | lib | VDH-050 |
+| [VDH-058](VDH-058-frames-wipe-and-scan-hang.md) | A loading frame wiped the page's results; a frame that never finishes loading hung the scan | done | P0 | background | VDH-033 |
+| [VDH-059](VDH-059-mp4-by-default-warn-on-size.md) | Streams saved as MP4 by default; size only warns, never blocks | done | P1 | lib | VDH-050 |
+| [VDH-060](VDH-060-e2e-after-mp4-default.md) | E2E follows the MP4 default and waits for the navigation clear | done | P0 | test | VDH-058, VDH-059 |
+| [VDH-061](VDH-061-desktop-groundwork.md) | Desktop app groundwork: rules, design doc, pinned extension ID, Rust workspace and CI | done | P1 | build | VDH-020 |
+| [VDH-062](VDH-062-core-wasm-parsers.md) | Rust core compiled to wasm: loader in every extension context; HLS, DASH, XML, DRM verdicts, inspection | todo | P1 | lib | VDH-061 |
+| [VDH-063](VDH-063-core-wasm-planner.md) | Rust core: planner, ffmpeg arguments, requests, settings, security, file types, sniffing | todo | P1 | lib | VDH-062 |
+| [VDH-064](VDH-064-core-wasm-rest.md) | Rust core: the remaining pure modules | todo | P2 | lib | VDH-063 |
+| [VDH-065](VDH-065-desktop-engine.md) | Desktop engine and CLI: fetching, HLS/DASH/AES-128, live, native ffmpeg remux, resumable queue | todo | P1 | desktop | VDH-063 |
+| [VDH-066](VDH-066-desktop-app-standalone.md) | Desktop app (Tauri v2): standalone downloads, queue, history, tray | todo | P1 | desktop | VDH-065 |
+| [VDH-067](VDH-067-native-link.md) | Native link: extension hands jobs to the desktop app | todo | P1 | desktop | VDH-066 |
+| [VDH-068](VDH-068-desktop-reencode.md) | Desktop re-encoding: presets, codec controls, trim, MKV, soft subtitles, batch | todo | P2 | desktop | VDH-066 |
+| [VDH-069](VDH-069-desktop-packaging.md) | Desktop packaging, updater and release workflow | todo | P1 | build | VDH-066 |

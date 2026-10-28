@@ -1,7 +1,7 @@
 ---
 id: VDH-058
 title: A loading frame wiped the page's results; a frame that never finishes loading hung the scan
-status: in-progress
+status: done
 priority: P0
 area: background
 depends_on: [VDH-033]
@@ -21,11 +21,13 @@ Reported: when an iframe loads, the extension "crashes", scans forever and delet
 
 ## Acceptance criteria
 
-- [ ] Only a change of the top document's address (ignoring `#fragment`) clears the tab (unit: `sameDocument`)
-- [ ] Every injection runs immediately (no wait for frames to load); scanning all frames, reading the hook and calls into a frame
+- [x] Only a change of the top document's address (ignoring `#fragment`) clears the tab (unit: `sameDocument`)
+- [x] Every injection runs immediately (no wait for frames to load); scanning all frames, reading the hook and calls into a frame
       have deadlines, with a top-frame-only fallback (unit: `withDeadline`)
-- [ ] A scan has an overall deadline, after which it ends as an error that keeps what the tab showed; a late or superseded scan
+- [x] A scan has an overall deadline, after which it ends as an error that keeps what the tab showed; a late or superseded scan
       never overwrites newer results (generation per tab)
-- [ ] E2E: a frame added after load keeps the page's results; with a frame that never finishes loading the scan ends (0.2 s) and
+- [x] E2E: a frame added after load keeps the page's results; with a frame that never finishes loading the scan ends (0.2 s) and
       lists both the page's and the late player frame's media (reproduced first: no READY after 40 s)
-- [ ] CI green on the PR head
+- [x] CI green on the PR head
+
+- Verified: local suite (E2E 113/113) on a9d64c1; CI on PR #10 green: CI runs 40622400239 and 40622404968 (check, e2e), Desktop runs 40622400375 and 40622405037 (rust on Linux, Windows, macOS).

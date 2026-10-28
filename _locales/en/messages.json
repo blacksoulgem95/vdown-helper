@@ -276,7 +276,7 @@
     "message": "The audio codec doesn't fit that container."
   },
   "issueTooLarge": {
-    "message": "The estimated size exceeds your in-browser processing memory limit. Raise the limit in Settings or choose a disk-backed format (TS or original). Very large conversions need a native tool: a companion-app design is documented in docs/native-companion.md (not included)."
+    "message": "The estimated size exceeds your in-browser processing memory limit. Raise the limit in Settings or choose a disk-backed format (TS or original). Very large conversions need a native tool: the vdown-helper desktop app is in development (docs/desktop.md)."
   },
   "issueTooLong": {
     "message": "The media is longer than your encoding time limit."
