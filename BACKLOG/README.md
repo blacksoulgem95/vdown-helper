@@ -77,3 +77,4 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-057](VDH-057-settings-flash-defaults.md) | Settings page showed the defaults until the stored settings loaded | done | P2 | ui | VDH-010 |
 | [VDH-058](VDH-058-frames-wipe-and-scan-hang.md) | A loading frame wiped the page's results; a frame that never finishes loading hung the scan | in-progress | P0 | background | VDH-033 |
 | [VDH-059](VDH-059-mp4-by-default-warn-on-size.md) | Streams saved as MP4 by default; size only warns, never blocks | in-progress | P1 | lib | VDH-050 |
+| [VDH-060](VDH-060-e2e-after-mp4-default.md) | E2E follows the MP4 default and waits for the navigation clear | in-progress | P0 | test | VDH-058, VDH-059 |
