@@ -151,7 +151,10 @@ pub fn parse_dash_ref(url: &str) -> JsValue {
 
 #[wasm_bindgen(js_name = mediaPlaylistVerdict)]
 pub fn media_playlist_verdict(playlist: JsValue) -> Result<JsValue, JsError> {
-    Ok(to_js(&analyze::media_playlist_verdict(&from_js(playlist, "media playlist")?)))
+    Ok(to_js(&analyze::media_playlist_verdict(&from_js(
+        playlist,
+        "media playlist",
+    )?)))
 }
 
 #[wasm_bindgen(js_name = dashResource)]
@@ -161,7 +164,10 @@ pub fn dash_resource(text: &str, url: &str) -> JsValue {
 
 #[wasm_bindgen(js_name = inspectMediaPlaylist)]
 pub fn inspect_media_playlist(playlist: JsValue) -> Result<JsValue, JsError> {
-    Ok(to_js(&inspect::inspect_media_playlist(&from_js(playlist, "media playlist")?)))
+    Ok(to_js(&inspect::inspect_media_playlist(&from_js(
+        playlist,
+        "media playlist",
+    )?)))
 }
 
 /// `{ ok: true, value } | { ok: false, error }`, like `expandSegments`.
@@ -175,8 +181,14 @@ pub fn inspect_dash_representation(
     #[derive(Serialize)]
     #[serde(untagged)]
     enum Out {
-        Ok { ok: bool, value: inspect::VariantInspection },
-        Err { ok: bool, error: String },
+        Ok {
+            ok: bool,
+            value: inspect::VariantInspection,
+        },
+        Err {
+            ok: bool,
+            error: String,
+        },
     }
     let r = inspect::inspect_dash_representation(
         &from_js(manifest, "manifest")?,
@@ -197,11 +209,17 @@ fn urls_of(urls: JsValue) -> Result<Vec<String>, JsError> {
 #[wasm_bindgen(js_name = originsOf)]
 pub fn origins_of(urls: JsValue, max: usize) -> Result<JsValue, JsError> {
     let urls = urls_of(urls)?;
-    Ok(to_js(&inspect::origins_of(urls.iter().map(String::as_str), max)))
+    Ok(to_js(&inspect::origins_of(
+        urls.iter().map(String::as_str),
+        max,
+    )))
 }
 
 #[wasm_bindgen(js_name = sampleByOrigin)]
 pub fn sample_by_origin(urls: JsValue, max: usize) -> Result<JsValue, JsError> {
     let urls = urls_of(urls)?;
-    Ok(to_js(&inspect::sample_by_origin(urls.iter().map(String::as_str), max)))
+    Ok(to_js(&inspect::sample_by_origin(
+        urls.iter().map(String::as_str),
+        max,
+    )))
 }
