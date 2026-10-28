@@ -1,7 +1,7 @@
 ---
 id: VDH-062
 title: Rust core compiled to wasm: loader in every extension context; HLS, DASH, XML, DRM verdicts, inspection
-status: in-progress
+status: done
 priority: P1
 area: lib
 depends_on: [VDH-061]
@@ -17,14 +17,14 @@ verdicts built on them.
 
 ## Acceptance criteria
 
-- [ ] `npm run build` (and `npm test`, `npm run typecheck`) compile `core-wasm` with the pinned `wasm-bindgen` CLI; the
+- [x] `npm run build` (and `npm test`, `npm run typecheck`) compile `core-wasm` with the pinned `wasm-bindgen` CLI; the
       wasm is inlined and instantiated synchronously in the service worker, offscreen document, pages and unit tests
-- [ ] `hls/`, `xml`, `dash/` (parser, segment expansion, protections, `#vdh-rep=` references), the media-playlist and
+- [x] `hls/`, `xml`, `dash/` (parser, segment expansion, protections, `#vdh-rep=` references), the media-playlist and
       DASH verdicts of `analyze` and `inspect` run from Rust; the TS modules are thin wrappers with the same exports
-- [ ] Golden fixtures recorded from the former TypeScript (`core/fixtures/golden/*.jsonl`) give the same results in
+- [x] Golden fixtures recorded from the former TypeScript (`core/fixtures/golden/*.jsonl`) give the same results in
       `cargo test` (native) and in `tests/core-golden.test.ts` (wasm); the existing unit suites pass on the wasm
-- [ ] `check:dist` asserts the core is in the service worker; full E2E green in real Chromium
-- [ ] CI (`check`, `e2e`, `Desktop`) green on the PR head; the CI jobs that build the extension set up Rust, the wasm
+- [x] `check:dist` asserts the core is in the service worker; full E2E green in real Chromium
+- [x] CI (`check`, `e2e`, `Desktop`) green on the PR head; the CI jobs that build the extension set up Rust, the wasm
       target and the pinned CLI (`.github/actions/setup-core`)
 
 ## Notes
@@ -43,3 +43,5 @@ verdicts built on them.
 - Size: the wasm is about 520 KB (URL/IDNA tables and serde). Worth trimming later (`wasm-opt`) if it matters.
 - Open question for VDH-063/064: the modules the content scripts use (`dataUrl`, `filetypes`, `sniff`, `security.log`,
   `metadata`) run in every frame of every page; inlining the wasm there costs memory per frame.
+
+- Verified: local suite (unit 657/657, cargo, E2E 113/113) on d5d66c9; CI on PR #11 green: CI runs 40660622813 and 40660652404 (check, e2e), Desktop runs 40660622553 and 40660652430 (rust on Linux, Windows, macOS).
