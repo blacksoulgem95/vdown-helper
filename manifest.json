@@ -5,7 +5,7 @@
   "version": "0.0.0",
   "default_locale": "en",
   "minimum_chrome_version": "116",
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuj9E2teJBx/SL6HjgQJ5jvQaH5qLuv71+LxMDbAQIxjyToGEflxmzjp/cXPca88yWo5PY+gErSeJtiztYNSo8stbLig4f5MoQtnotZyEsxKR//KFoj7bwLCd/P0PCAzz3iUU2R1T/GExJBEpaXsIEnYOjIJQ1E6Y8sqyQfOPil+SLSiEJwMzCeOrsQD0vfj//Dt6zyz9g+BoxHc5D8/17Dk42dwduIXcbvpL33MufuGN0t0axhxwYtzayQOVVZziLay6vz4gnaKD9lYqEguXfoj429EZ2jquHJhPM0/3AUhxah+PkplkdyGWOvMhBtjctS2l+WvjndzyK7DginxeSQIDAQAB",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAthQ9unAOrq1e7fy4QH9HMw7/RaqF6Qg6WH3a99eiBea8FG1TskTuPtXEUzbmKDdcQNmtds4nqEqkMVVeYTyJTz1KHAmQNJkIjwx3WCwbF0VNoAaL0NJ/D8KpKj8vHUnHppAK41CqZUOJpnVrJ+DqMIOtB9G5cI+f4VV3QFESaxcJZFyaKfMvi0vON4hSZNEBTGi5ZRawBpi8EnZ3swzs+ZPV2/sDSZwKHilpQLRIhy/uiGnzGgy2cI9opukP66vnRCpdxgT5PELoznJaPT56DAekmoNrV3WI18w5Ee6pI07ugHIqOSUYJi0ZK8MVQX82Iu9BBUqIGZDv47hegAdKDwIDAQAB",
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
