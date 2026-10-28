@@ -1,0 +1,30 @@
+name: Set up the Rust core build
+description: Rust with the wasm32 target and the wasm-bindgen CLI pinned in core-wasm/Cargo.toml (scripts/build-core.mjs).
+runs:
+  using: composite
+  steps:
+    - name: Rust toolchain with wasm32
+      shell: bash
+      run: |
+        rustup toolchain install stable --profile minimal --target wasm32-unknown-unknown
+        rustup default stable
+    - name: Pinned wasm-bindgen version
+      id: pin
+      shell: bash
+      run: echo "version=$(sed -n 's/^wasm-bindgen = "=\(.*\)"/\1/p' core-wasm/Cargo.toml)" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache@v4
+      id: cli
+      with:
+        path: ~/.cargo/bin/wasm-bindgen
+        key: wasm-bindgen-cli-${{ runner.os }}-${{ steps.pin.outputs.version }}
+    - name: Install wasm-bindgen CLI
+      if: steps.cli.outputs.cache-hit != 'true'
+      shell: bash
+      run: cargo install wasm-bindgen-cli --version ${{ steps.pin.outputs.version }} --locked
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: core-wasm-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}

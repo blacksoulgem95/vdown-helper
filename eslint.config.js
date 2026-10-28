@@ -15,6 +15,8 @@ export default tseslint.config(
       'public/**',
       'e2e/.tmp/**',
       'docs/**',
+      'src/wasm/gen/**',
+      'target/**',
     ],
   },
   js.configs.recommended,

@@ -2,7 +2,7 @@
 # later, the desktop app. Design: docs/desktop.md.
 [workspace]
 resolver = "3"
-members = ["core"]
+members = ["core", "core-wasm"]
 
 [workspace.package]
 edition = "2024"
@@ -19,3 +19,10 @@ all = { level = "warn", priority = -1 }
 [profile.release]
 lto = true
 codegen-units = 1
+
+# The extension's wasm build (scripts/build-core.mjs): smallest code, no unwinding.
+[profile.wasm]
+inherits = "release"
+opt-level = "z"
+panic = "abort"
+strip = true

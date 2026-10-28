@@ -14,6 +14,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - uses: ./.github/actions/setup-core
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run format:check
@@ -37,6 +38,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - uses: ./.github/actions/setup-core
       - name: Install Chromium and ffmpeg (fixture generation and output verification)
         run: |
           npx playwright install --with-deps chromium

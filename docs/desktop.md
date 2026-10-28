@@ -58,9 +58,14 @@ The browser only ever owns the relay. The relay starts the app if it is not runn
 ### Shared core (VDH-062 to VDH-064)
 
 Every pure module of `src/lib` moves to `vdh-core`. TS modules become thin wrappers with the same exports, so callers
-do not change; TS types are generated from the Rust types (`tsify`). The wasm is loaded asynchronously in every
-extension context (the service worker still registers its listeners synchronously and handlers await `coreReady`).
-The existing vitest suites stay as conformance tests against the wasm, and `cargo test` runs the same golden fixtures.
+do not change. `scripts/build-core.mjs` (run by `npm run build`, `npm test` and `npm run typecheck`) compiles
+`core-wasm` and the pinned `wasm-bindgen` CLI writes the glue to `src/wasm/gen/` (generated, not committed) with the
+`.wasm` inlined as base64: `src/lib/core.ts` instantiates it **synchronously** in every context (service worker,
+offscreen document, pages, unit tests), so nothing is fetched and no caller has to wait.
+
+The shapes crossing the boundary are the TypeScript types in `src/types`; they are held to the Rust types by golden
+fixtures recorded from the former TypeScript implementation (`core/fixtures/golden/*.jsonl`), replayed by `cargo test`
+natively and by `tests/core-golden.test.ts` through the wasm. The existing vitest suites keep running against the wasm.
 
 ### Engine (VDH-065)
 

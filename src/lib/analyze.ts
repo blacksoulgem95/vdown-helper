@@ -8,18 +8,9 @@ import type {
   RawCandidate,
 } from '@/types/media';
 import { classifyPlaylist, parseHls } from './hls/parser';
-import { dashRef } from './dash/ref';
 import { extensionForMime, fileKindOfExtension, fileStem, urlExtension, type FileKind } from './filetypes';
 import { exceedsHeldLimit, isDataLabel } from './dataUrl';
 import { heldLimit } from '@/types/ingest';
-import {
-  DashExpandError,
-  expandSegments,
-  mainPeriodIndex,
-  parseDash,
-  periodDuration,
-  protectionsOf,
-} from './dash/parser';
 import {
   estimateBytes,
   formatFromMime,
@@ -31,6 +22,7 @@ import {
 import type { ProbeResult } from './netprobe';
 import { dedupeResources, hideCoveredVariants, resourceId } from './resources';
 import { isSafeFetchUrl, normalizeUrl, parseUrl } from './security';
+import { core } from './core';
 
 /** Network access used while analysing. Implementations decide which origin the request is made from. */
 export interface Fetcher {
@@ -208,16 +200,9 @@ function skeleton(e: Entry, ctx: AnalyzeContext, format: MediaFormat): MediaReso
   return r;
 }
 
-/** Verdict for a parsed media playlist. */
+/** Verdict for a parsed media playlist. Implemented in Rust (`core/src/analyze.rs`), shared with the desktop app. */
 export function mediaPlaylistVerdict(p: HlsMediaPlaylist): Downloadability {
-  if (p.hasDrm) {
-    const sample = p.encryption.some((m) => m === 'SAMPLE-AES' || m === 'SAMPLE-AES-CTR');
-    return verdict('protected', sample ? 'sample-aes' : 'drm');
-  }
-  // A stream that is still being made cannot be downloaded, but it can be recorded as it goes by.
-  if (!p.endList) return verdict('downloadable', 'ok', 'live-recordable');
-  if (p.encryption.includes('AES-128')) return verdict('downloadable', 'ok', 'aes-128');
-  return verdict('downloadable', 'ok');
+  return core.mediaPlaylistVerdict(p) as Downloadability;
 }
 
 function summaryOf(p: HlsMediaPlaylist, cls: PlaylistSummary['playlistClass']): PlaylistSummary {
@@ -636,120 +621,33 @@ export function provisionalResources(candidates: RawCandidate[], ctx: AnalyzeCon
 
 /** Describe an MPEG-DASH manifest: its real representations, duration, protection and addressing. */
 function analyzeDash(r: MediaResource, text: string, url: string): MediaResource {
-  r.format = 'dash';
-  const parsed = parseDash(text, url);
-  if (!parsed.ok) {
-    r.kind = 'unsupported-playlist';
-    r.playlist = { playlistClass: 'dash', encryption: [] };
-    r.downloadability =
-      parsed.error.code === 'unsafe-url'
-        ? verdict('unsupported', 'unsafe-url')
-        : verdict('unsupported', 'malformed', parsed.error.code);
-    return r;
-  }
-  const m = parsed.manifest;
-  const period = m.periods[mainPeriodIndex(m)];
-  if (!period) {
-    r.kind = 'unsupported-playlist';
-    r.downloadability = verdict('unsupported', 'malformed');
-    return r;
-  }
-  r.kind = 'dash';
-  const videos = period.representations
-    .filter((x) => x.content === 'video')
-    .sort((a, b) => (b.height ?? 0) - (a.height ?? 0) || b.bandwidth - a.bandwidth)
-    .slice(0, MAX_VARIANTS);
-  const audios = period.representations.filter((x) => x.content === 'audio').slice(0, MAX_AUDIO_TRACKS);
-  const hasAudioCodec = (codecs: string | undefined) => /mp4a|ac-3|ec-3|opus|vorbis|flac/i.test(codecs ?? '');
-  r.variants = videos.map((x) => {
-    const v: HlsVariant = { uri: dashRef(url, x.id), bandwidth: x.bandwidth };
-    if (x.width) v.width = x.width;
-    if (x.height) v.height = x.height;
-    if (x.frameRate) v.frameRate = x.frameRate;
-    if (x.codecs) v.codecs = x.codecs;
-    // Separate audio is only offered for video that does not already carry it.
-    if (audios.length > 0 && !hasAudioCodec(x.codecs)) v.audioGroup = 'dash-audio';
-    return v;
-  });
-  r.audioTracks = audios.map((x, i) => {
-    const t: HlsRendition = {
-      type: 'AUDIO',
-      groupId: 'dash-audio',
-      name: clip(x.label ?? x.lang ?? x.id),
-      uri: dashRef(url, x.id),
-      isDefault: i === 0,
-      autoSelect: true,
-    };
-    if (x.lang) t.language = x.lang;
-    if (x.codecs) t.codecs = x.codecs;
-    return t;
-  });
-  const texts = period.representations.filter((x) => x.content === 'text').slice(0, MAX_SUBTITLE_TRACKS);
-  if (m.type === 'static' && texts.length > 0) {
-    r.subtitleTracks = texts.map((x) => {
-      const t: HlsRendition = {
-        type: 'SUBTITLES',
-        groupId: 'dash-text',
-        name: clip(x.label ?? x.lang ?? x.id),
-        uri: dashRef(url, x.id),
-        isDefault: false,
-        autoSelect: false,
-      };
-      if (x.lang) t.language = x.lang;
-      // The codec decides whether the track can be read (wvtt/image tracks cannot), the MIME type is the fallback.
-      const codec = x.codecs ?? x.mimeType;
-      if (codec) t.codecs = codec;
-      return t;
-    });
-  }
-  r.mediaType = videos.length > 0 ? 'video' : 'audio';
-  applyVariantTop(r, r.variants[0]);
-  if (videos.length === 0 && audios[0]) r.bitrate = audios[0].bandwidth;
-  const dur = periodDuration(m, period);
-  if (dur !== undefined) r.durationSec = dur;
+  return Object.assign(r, dashResource(text, url));
+}
 
-  const top = videos[0] ?? audios[0];
-  let segmentCount: number | undefined;
-  if (top && m.type === 'static') {
-    try {
-      segmentCount = expandSegments(m, period, top).segments.length;
-    } catch (e) {
-      r.downloadability = verdict(
-        'unsupported',
-        'malformed',
-        e instanceof DashExpandError ? 'segments' : 'expand',
-      );
-      r.playlist = { playlistClass: 'dash', encryption: [], periods: m.periods.length };
-      return r;
-    }
-  }
-  r.playlist = {
-    playlistClass: 'dash',
-    encryption: [],
-    fragmented: true,
-    live: m.type === 'dynamic',
-    periods: m.periods.length,
-    ...(segmentCount !== undefined ? { segmentCount } : {}),
-  };
-  const prot = protectionsOf(period.representations);
-  if (prot.drm) {
-    r.downloadability = verdict('protected', 'drm', prot.systems.join(','));
-  } else if (prot.clearKey) {
-    // Encrypted with ClearKey: only downloadable once its key can be obtained (not implemented yet).
-    r.downloadability = verdict('unsupported', 'dash-clearkey');
-  } else if (m.type === 'dynamic') {
-    r.downloadability = top
-      ? verdict('downloadable', 'ok', 'live-recordable')
-      : verdict('unsupported', 'no-segments');
-  } else if (!top) {
-    r.downloadability = verdict('unsupported', 'no-segments');
-  } else {
-    r.downloadability = verdict('downloadable', 'ok');
-    const size = estimateBytes(r.bitrate, dur);
-    if (size !== undefined) {
-      r.sizeBytes = size;
-      r.sizeIsEstimate = true;
-    }
-  }
-  return r;
+/** What a DASH manifest says about the resource it is: the fields `analyzeDash` sets (pure: no network, no clock). */
+export type DashResourcePatch = Partial<
+  Pick<
+    MediaResource,
+    | 'format'
+    | 'kind'
+    | 'playlist'
+    | 'downloadability'
+    | 'variants'
+    | 'audioTracks'
+    | 'subtitleTracks'
+    | 'mediaType'
+    | 'bitrate'
+    | 'width'
+    | 'height'
+    | 'frameRate'
+    | 'codecs'
+    | 'durationSec'
+    | 'sizeBytes'
+    | 'sizeIsEstimate'
+  >
+>;
+
+/** Implemented in Rust (`core/src/analyze.rs`), shared with the desktop app. */
+export function dashResource(text: string, url: string): DashResourcePatch {
+  return core.dashResource(text, url) as DashResourcePatch;
 }

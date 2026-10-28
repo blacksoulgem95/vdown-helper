@@ -1,6 +1,7 @@
 // Builds the extension into dist/: pages, service worker, content script, then copies static files.
 // Runs TypeScript via Node's native type stripping for vite.shared.ts.
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { build } from 'vite';
 
@@ -15,6 +16,9 @@ const root = resolve(import.meta.dirname, '..');
 const { pagesConfig, backgroundConfig, contentConfig, hookConfig, DIST } = await import(
   resolve(root, 'vite.shared.ts')
 );
+
+// The Rust core first: every bundle inlines it (src/lib/core.ts).
+execFileSync('node', [resolve(root, 'scripts/build-core.mjs')], { stdio: 'inherit' });
 
 await build(pagesConfig());
 await build(backgroundConfig());
