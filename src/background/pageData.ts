@@ -48,7 +48,8 @@ async function frameText(
   url: string,
 ): Promise<string | undefined> {
   try {
-    return await pageSameOriginText(tabId, frameId, url);
+    const text: unknown = await pageSameOriginText(tabId, frameId, url);
+    return typeof text === 'string' ? text : undefined;
   } catch {
     return undefined;
   }

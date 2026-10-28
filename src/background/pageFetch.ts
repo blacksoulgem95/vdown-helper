@@ -71,12 +71,14 @@ async function callPage<T>(
 }
 
 /** A same-origin document (feed, open-site API) read by the frame itself, anonymously (content/metadata.ts). */
-export function pageSameOriginText(
+export async function pageSameOriginText(
   tabId: number,
   frameId: number | undefined,
   url: string,
 ): Promise<string | undefined> {
-  return callPage<string | undefined>(tabId, frameId, 'sameOriginText', url);
+  // executeScript reports a function's `undefined` as null
+  const text = await callPage<unknown>(tabId, frameId, 'sameOriginText', url);
+  return typeof text === 'string' ? text : undefined;
 }
 
 /** One report per frame that could be scanned; each carries the frame id it came from. */

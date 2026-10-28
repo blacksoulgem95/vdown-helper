@@ -9,7 +9,9 @@ import type { ScanReport } from '@/types/media';
 vi.mock('@/background/pageFetch', async () => {
   const { sameOriginText } = await import('@/content/metadata');
   return {
-    pageSameOriginText: (_tab: number, _frame: number | undefined, url: string) => sameOriginText(url),
+    // as executeScript reports it: a function's `undefined` arrives as null
+    pageSameOriginText: async (_tab: number, _frame: number | undefined, url: string) =>
+      (await sameOriginText(url)) ?? null,
   };
 });
 
