@@ -194,6 +194,28 @@ export interface RawCandidate {
   /** Set by the background from the frame that reported the candidate (never trusted from the page). */
   frameId?: number;
   frameUrl?: string;
+  /**
+   * Raw facts the page scanner reports for the background to classify (the scanner carries no classification logic,
+   * so the shared core never has to load in every frame): `link` is an `<a href>` that may be a document or archive,
+   * `resource` a Performance entry that may be an image, document, archive or page asset.
+   */
+  fileHint?: 'link' | 'resource';
+  /** Performance entry initiator type (`img`, `script`, ...), for `fileHint: 'resource'`. */
+  initiator?: string;
+  /** First bytes of a page-held blob whose declared type says nothing, for the background to recognise. */
+  blobHead?: number[];
+  /** The blob is counted in `notes.blobSources` until the background lists it. */
+  blobCounted?: boolean;
+}
+
+/** Page metadata as found: the background turns it into candidates (lib/metadata). */
+export interface PageData {
+  /** The document's base URI. */
+  base: string;
+  tags: Array<{ key: string; content: string }>;
+  links: Array<{ rel: string; type: string; href: string; title?: string }>;
+  /** JSON-LD script texts. */
+  ld: string[];
 }
 
 /** Things a scan could see but not use. */
@@ -212,4 +234,6 @@ export interface ScanReport {
   notes: ScanNotes;
   /** Added by the background from the injection result. */
   frameId?: number;
+  /** Metadata of the frame's own document, parsed by the background. */
+  pageData?: PageData;
 }

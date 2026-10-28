@@ -1,6 +1,27 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mseVideos } from '@/content/capture';
 import { heldBlobs, heldData, scan, scanAsync } from '@/content/scanner';
+import { classifyCandidates } from '@/lib/classify';
+import { pageDataCandidates, tagCandidates } from '@/background/pageData';
+import type { ScanReport } from '@/types/media';
+
+// The frame reads its own feeds and site API (content/metadata.ts); in the extension the background asks it to.
+vi.mock('@/background/pageFetch', async () => {
+  const { sameOriginText } = await import('@/content/metadata');
+  return {
+    pageSameOriginText: (_tab: number, _frame: number | undefined, url: string) => sameOriginText(url),
+  };
+});
+
+/** What the background makes of a frame's report: the scanner reports raw facts, lib/classify decides what they are. */
+function classify(r: ScanReport): ScanReport {
+  const c = classifyCandidates(r.candidates);
+  return {
+    ...r,
+    candidates: c.candidates,
+    notes: { ...r.notes, blobSources: r.notes.blobSources + c.unreadableBlobs },
+  };
+}
 
 function setBody(html: string) {
   document.body.innerHTML = html;
@@ -17,7 +38,7 @@ describe('content scanner', () => {
       <audio src="https://cdn.example.org/s.mp3"></audio>
       <a href="/files/d.mkv">Download D</a>
       <a href="/page.html">not media</a>`);
-    const r = scan();
+    const r = classify(scan());
     const byUrl = Object.fromEntries(r.candidates.map((c) => [new URL(c.url).pathname, c]));
     expect(Object.keys(byUrl).sort()).toEqual(
       ['/files/d.mkv', '/media/a.mp4', '/s.mp3', '/b.webm', '/c.m3u8'].sort(),
@@ -125,7 +146,7 @@ describe('content scanner', () => {
 
   it('caps the number of candidates', () => {
     setBody(Array.from({ length: 500 }, (_, i) => `<a href="/f${i}.mp4">x</a>`).join(''));
-    expect(scan().candidates.length).toBeLessThanOrEqual(200);
+    expect(classify(scan()).candidates.length).toBeLessThanOrEqual(200);
   });
 
   describe('images, documents, archives and page assets', () => {
@@ -167,7 +188,7 @@ describe('content scanner', () => {
         <a href="/page.html">p</a> <a href="/lib.js">js link</a> <a href="mailto:a@b.c">m</a>
         <script src="/app.js"></script><link rel="stylesheet" href="/site.css">
         <link rel="preload" as="font" href="/f.woff2">`);
-      expect(kinds(scan())).toEqual([
+      expect(kinds(classify(scan()))).toEqual([
         ['/app.js', 'asset', 'dom-element'],
         ['/dl/pack.zip', 'archive', 'dom-link'],
         ['/docs/data.csv', 'document', 'dom-link'],
@@ -231,7 +252,7 @@ describe('blob: sources (scanAsync)', () => {
     const sync = scan();
     expect(sync.candidates).toHaveLength(0); // the synchronous scan still never reports blobs
     expect(sync.notes.blobSources).toBe(1);
-    const r = await scanAsync();
+    const r = classify(await scanAsync());
     expect(r.notes.blobSources).toBe(0);
     expect(r.candidates).toHaveLength(1);
     expect(r.candidates[0]).toMatchObject({
@@ -253,7 +274,7 @@ describe('blob: sources (scanAsync)', () => {
     });
     respond({ 'blob:https://example.com/img': png });
     setBody('<img src="blob:https://example.com/img">');
-    const r = await scanAsync();
+    const r = classify(await scanAsync());
     expect(r.candidates).toHaveLength(1);
     expect(r.candidates[0]).toMatchObject({ mimeType: 'image/png', fileKind: 'image', method: 'dom-image' });
     expect(r.notes.blobSources).toBe(0); // an image blob was never counted as an unreadable media source
@@ -273,7 +294,7 @@ describe('blob: sources (scanAsync)', () => {
     );
     const p = scanAsync();
     await vi.advanceTimersByTimeAsync(3000);
-    const r = await p;
+    const r = classify(await p);
     // three videos fed by something unreadable (MediaSource, hung read, revoked URL): listed for capture, without a URL
     const mse = r.candidates.filter((c) => c.held?.kind === 'mse');
     expect(mse).toHaveLength(3);
@@ -293,7 +314,7 @@ describe('blob: sources (scanAsync)', () => {
   it('still lists a real text file as a document', async () => {
     respond({ 'blob:https://example.com/t': new Blob(['hello, world\n'], { type: 'text/plain' }) });
     setBody('<a href="blob:https://example.com/t" download="n.txt">Notes</a>');
-    const r = await scanAsync();
+    const r = classify(await scanAsync());
     expect(r.candidates[0]).toMatchObject({ fileKind: 'document', mimeType: 'text/plain' });
   });
 
@@ -301,11 +322,11 @@ describe('blob: sources (scanAsync)', () => {
     const a = new Blob([bytes(0x1a, 0x45, 0xdf, 0xa3, 0, 0, 0, 0)], { type: 'video/webm' });
     respond({ 'blob:https://example.com/a': a });
     setBody('<video src="blob:https://example.com/a"><source src="blob:https://example.com/a"></video>');
-    const first = await scanAsync();
+    const first = classify(await scanAsync());
     expect(first.candidates).toHaveLength(2); // two different detection methods, as for http sources
     expect(new Set(first.candidates.map((c) => c.held!.id)).size).toBe(1);
     setBody('');
-    await scanAsync();
+    classify(await scanAsync());
     expect(heldBlobs.size).toBe(0);
   });
 
@@ -315,7 +336,7 @@ describe('blob: sources (scanAsync)', () => {
     });
     respond({ 'blob:https://example.com/doc': pdf });
     setBody('<a href="blob:https://example.com/doc" download="r.pdf">Report</a>');
-    const r = await scanAsync();
+    const r = classify(await scanAsync());
     expect(r.candidates[0]).toMatchObject({
       fileKind: 'document',
       mimeType: 'application/pdf',
@@ -351,8 +372,7 @@ describe('metadata and open-site lookups', () => {
       <script type="application/ld+json">{"@type":"VideoObject","name":"Launch 2","contentUrl":"/two.webm"}</script>
       <link rel="alternate" type="audio/mpeg" href="/talk.mp3">
       <link rel="alternate" type="application/rss+xml" href="/feed.xml">`);
-    const r = scan();
-    const meta = r.candidates.filter((c) => c.method === 'metadata');
+    const meta = tagCandidates(scan()).candidates;
     expect(meta.map((c) => c.url)).toEqual([
       'https://cdn.example/launch.mp4',
       `${location.origin}/two.webm`,
@@ -381,9 +401,9 @@ describe('metadata and open-site lookups', () => {
         streamingPlaylists: [],
       },
     });
-    const r = await scanAsync();
+    const found = await pageDataCandidates(1, await scanAsync());
     expect(requested).toEqual([`${location.origin}/api/v1/videos/kkGMgK9ZtnKfYAgnEtQxbv credentials=omit`]);
-    expect(r.candidates.filter((c) => c.method === 'site-api')).toMatchObject([
+    expect(found.filter((c) => c.method === 'site-api')).toMatchObject([
       { url: `${location.origin}/static/c-720.mp4`, title: 'Clip (720p)', mediaType: 'video', width: 1280 },
     ]);
   });
@@ -395,9 +415,9 @@ describe('metadata and open-site lookups', () => {
     answer({
       '/feed.xml': `<rss><channel><item><title>Ep</title><enclosure url="https://cdn.example/e.mp3" type="audio/mpeg"/></item></channel></rss>`,
     });
-    const r = await scanAsync();
+    const found = await pageDataCandidates(1, await scanAsync());
     expect(requested).toEqual([`${location.origin}/feed.xml credentials=omit`]); // the other origin is never contacted
-    expect(r.candidates).toContainEqual(
+    expect(found).toContainEqual(
       expect.objectContaining({ url: 'https://cdn.example/e.mp3', method: 'metadata', title: 'Ep' }),
     );
   });
@@ -405,13 +425,17 @@ describe('metadata and open-site lookups', () => {
   it('makes no request on an ordinary page, and ignores a site that answers wrongly or from elsewhere', async () => {
     setBody('<p>hello</p>');
     answer({});
-    await scanAsync();
+    await pageDataCandidates(1, await scanAsync());
     expect(requested).toEqual([]);
 
     history.pushState({}, '', '/w/kkGMgK9ZtnKfYAgnEtQxbv');
     answer({ '/api/v1/videos/kkGMgK9ZtnKfYAgnEtQxbv': 'not json' });
-    expect((await scanAsync()).candidates.filter((c) => c.method === 'site-api')).toEqual([]);
+    expect((await pageDataCandidates(1, await scanAsync())).filter((c) => c.method === 'site-api')).toEqual(
+      [],
+    );
     answer({ '/api/v1/videos/kkGMgK9ZtnKfYAgnEtQxbv': { uuid: 'x', name: 'n', files: [] } });
-    expect((await scanAsync()).candidates.filter((c) => c.method === 'site-api')).toEqual([]);
+    expect((await pageDataCandidates(1, await scanAsync())).filter((c) => c.method === 'site-api')).toEqual(
+      [],
+    );
   });
 });

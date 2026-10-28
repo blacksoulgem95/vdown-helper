@@ -6,7 +6,7 @@ import type { VdhApi } from '@/content/scanner';
 import { mayExtensionFetch, parseUrl } from '@/lib/security';
 import { withReplay } from './replay';
 
-type ApiCall = 'scan' | 'probeHeaders' | 'fetchText';
+type ApiCall = 'scan' | 'probeHeaders' | 'fetchText' | 'sameOriginText';
 
 /**
  * Inject the (read-only) scanner into every frame Chrome lets us into: the top frame (activeTab), same-origin
@@ -68,6 +68,15 @@ async function callPage<T>(
     name,
   );
   return res?.result as T;
+}
+
+/** A same-origin document (feed, open-site API) read by the frame itself, anonymously (content/metadata.ts). */
+export function pageSameOriginText(
+  tabId: number,
+  frameId: number | undefined,
+  url: string,
+): Promise<string | undefined> {
+  return callPage<string | undefined>(tabId, frameId, 'sameOriginText', url);
 }
 
 /** One report per frame that could be scanned; each carries the frame id it came from. */

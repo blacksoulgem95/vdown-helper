@@ -1,4 +1,6 @@
 import { analyzeCandidates, provisionalResources, type AnalyzeContext } from '@/lib/analyze';
+import { classifyCandidates } from '@/lib/classify';
+import { pageDataCandidates } from './pageData';
 import {
   hookCandidates,
   markMseResources,
@@ -143,8 +145,16 @@ async function runScan(tabId: number, automatic: boolean, gen: number): Promise<
     const report = reports.find((r) => r.frameId === 0) ?? reports[0];
     if (!report) throw new Error('scanner-missing');
     const observed = await getObserved(tabId);
-    const framed = reports.flatMap((r) =>
-      r.candidates.map((c) => ({
+    // The scanners report raw facts; what they are is decided here, with the shared core (lib/classify, pageData).
+    const fromPages = await Promise.all(
+      reports.map(async (r) => {
+        const classified = classifyCandidates(r.candidates);
+        r.notes = { ...r.notes, blobSources: r.notes.blobSources + classified.unreadableBlobs };
+        return [...classified.candidates, ...(await pageDataCandidates(tabId, r))];
+      }),
+    );
+    const framed = reports.flatMap((r, i) =>
+      (fromPages[i] ?? []).map((c) => ({
         ...c,
         ...(r.frameId !== undefined ? { frameId: r.frameId } : {}),
         frameUrl: r.pageUrl,
