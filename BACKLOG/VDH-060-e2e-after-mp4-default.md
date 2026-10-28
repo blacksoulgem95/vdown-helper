@@ -1,7 +1,7 @@
 ---
 id: VDH-060
 title: E2E follows the MP4 default and waits for the navigation clear
-status: in-progress
+status: done
 priority: P0
 area: test
 depends_on: [VDH-058, VDH-059]
@@ -22,10 +22,12 @@ PR #9 (VDH-058, VDH-059) reached `main` with `e2e` at 111/113 (CI runs 404328961
 
 ## Acceptance criteria
 
-- [ ] The HLS master step sets `defaultContainer: 'original'` first and still checks the TS join (no FFmpeg, 3/3
+- [x] The HLS master step sets `defaultContainer: 'original'` first and still checks the TS join (no FFmpeg, 3/3
       segments, clean decode), then restores the defaults
-- [ ] The pasted-link step waits (bounded) for the clear instead of reading once
-- [ ] Full local suite green on the PR head, E2E 113/113
-- [ ] CI `check` and `e2e` green on the PR head
+- [x] The pasted-link step waits (bounded) for the clear instead of reading once
+- [x] Full local suite green on the PR head, E2E 113/113
+- [x] CI `check` and `e2e` green on the PR head
 
 ## Notes
+
+- Verified: local suite (E2E 113/113) on a9d64c1; CI on PR #10 green: CI runs 40622400239 and 40622404968 (check, e2e), Desktop runs 40622400375 and 40622405037 (rust on Linux, Windows, macOS).
