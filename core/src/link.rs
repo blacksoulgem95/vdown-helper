@@ -1,7 +1,7 @@
 //! Identity of the link between the extension and the desktop app (Chrome Native Messaging).
 
 /// The extension's ID, pinned by the public `key` in `manifest.json` (see `scripts/lib/extension-id.mjs`).
-pub const EXTENSION_ID: &str = "gaadncjaphdelallbigeiejgolhgoipa";
+pub const EXTENSION_ID: &str = "jplegcfjmgefcabmhljkgneehmgfhclk";
 
 /// Native messaging host name; Chrome allows only lowercase letters, digits, `_` and `.`.
 pub const HOST_NAME: &str = "io.github.blacksoulgem95.vdownhelper";
