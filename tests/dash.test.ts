@@ -75,7 +75,7 @@ describe('parseDash: structure', () => {
     expect(e.segments[0]!.uri).toBe('https://cdn.example/show/v/720/seg-00001.m4s');
     expect(e.segments[4]!.uri).toBe('https://cdn.example/show/v/720/seg-00005.m4s');
     expect(e.init?.uri).toBe('https://cdn.example/show/v/720/init.mp4');
-    expect(e.segments.every((s) => s.map === e.init)).toBe(true);
+    expect(e.segments.every((s) => JSON.stringify(s.map) === JSON.stringify(e.init))).toBe(true);
     expect(e.durationSec).toBeCloseTo(20);
   });
   it('expands a timeline with repeats and $Time$ addressing', () => {

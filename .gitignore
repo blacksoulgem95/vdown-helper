@@ -10,3 +10,4 @@ release/
 site/dist/
 store/.tmp/
 target/
+src/wasm/gen/

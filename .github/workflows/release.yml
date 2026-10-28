@@ -69,6 +69,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - run: npm ci
+      - uses: ./.github/actions/setup-core
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run format:check

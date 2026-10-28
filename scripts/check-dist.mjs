@@ -137,6 +137,10 @@ for (const file of walk(dist).filter((f) => f.endsWith('.js') && !f.includes(`${
     fail(`${rel}: remote import`);
 }
 
+// The Rust core (vdh-core as wasm, inlined as base64: "AGFzbQ" is the wasm magic number) must be in the service worker,
+// which parses playlists and re-checks every request.
+if (!read('background.js').includes('AGFzbQ')) fail('background.js does not carry the Rust core (src/lib/core.ts)');
+
 // Test-only players and tools (devDependencies) must never be part of the extension.
 for (const file of walk(dist).filter((f) => f.endsWith('.js') && !f.includes(`${join(dist, 'vendor')}`))) {
   const code = readFileSync(file, 'utf8');

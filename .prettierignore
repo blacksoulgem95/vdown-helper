@@ -8,3 +8,6 @@ _locales
 site/dist
 store/.tmp
 store-assets
+src/wasm/gen
+target
+core/fixtures
