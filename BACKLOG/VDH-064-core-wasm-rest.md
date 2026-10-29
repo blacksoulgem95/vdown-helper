@@ -1,7 +1,7 @@
 ---
 id: VDH-064
 title: Rust core: the remaining pure modules
-status: in-progress
+status: done
 priority: P2
 area: lib
 depends_on: [VDH-063]
@@ -20,8 +20,8 @@ Last slice: `resources`, `queue`, `zip`, `subtitles`, `subtitleBytes`, `media`, 
 - [x] Goldens recorded from the former TypeScript (`core/fixtures/golden/{ui,page,subtitles,mse}.jsonl`, ~4,800 cases
       incl. a corpus with the E2E fixtures' real subtitles and fMP4/WebM segments) match in `cargo test` and through the
       wasm; existing unit suites pass
-- [ ] Full local suite (incl. E2E) green
-- [ ] CI green on the PR head
+- [x] Full local suite (incl. E2E) green
+- [x] CI green on the PR head
 
 ## Notes
 
@@ -49,3 +49,5 @@ Last slice: `resources`, `queue`, `zip`, `subtitles`, `subtitleBytes`, `media`, 
 - JSON-LD nested deeper than 128 levels is not read (serde_json's recursion limit); the TypeScript read its top 6 levels.
 - Size: the wasm is ~1074 KB (VDH-072). An MSE chunk is copied into wasm memory to be classified, so that memory grows
   to the largest chunk seen.
+- Verified on `c4b2e80` (PR #15): local suite (unit 674/674, cargo, E2E 113/113) and CI runs 40801271526 / 40802098555
+  (`check`, `e2e`) and 40801271553 / 40802097021 (Desktop).
