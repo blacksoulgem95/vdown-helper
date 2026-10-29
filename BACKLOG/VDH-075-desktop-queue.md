@@ -1,7 +1,7 @@
 ---
 id: VDH-075
 title: Desktop engine: persistent queue, resume after restart, bandwidth cap, schedule, history
-status: in-progress
+status: done
 priority: P1
 area: desktop
 depends_on: [VDH-065]
@@ -22,7 +22,7 @@ URLs. Split out of VDH-065.
 - [x] Global bandwidth cap (token bucket) and a schedule window that pauses and resumes jobs
 - [x] History until cleared (can be turned off), URLs stored with credentials and tokens stripped; cookies never stored
 - [x] `vdh` CLI commands for the queue, used by integration tests against the fixture servers
-- [ ] CI green on the PR head
+- [x] CI green on the PR head
 
 ## Notes
 
@@ -39,3 +39,8 @@ URLs. Split out of VDH-065.
   them will ask the browser again (VDH-067).
 - The schedule window is local time (`chrono`); outside it, running jobs go back to the queue with what they staged.
 - `rusqlite` 0.40 with SQLite compiled in (0.41 needs Rust 1.89; the workspace declares 1.85).
+- Done: PR #17 head `e51b4f7` green in CI: `check` + `e2e` (runs 40810125374, 40810118956) and `Desktop` (runs
+  40810125248, 40810118968: rust on ubuntu-22.04, windows-latest, macos-14, and `engine-fixtures`). Locally on
+  `7686d3b` (`e51b4f7` only changes a Rust test): typecheck, lint, format:check, unit tests, build, check:dist, E2E
+  113/113, `cargo fmt/clippy/test` with `VDH_REQUIRE_FIXTURES=1` (12 fixture and 6 queue tests). The first CI run
+  failed on Windows clippy (imports used only by a unix-only test); `e51b4f7` moved them into that test.
