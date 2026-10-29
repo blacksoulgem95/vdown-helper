@@ -1,7 +1,7 @@
 ---
 id: VDH-066
 title: Desktop app (Tauri v2): window, queue, history, settings, tray
-status: in-progress
+status: done
 priority: P1
 area: desktop
 depends_on: [VDH-065, VDH-075]
@@ -27,7 +27,7 @@ Page scan, local files, clipboard watch and folder rules moved to VDH-076, so th
       settings saved in the queue database and applied while jobs run
 - [x] Tray with close-to-tray, start at login (opt-in), OS notifications, single instance, English and Italian
 - [x] Linux E2E of the real app with tauri-driver (`npm run test:desktop`)
-- [ ] CI green on the PR head
+- [x] CI green on the PR head
 
 ## Notes
 
@@ -39,7 +39,9 @@ Page scan, local files, clipboard watch and folder rules moved to VDH-076, so th
   surviving a restart, start at login registered and removed, closing the window (a real `WM_DELETE_WINDOW`,
   `e2e/wm-close.py`) hiding it to the tray with the app still running, and a second launch bringing the window back and
   exiting. Not driven: the tray menu itself (Xvfb has no tray host) and how notifications look.
-- PR #18 head `9d5046a` was green in CI (runs 40814597184, 40814591638, 40814597143, 40814591643) and locally (unit
-  679/679, cargo with fixtures, app E2E 4/4, extension E2E 113/113); the tray, start at login, notification and
-  single-instance checks were added after it, so CI is awaited again on the new head. The first CI run failed on Windows
-  (tauri-build needs `icons/icon.ico`); `9d5046a` added it.
+- Done: PR #18 head `5e79b0b` green in CI: `check` + `e2e` (runs 40815886968, 40815879938) and `Desktop` (runs
+  40815886961, 40815880260: rust on ubuntu-22.04, windows-latest, macos-14, `engine-fixtures`, `app-e2e` 8/8). Locally:
+  the app E2E 8/8 on `5e79b0b`; the rest of the suite (unit 679/679, build, check:dist, cargo with fixtures, extension
+  E2E 113/113) on `9d5046a`, which differs only by the app E2E, its CI job and the notes; the full suite runs again on
+  the done commit before the merge. The first CI run failed on Windows (tauri-build needs `icons/icon.ico`); `9d5046a`
+  added it.
