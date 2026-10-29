@@ -3,10 +3,9 @@
 
 mod common;
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use common::*;
-use serde_json::Value;
 
 #[test]
 fn hls_master_gives_the_best_quality_as_mp4() {
@@ -171,6 +170,8 @@ fn a_live_stream_is_recorded_until_it_ends() {
 #[cfg(unix)]
 #[test]
 fn stopping_a_recording_keeps_what_was_recorded() {
+    use serde_json::Value;
+    use std::path::PathBuf;
     use std::process::{Command, Stdio};
     use std::time::{Duration, Instant};
     let Some(f) = fixtures() else { return };
