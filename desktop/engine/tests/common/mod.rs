@@ -157,23 +157,26 @@ pub fn probe(file: &Path) -> Probe {
 
 /// Decoding the whole file reports no error.
 ///
-/// Opus in Matroska/WebM: FFmpeg 8.0 logs `Error parsing Opus packet header` when it reads the last, end-trimmed Opus
-/// packet from Matroska, even when the audio is not decoded, although the stored bytes are correct (the same packet
-/// copied into Ogg decodes cleanly; VDH-081). So the rest of the file is decoded as it is and the Opus packets, copied
-/// unchanged into Ogg, are decoded there: every packet is still checked.
+/// Opus in Matroska/WebM: FFmpeg 8.0 logs `Error parsing Opus packet header` whenever it reads the last, end-trimmed
+/// Opus packet from Matroska (already while it looks at the streams, before decoding anything), although the stored
+/// bytes are correct (the same packet copied into Ogg decodes cleanly; VDH-081). So the video and the Opus packets are
+/// copied unchanged into files of their own (Matroska without the Opus, and Ogg) and each is decoded in full there:
+/// every packet is still checked.
 pub fn decodes_cleanly(file: &Path) {
     let ext = file.extension().and_then(|e| e.to_str()).unwrap_or("");
     let opus_in_matroska =
         matches!(ext, "mkv" | "webm") && probe(file).codecs.iter().any(|c| c == "opus");
-    if opus_in_matroska {
-        // the audio is dropped before the demuxer reads it (FFmpeg 8 logs the error while reading)
-        decodes(file, &["-discard:a", "all"], &["-an"]);
-        let ogg = file.with_extension("opus-check.ogg");
+    if !opus_in_matroska {
+        decodes(file);
+        return;
+    }
+    for (map, suffix) in [("0:v", "video-check.mkv"), ("0:a", "opus-check.ogg")] {
+        let part = file.with_extension(suffix);
         let copied = Command::new("ffmpeg")
             .args(["-v", "error", "-y", "-i"])
             .arg(file)
-            .args(["-map", "0:a", "-c", "copy"])
-            .arg(&ogg)
+            .args(["-map", map, "-c", "copy"])
+            .arg(&part)
             .output()
             .expect("ffmpeg runs");
         assert!(
@@ -182,20 +185,15 @@ pub fn decodes_cleanly(file: &Path) {
             file.display(),
             String::from_utf8_lossy(&copied.stderr)
         );
-        decodes(&ogg, &[], &[]);
-        let _ = std::fs::remove_file(&ogg);
-    } else {
-        decodes(file, &[], &[]);
+        decodes(&part);
+        let _ = std::fs::remove_file(&part);
     }
 }
 
-fn decodes(file: &Path, input: &[&str], output: &[&str]) {
+fn decodes(file: &Path) {
     let out = Command::new("ffmpeg")
-        .args(["-v", "error"])
-        .args(input)
-        .arg("-i")
+        .args(["-v", "error", "-i"])
         .arg(file)
-        .args(output)
         .args(["-f", "null", "-"])
         .output()
         .expect("ffmpeg runs");

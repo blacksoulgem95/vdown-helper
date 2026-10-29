@@ -23,9 +23,10 @@ libopus. Find which packets are rejected and whether the files the app writes ar
 - [x] The files shown to be correct: the last packet read from the WebM is byte for byte the one read from Ogg, with
       the same skip-samples side data; the Ogg decodes cleanly, the WebM made from it fails, and the Ogg copied back
       out of that WebM decodes cleanly again. The fault is in FFmpeg 8.0.1's reading of Opus from Matroska, not in
-      the stored data: the error is logged while the file is read, even when its audio is not decoded
-- [x] The engine tests check every Opus packet of a Matroska/WebM output: the rest of the file is decoded as it is
-      (its audio dropped before it is read) and the Opus packets, copied unchanged into Ogg, are decoded there
+      the stored data: the error is logged whenever the packet is read, already while ffmpeg looks at the streams and
+      even when the audio is dropped (`-discard:a all`) or not decoded
+- [x] The engine tests check every packet of a Matroska/WebM output with Opus: the video and the Opus packets are
+      copied unchanged into files of their own (Matroska without the Opus, and Ogg) and each is decoded in full
 - [ ] CI green on the PR head
 
 ## Notes
