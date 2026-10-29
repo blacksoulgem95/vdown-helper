@@ -76,9 +76,14 @@ jobs:
       - run: npm ci
       - uses: ./.github/actions/setup-core
       - name: Linux libraries, WebKitWebDriver, Xvfb and ffmpeg
-        run: >-
-          sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev
-          librsvg2-dev libxdo-dev webkit2gtk-driver xvfb dbus ffmpeg
+        run: |
+          sudo apt-get update
+          # WebKitWebDriver: webkit2gtk-driver until Ubuntu 24.04, webkitgtk-webdriver from 26.04
+          driver=webkit2gtk-driver
+          if apt-cache policy webkitgtk-webdriver | grep -q 'Candidate: [0-9]'; then driver=webkitgtk-webdriver; fi
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev \
+            "$driver" xvfb dbus ffmpeg
+          command -v WebKitWebDriver
       - uses: actions/cache@v4
         id: driver
         with:
