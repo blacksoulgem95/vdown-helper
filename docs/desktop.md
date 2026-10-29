@@ -81,9 +81,12 @@ natively and by `tests/core-golden.test.ts` through the wasm. The existing vites
 - `ffmpeg` / `ffprobe` are sidecar processes. Argument vectors come only from `vdh-core` (a closed set of operations:
   copy, merge, audio extract/convert, transcode presets, trim, subtitle embed); never a shell. Progress from
   `-progress pipe:1`.
-- Queue: 3 jobs at a time, 4 segments each by default; global bandwidth cap; schedule window; history kept until
-  cleared (URLs stored with credentials and tokens stripped); folder rules like `{type}/{host}/{title}` under
-  `~/Downloads/vdown-helper`; filenames sanitised with the extension's rules.
+- Queue (`vdh queue add|list|run|pause|resume|retry|cancel|stop|remove`, `vdh history`): 3 jobs at a time, 4 segments
+  each by default; jobs and the checkpoints of their staged tracks in SQLite, so a job continues after the app is closed
+  or killed; requests to pause or cancel are written to the database and reach the running queue from any process;
+  global bandwidth cap; schedule window (local time); history kept until cleared, can be turned off (URLs stored with
+  credentials and tokens stripped); folder rules like `{type}/{host}/{title}` under `~/Downloads/vdown-helper` (with
+  the app, VDH-066); filenames sanitised with the extension's rules.
 
 ### Native link (VDH-067)
 

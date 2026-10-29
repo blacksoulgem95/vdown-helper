@@ -3,7 +3,8 @@
 
 use std::path::Path;
 
-use tokio::io::AsyncWriteExt;
+use serde::{Deserialize, Serialize};
+use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 use vdh_core::dash::{
     DashParseResult, DashType, expand_segments, main_period_index, parse_dash, parse_dash_ref,
     protections_of,
@@ -12,6 +13,19 @@ use vdh_core::hls::{HlsMediaPlaylist, HlsParseResult, HlsPlaylist, HlsSegment, p
 
 use crate::error::{EngineError, ErrorCode, Result};
 use crate::segments::{SegmentOptions, SegmentProgress, SinkState, write_segments};
+
+/// Where a staged track stands, so its job can continue after a pause or a restart instead of starting over.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrackCheckpoint {
+    /// Segments already in the staging file, in playlist order.
+    pub next: usize,
+    pub sink: SinkState,
+    /// The whole track is staged.
+    pub complete: bool,
+    pub fragmented: bool,
+    pub duration_sec: f64,
+}
 
 /// One staged track.
 #[derive(Debug, Clone)]
@@ -124,14 +138,29 @@ pub fn now_ms() -> f64 {
         .map_or(0.0, |d| d.as_millis() as f64)
 }
 
-/// An HLS media playlist or a DASH representation, fetched into `path`.
+/// An HLS media playlist or a DASH representation, fetched into `path`. With a checkpoint the staging file is cut back
+/// to what the checkpoint vouches for and the segments after it are fetched; `progress` reports a checkpoint after every
+/// segment written.
 pub async fn stage_stream(
     opts: &SegmentOptions<'_>,
     url: &str,
     dash: bool,
     path: &Path,
-    progress: impl FnMut(SegmentProgress),
+    from: Option<&TrackCheckpoint>,
+    mut progress: impl FnMut(SegmentProgress, &TrackCheckpoint),
 ) -> Result<Staged> {
+    if let Some(cp) = from.filter(|c| c.complete) {
+        if tokio::fs::metadata(path)
+            .await
+            .is_ok_and(|m| m.len() >= cp.sink.bytes)
+        {
+            return Ok(Staged {
+                bytes: cp.sink.bytes,
+                fragmented: cp.fragmented,
+                duration_sec: cp.duration_sec,
+            });
+        }
+    }
     let (segs, duration_sec, fragmented) = if dash {
         let (segs, d, _) = load_dash_representation(opts, url, false, now_ms()).await?;
         (segs, d, true)
@@ -142,9 +171,58 @@ pub async fn stage_stream(
     if segs.is_empty() {
         return Err(EngineError::invalid("The stream has no segments"));
     }
-    let mut out = tokio::fs::File::create(path).await?;
-    let mut state = SinkState::default();
-    write_segments(opts, &segs, &mut out, &mut state, progress).await?;
+    // continue only from a checkpoint that fits this playlist and a file that holds what it vouches for
+    let have = tokio::fs::metadata(path).await.map_or(0, |m| m.len());
+    let resume =
+        from.filter(|c| !c.complete && c.next <= segs.len() && c.sink.bytes <= have && c.next > 0);
+    let (mut out, mut state, start) = match resume {
+        Some(cp) => {
+            let mut f = tokio::fs::OpenOptions::new().write(true).open(path).await?;
+            f.set_len(cp.sink.bytes).await?;
+            f.seek(std::io::SeekFrom::End(0)).await?;
+            (f, cp.sink.clone(), cp.next)
+        }
+        None => (
+            tokio::fs::File::create(path).await?,
+            SinkState::default(),
+            0,
+        ),
+    };
+    let total = segs.len();
+    write_segments(opts, &segs[start..], &mut out, &mut state, |p| {
+        let cp = TrackCheckpoint {
+            next: start + p.done,
+            sink: p.state.clone(),
+            complete: false,
+            fragmented,
+            duration_sec,
+        };
+        progress(
+            SegmentProgress {
+                done: start + p.done,
+                total,
+                ..p
+            },
+            &cp,
+        );
+    })
+    .await?;
+    let done = TrackCheckpoint {
+        next: total,
+        sink: state.clone(),
+        complete: true,
+        fragmented,
+        duration_sec,
+    };
+    progress(
+        SegmentProgress {
+            done: total,
+            total,
+            bytes: state.bytes,
+            state: state.clone(),
+        },
+        &done,
+    );
     Ok(Staged {
         bytes: state.bytes,
         fragmented,
@@ -182,6 +260,7 @@ pub async fn stage_file(
             c = res.chunk() => c.map_err(|_| EngineError::new(ErrorCode::Network, "The connection failed"))?,
         };
         let Some(chunk) = chunk else { break };
+        opts.net.throttle(chunk.len()).await;
         out.write_all(&chunk).await?;
         written += chunk.len() as u64;
         progress(written, total);

@@ -2,6 +2,7 @@
 //! origins they were given for (kept in memory, never written or logged). Redirects stay on http(s); transient failures
 //! are retried with a short backoff.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use reqwest::header::{COOKIE, HeaderMap, HeaderValue, ORIGIN, RANGE, REFERER, USER_AGENT};
@@ -11,6 +12,7 @@ use vdh_core::security::redact_url;
 use vdh_core::url::is_safe_fetch_url;
 
 use crate::error::{EngineError, ErrorCode, Result};
+use crate::limit::RateLimit;
 
 /// A User-Agent for jobs that did not come from a browser.
 pub const DEFAULT_USER_AGENT: &str = concat!(
@@ -51,6 +53,7 @@ pub struct Net {
     client: reqwest::Client,
     headers: RequestHeaders,
     retries: u32,
+    limit: Option<Arc<RateLimit>>,
 }
 
 fn network(e: &reqwest::Error) -> EngineError {
@@ -105,7 +108,22 @@ impl Net {
             client,
             headers,
             retries: 3,
+            limit: None,
         })
+    }
+
+    /// Share a bandwidth cap with other jobs.
+    #[must_use]
+    pub fn with_limit(mut self, limit: Arc<RateLimit>) -> Self {
+        self.limit = Some(limit);
+        self
+    }
+
+    /// Account for bytes read (waits under a bandwidth cap).
+    pub async fn throttle(&self, n: usize) {
+        if let Some(l) = &self.limit {
+            l.take(n).await;
+        }
     }
 
     /// The headers for one request: Referer / Origin as handed over, cookies only for their own origin.
@@ -182,7 +200,7 @@ impl Net {
     }
 
     /// A whole body, at most `cap` bytes.
-    async fn body(res: Response, cap: usize) -> Result<Vec<u8>> {
+    async fn body(&self, res: Response, cap: usize) -> Result<Vec<u8>> {
         if res.content_length().is_some_and(|n| n > cap as u64) {
             return Err(EngineError::new(
                 ErrorCode::TooLarge,
@@ -192,6 +210,7 @@ impl Net {
         let mut res = res;
         let mut out = Vec::new();
         while let Some(chunk) = res.chunk().await.map_err(|e| network(&e))? {
+            self.throttle(chunk.len()).await;
             out.extend_from_slice(&chunk);
             if out.len() > cap {
                 return Err(EngineError::new(
@@ -207,7 +226,7 @@ impl Net {
     pub async fn text(&self, url: &str) -> Result<(String, String)> {
         let res = self.get(url, None).await?;
         let final_url = res.url().to_string();
-        let body = Self::body(res, MAX_TEXT_BYTES).await?;
+        let body = self.body(res, MAX_TEXT_BYTES).await?;
         Ok((String::from_utf8_lossy(&body).into_owned(), final_url))
     }
 
@@ -219,12 +238,14 @@ impl Net {
         cap: usize,
     ) -> Result<Vec<u8>> {
         let Some(r) = range else {
-            return Self::body(self.get(url, None).await?, cap).await;
+            return self.body(self.get(url, None).await?, cap).await;
         };
         let (offset, length) = (r.offset as u64, r.length as u64);
         let res = self.get(url, Some((offset, Some(length)))).await?;
         let partial = res.status() == StatusCode::PARTIAL_CONTENT;
-        let body = Self::body(res, cap.max(offset as usize + length as usize)).await?;
+        let body = self
+            .body(res, cap.max(offset as usize + length as usize))
+            .await?;
         if partial {
             if body.len() as u64 != length {
                 return Err(EngineError::invalid(
