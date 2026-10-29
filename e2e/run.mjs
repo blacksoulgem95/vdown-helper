@@ -2932,6 +2932,21 @@ const recordAndWait = async (pg, pop, r, seconds) => {
   await new Promise((res) => setTimeout(res, seconds * 1000));
   return { job: await newRecordJob(known), known };
 };
+// The page relays a recording in 1 s chunks and each one raises the job's byte count: `n` distinct counts mean at
+// least `n` chunks reached the extension, however slow the runner (a fixed sleep is not enough on a loaded one).
+const relayedChunks = async (jobId, n) => {
+  const seen = new Set();
+  await until(
+    async () => {
+      const bytes = (await jobs()).find((j) => j.id === jobId)?.progress?.bytesDone;
+      if (bytes > 0) seen.add(bytes);
+      return seen.size >= n;
+    },
+    `${n} relayed chunks`,
+    30000,
+    100,
+  );
+};
 
 await step(
   'stream: a MediaStream is listed as recordable without any address; RECORD, then Stop in the queue, saves a decodable WebM',
@@ -3034,7 +3049,8 @@ await step('stream: cancelling from the queue discards the recording', async () 
 await step('stream: closing the tab while recording keeps what was recorded', async () => {
   const { pg, id } = await openStream();
   const { pop, r } = await streamResource(id);
-  const a = await recordAndWait(pg, pop, r, 3);
+  const a = await recordAndWait(pg, pop, r, 0);
+  await relayedChunks(a.job.id, 3);
   await pg.close();
   const done = await jobFinished((j) => j.id === a.job.id, 90000);
   assert(done.stage === 'completed', `stage ${done.stage}: ${JSON.stringify(done.error)}`);

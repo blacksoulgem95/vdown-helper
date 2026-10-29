@@ -1,6 +1,5 @@
-import type { AudioBitrate, AudioFormat, OutputMode } from '@/types/download';
 import type { QualityPreset, Settings } from '@/types/settings';
-import { sanitizeSubfolder } from './security';
+import { core } from './core';
 
 export const SETTINGS_KEY = 'settings';
 
@@ -29,11 +28,6 @@ export const DEFAULT_SETTINGS: Settings = {
   notifyOnError: true,
 };
 
-const MODES: OutputMode[] = ['video-audio', 'audio-only', 'video-only', 'original'];
-const QUALITIES: QualityPreset[] = ['highest', '2160', '1440', '1080', '720', '480', '360'];
-const AUDIO_FORMATS: AudioFormat[] = ['mp3', 'm4a', 'aac', 'wav'];
-const BITRATES: AudioBitrate[] = [128, 192, 256, 320];
-
 export const IMAGE_MIN_CHOICES = [0, 100, 300, 800] as const;
 
 export const LIMITS = {
@@ -46,53 +40,13 @@ export const LIMITS = {
   namingTemplate: { maxLength: 200 },
 } as const;
 
-function oneOf<T extends string | number>(v: unknown, allowed: readonly T[], fallback: T): T {
-  return allowed.includes(v as T) ? (v as T) : fallback;
-}
-function bool(v: unknown, fallback: boolean): boolean {
-  return typeof v === 'boolean' ? v : fallback;
-}
-function int(v: unknown, range: { min: number; max: number }, fallback: number): number {
-  if (typeof v !== 'number' || !Number.isFinite(v)) return fallback;
-  return Math.min(range.max, Math.max(range.min, Math.round(v)));
-}
-
-/** Validates arbitrary stored data into a complete, in-range Settings object. Unknown keys are dropped. */
+/**
+ * Validates arbitrary stored data into a complete, in-range Settings object. Unknown keys are dropped. Implemented in
+ * Rust (`core/src/settings.rs`), shared with the desktop app; `DEFAULT_SETTINGS` and `LIMITS` above must match it (a
+ * unit test checks).
+ */
 export function sanitizeSettings(raw: unknown): Settings {
-  const r = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
-  const d = DEFAULT_SETTINGS;
-  const template =
-    typeof r['namingTemplate'] === 'string' && r['namingTemplate'].trim()
-      ? r['namingTemplate'].slice(0, LIMITS.namingTemplate.maxLength)
-      : d.namingTemplate;
-  return {
-    schemaVersion: 1,
-    defaultMode: oneOf(r['defaultMode'], MODES, d.defaultMode),
-    defaultContainer: oneOf(r['defaultContainer'], ['mp4', 'original'] as const, d.defaultContainer),
-    preferredQuality: oneOf(r['preferredQuality'], QUALITIES, d.preferredQuality),
-    defaultAudioFormat: oneOf(r['defaultAudioFormat'], AUDIO_FORMATS, d.defaultAudioFormat),
-    defaultAudioBitrate: oneOf(r['defaultAudioBitrate'], BITRATES, d.defaultAudioBitrate),
-    namingTemplate: template,
-    subfolder: typeof r['subfolder'] === 'string' ? sanitizeSubfolder(r['subfolder']) : d.subfolder,
-    askWhereToSave: bool(r['askWhereToSave'], d.askWhereToSave),
-    autoScan: bool(r['autoScan'], d.autoScan),
-    pageHook: bool(r['pageHook'], d.pageHook),
-    networkObserver: bool(r['networkObserver'], d.networkObserver),
-    imageMinPx: oneOf(r['imageMinPx'], IMAGE_MIN_CHOICES, d.imageMinPx),
-    maxConcurrentDownloads: int(
-      r['maxConcurrentDownloads'],
-      LIMITS.maxConcurrentDownloads,
-      d.maxConcurrentDownloads,
-    ),
-    segmentConcurrency: int(r['segmentConcurrency'], LIMITS.segmentConcurrency, d.segmentConcurrency),
-    maxMemoryMb: int(r['maxMemoryMb'], LIMITS.maxMemoryMb, d.maxMemoryMb),
-    maxEncodeDurationSec: int(r['maxEncodeDurationSec'], LIMITS.maxEncodeDurationSec, d.maxEncodeDurationSec),
-    recordContainer: oneOf(r['recordContainer'], ['webm', 'mp4'] as const, d.recordContainer),
-    recordMaxMinutes: int(r['recordMaxMinutes'], LIMITS.recordMaxMinutes, d.recordMaxMinutes),
-    recordMaxMb: int(r['recordMaxMb'], LIMITS.recordMaxMb, d.recordMaxMb),
-    notifyOnComplete: bool(r['notifyOnComplete'], d.notifyOnComplete),
-    notifyOnError: bool(r['notifyOnError'], d.notifyOnError),
-  };
+  return core.sanitizeSettings(raw) as Settings;
 }
 
 export async function loadSettings(): Promise<Settings> {
@@ -144,9 +98,7 @@ export function migrateHookDefault(
   stored: unknown,
   applied: readonly string[],
 ): Record<string, unknown> | undefined {
-  if (applied.includes(HOOK_DEFAULT_ON)) return undefined;
-  if (typeof stored !== 'object' || stored === null || Array.isArray(stored)) return undefined;
-  return { ...(stored as Record<string, unknown>), pageHook: true };
+  return core.migrateHookDefault(stored, [...applied]) as Record<string, unknown> | undefined;
 }
 
 /** Run the one-time migrations on install or update. A new install only records them as applied. */
@@ -168,9 +120,5 @@ export async function runMigrations(reason: string): Promise<void> {
 
 /** Picks the variant to preselect for a quality preset: the best at or below the preset, else the lowest. */
 export function pickVariantIndex(heights: Array<number | undefined>, preset: QualityPreset): number {
-  if (heights.length === 0) return -1;
-  if (preset === 'highest') return 0; // variants are sorted best-first
-  const cap = Number(preset);
-  const idx = heights.findIndex((h) => h === undefined || h <= cap);
-  return idx === -1 ? heights.length - 1 : idx;
+  return core.pickVariantIndex(heights, preset);
 }

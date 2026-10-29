@@ -267,6 +267,12 @@ pub fn decode_uri_component(s: &str) -> Option<String> {
     String::from_utf8(out).ok()
 }
 
+/// `Math.round`: halves round towards +∞.
+pub fn round(x: f64) -> f64 {
+    let f = x.floor();
+    if x - f >= 0.5 { f + 1.0 } else { f }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
