@@ -16,6 +16,8 @@ pub enum ErrorCode {
     Unknown,
     /// Not a failure: the user cancelled (the job ends in the `cancelled` stage).
     Cancelled,
+    /// Not a failure: the job was paused and keeps what it staged.
+    Paused,
 }
 
 impl ErrorCode {
@@ -31,6 +33,7 @@ impl ErrorCode {
             Self::Interrupted => "interrupted",
             Self::Unknown => "unknown",
             Self::Cancelled => "cancelled",
+            Self::Paused => "paused",
         }
     }
 }

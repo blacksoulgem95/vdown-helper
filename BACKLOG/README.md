@@ -92,4 +92,4 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-072](VDH-072-wasm-size.md) | Trim the shared core's wasm (about 1 MB, inlined in every extension page) | todo | P2 | build | VDH-063 |
 | [VDH-073](VDH-073-e2e-recording-wait.md) | E2E: closing the tab while recording waits for relayed chunks, not a fixed sleep | done | P2 | test | - |
 | [VDH-074](VDH-074-core-wasm-analyze.md) | Rust core: candidate analysis (analyze, classify) | todo | P2 | lib | VDH-064 |
-| [VDH-075](VDH-075-desktop-queue.md) | Desktop engine: persistent queue, resume after restart, bandwidth cap, schedule, history | todo | P1 | desktop | VDH-065 |
+| [VDH-075](VDH-075-desktop-queue.md) | Desktop engine: persistent queue, resume after restart, bandwidth cap, schedule, history | in-progress | P1 | desktop | VDH-065 |

@@ -88,7 +88,7 @@ async fn record_track(
                 progress(SegmentProgress {
                     done: written + p.done,
                     total: written + p.total,
-                    bytes: p.bytes,
+                    ..p
                 });
             })
             .await?;

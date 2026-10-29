@@ -30,7 +30,8 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
 
-  # The `vdh` binary downloads from the extension's fixture servers; outputs are checked with ffprobe and a full decode.
+  # The `vdh` binary (one-off downloads and the queue) against the extension's fixture servers; outputs are checked with
+  # ffprobe and a full decode.
   engine-fixtures:
     runs-on: ubuntu-latest # the same runner (and ffmpeg) the extension's E2E fixtures are generated with
     steps:
@@ -53,6 +54,6 @@ jobs:
             ~/.cargo/git
             target
           key: cargo-fixtures-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
-      - run: cargo test -p vdh-engine --locked --test fixtures
+      - run: cargo test -p vdh-engine --locked
         env:
           VDH_REQUIRE_FIXTURES: '1'

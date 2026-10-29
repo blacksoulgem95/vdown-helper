@@ -21,7 +21,8 @@ type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
 const MAX_SEGMENT_BYTES: usize = 512 * 1024 * 1024;
 
 /// What is remembered between batches (a live recording appends in batches).
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SinkState {
     /// The initialisation section last written, so a later batch does not repeat it.
     pub map_key: String,
@@ -32,12 +33,14 @@ pub struct SinkState {
     pub bytes: u64,
 }
 
-/// Progress of one batch: segments written, out of how many, and bytes written so far (all batches).
-#[derive(Debug, Clone, Copy)]
+/// Progress of one batch: segments written, out of how many, and the sink after the last one (a checkpoint: a job can
+/// continue from here after a restart).
+#[derive(Debug, Clone)]
 pub struct SegmentProgress {
     pub done: usize,
     pub total: usize,
     pub bytes: u64,
+    pub state: SinkState,
 }
 
 pub struct SegmentOptions<'a> {
@@ -127,6 +130,27 @@ fn gone(e: &EngineError) -> bool {
     e.code == ErrorCode::HttpError && matches!(e.message.as_str(), "HTTP 404" | "HTTP 410")
 }
 
+/// One segment, decrypted; `None` when the server no longer has it and gaps are tolerated.
+async fn fetch_segment(
+    net: &Net,
+    keys: &Keys,
+    seg: &HlsSegment,
+    tolerate_missing: bool,
+) -> Result<Option<Vec<u8>>> {
+    let data = match net
+        .bytes(&seg.uri, seg.byte_range.as_ref(), MAX_SEGMENT_BYTES)
+        .await
+    {
+        Ok(d) => d,
+        Err(e) if tolerate_missing && gone(&e) => return Ok(None),
+        Err(e) => return Err(e),
+    };
+    Ok(Some(match &seg.key {
+        Some(k) => decrypt(net, keys, k, data, seg.sequence).await?,
+        None => data,
+    }))
+}
+
 /// Fetch `segs` (several at a time, written in order) and append them to `out`.
 pub async fn write_segments(
     opts: &SegmentOptions<'_>,
@@ -137,24 +161,13 @@ pub async fn write_segments(
 ) -> Result<()> {
     let keys = Keys::new(segs);
     let net = opts.net;
-    let fetches = stream::iter(segs.iter().map(|seg| {
-        let keys = &keys;
-        async move {
-            let data = match net
-                .bytes(&seg.uri, seg.byte_range.as_ref(), MAX_SEGMENT_BYTES)
-                .await
-            {
-                Ok(d) => d,
-                Err(e) if opts.tolerate_missing && gone(&e) => return Ok(None),
-                Err(e) => return Err(e),
-            };
-            Ok(Some(match &seg.key {
-                Some(k) => decrypt(net, keys, k, data, seg.sequence).await?,
-                None => data,
-            }))
-        }
-    }))
-    .buffered(opts.concurrency.max(1));
+    // Built up front (nothing runs until polled): a stream over a borrowing closure would not be `Send` for every
+    // lifetime, which spawning the job needs.
+    let fetches: Vec<_> = segs
+        .iter()
+        .map(|seg| fetch_segment(net, &keys, seg, opts.tolerate_missing))
+        .collect();
+    let fetches = stream::iter(fetches).buffered(opts.concurrency.max(1));
     tokio::pin!(fetches);
 
     let total = segs.len();
@@ -199,6 +212,7 @@ pub async fn write_segments(
             done,
             total,
             bytes: state.bytes,
+            state: state.clone(),
         });
     }
     out.flush().await?;

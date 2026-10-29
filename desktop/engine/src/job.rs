@@ -2,6 +2,8 @@
 //! staged to disk, joined or converted by ffmpeg when the plan says so, and moved to its final name.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde::Serialize;
 use tokio_util::sync::CancellationToken;
@@ -12,10 +14,10 @@ use vdh_core::request::{DownloadRequest, plan_from_request};
 use vdh_core::security::{sanitize_filename, sanitize_subfolder, with_extension};
 use vdh_core::url::is_safe_fetch_url;
 
-use crate::error::{EngineError, Result};
+use crate::error::{EngineError, ErrorCode, Result};
 use crate::net::Net;
 use crate::segments::{SegmentOptions, SegmentProgress};
-use crate::stage::{Staged, stage_file, stage_stream};
+use crate::stage::{Staged, TrackCheckpoint, stage_file, stage_stream};
 use crate::{ffmpeg, live};
 
 /// What a running job reports: the stage it entered, or progress within it (the extension's `JobProgress`).
@@ -47,6 +49,12 @@ pub struct Progress {
     pub elapsed_sec: Option<f64>,
 }
 
+/// Where a job keeps the checkpoints of its staged tracks (the queue stores them; a one-off run keeps none).
+pub trait Checkpoints: Send + Sync {
+    fn load(&self, track: &str) -> Option<TrackCheckpoint>;
+    fn save(&self, track: &str, checkpoint: &TrackCheckpoint);
+}
+
 pub struct JobContext {
     pub net: Net,
     /// Where finished files go (the request's subfolder is created inside).
@@ -59,7 +67,22 @@ pub struct JobContext {
     pub cancel: CancellationToken,
     /// Ends a live recording and keeps what was recorded.
     pub stop: CancellationToken,
+    /// Set before `cancel` fires when the job is only paused: its staging is kept, and it continues later.
+    pub paused: Arc<AtomicBool>,
+    pub checkpoints: Option<Box<dyn Checkpoints>>,
     pub events: Box<dyn Fn(Event) + Send + Sync>,
+}
+
+impl JobContext {
+    fn checkpoint(&self, track: &str) -> Option<TrackCheckpoint> {
+        self.checkpoints.as_ref().and_then(|c| c.load(track))
+    }
+
+    fn save(&self, track: &str, cp: &TrackCheckpoint) {
+        if let Some(c) = &self.checkpoints {
+            c.save(track, cp);
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -191,11 +214,14 @@ impl<'a> Reporter<'a> {
     }
 }
 
-/// Run one request to the end. The staging folder is removed whatever happens.
+/// Run one request to the end. The staging folder is removed when the job ends, and kept when it is only paused.
 pub async fn run(req: &DownloadRequest, ctx: &JobContext) -> Result<Finished> {
     let plan = plan(req)?;
     tokio::fs::create_dir_all(&ctx.work_dir).await?;
     let result = run_plan(req, &plan, ctx).await;
+    if result.as_ref().is_err_and(EngineError::is_cancelled) && ctx.paused.load(Ordering::SeqCst) {
+        return Err(EngineError::new(ErrorCode::Paused, "Paused"));
+    }
     let _ = tokio::fs::remove_dir_all(&ctx.work_dir).await;
     // the staging root goes too once no other job uses it
     if let Some(parent) = ctx.work_dir.parent() {
@@ -226,7 +252,32 @@ async fn run_plan(req: &DownloadRequest, plan: &Plan, ctx: &JobContext) -> Resul
 
     let (video, audio, duration) = if plan.pipeline == "live" {
         rep.stage("recording");
-        let rec = live::record(req, ctx, &mut |p| rep.segments(p)).await?;
+        // a recording interrupted by a restart cannot pick up the time it missed: what it has is joined and kept
+        let recorded = ctx.checkpoint("video").filter(|c| c.sink.bytes > 0);
+        let rec = match recorded {
+            Some(cp) => {
+                let audio = ctx.work_dir.join("audio.stream");
+                live::Recorded {
+                    video: ctx.work_dir.join("video.stream"),
+                    audio: req.audio_url.as_ref().map(|_| audio),
+                    duration_sec: cp.sink.seconds,
+                }
+            }
+            None => {
+                live::record(req, ctx, &mut |p| {
+                    ctx.save(
+                        "video",
+                        &TrackCheckpoint {
+                            next: p.done,
+                            sink: p.state.clone(),
+                            ..TrackCheckpoint::default()
+                        },
+                    );
+                    rep.segments(p);
+                })
+                .await?
+            }
+        };
         (rec.video, rec.audio, Some(rec.duration_sec))
     } else if matches!(
         plan.pipeline.as_str(),
@@ -236,18 +287,22 @@ async fn run_plan(req: &DownloadRequest, plan: &Plan, ctx: &JobContext) -> Resul
         if streamed {
             let dash = req.is_dash == Some(true);
             let v = ctx.work_dir.join("video.stream");
+            let from = ctx.checkpoint("video");
             let staged: Staged =
-                stage_stream(&opts, &req.source_url, dash, &v, |p| rep.segments(p)).await?;
+                stage_stream(&opts, &req.source_url, dash, &v, from.as_ref(), |p, cp| {
+                    ctx.save("video", cp);
+                    rep.segments(p);
+                })
+                .await?;
             let a = match &req.audio_url {
                 Some(url) => {
                     let a = ctx.work_dir.join("audio.stream");
-                    stage_stream(
-                        &opts,
-                        url,
-                        dash || vdh_core::dash::parse_dash_ref(url).is_some(),
-                        &a,
-                        |p| rep.segments(p),
-                    )
+                    let from = ctx.checkpoint("audio");
+                    let dash = dash || vdh_core::dash::parse_dash_ref(url).is_some();
+                    stage_stream(&opts, url, dash, &a, from.as_ref(), |p, cp| {
+                        ctx.save("audio", cp);
+                        rep.segments(p);
+                    })
                     .await?;
                     Some(a)
                 }
