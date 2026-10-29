@@ -182,7 +182,8 @@ release.
 - The engine's integration tests against the E2E fixture servers (outputs checked with ffprobe and a full decode;
   resume after `kill -9`; DRM refused).
 - The real app on Linux driven by tauri-driver against the same servers (`xvfb-run -a npm run test:desktop`, after
-  `npm run desktop:ui` and `cargo build -p vdown-helper-desktop`): an HLS download, a DRM refusal, a live recording
-  stopped from the queue, settings that survive a restart.
+  `npm run desktop:ui` and `cargo build -p vdown-helper-desktop`), in its own D-Bus session: an HLS download and its
+  notification, a DRM refusal, a live recording stopped from the queue, settings that survive a restart, start at login,
+  closing the window to the tray (a real `WM_DELETE_WINDOW`) and a second launch bringing it back.
 - Extension ↔ app in real Chromium with the host registered in the test profile.
 - Installer smoke tests on each OS runner.

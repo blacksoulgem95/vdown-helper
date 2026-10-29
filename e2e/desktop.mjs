@@ -6,7 +6,16 @@
 //
 // VDH_APP points at another build of the app (default: target/debug/vdown-helper).
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -81,8 +90,15 @@ async function fixtures() {
   return JSON.parse(line);
 }
 
+// The driver (and so the app) runs in its own D-Bus session: the app's single-instance lock and its notifications use
+// it, and dbus-monitor records the notifications the app sends.
+const busFile = join(home, 'bus');
+const notifyLog = join(home, 'notifications.log');
 async function driver() {
-  const p = spawn('tauri-driver', ['--port', String(PORT)], {
+  const script = `echo "$DBUS_SESSION_BUS_ADDRESS" > '${busFile}'
+dbus-monitor --session "interface='org.freedesktop.Notifications',member='Notify'" > '${notifyLog}' 2>&1 &
+exec tauri-driver --port ${PORT}`;
+  const p = spawn('dbus-run-session', ['--', 'sh', '-c', script], {
     env,
     stdio: ['ignore', 'ignore', 'inherit'],
     detached: true,
@@ -90,6 +106,18 @@ async function driver() {
   children.push(p);
   await until('tauri-driver', async () => (await fetch(`${WD}/status`)).ok);
 }
+const busEnv = () => ({ ...env, DBUS_SESSION_BUS_ADDRESS: readFileSync(busFile, 'utf8').trim() });
+/** The app processes running now (the one the driver started, and any other). */
+const appPids = () => {
+  try {
+    return String(execFileSync('pgrep', ['-x', 'vdown-helper']))
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+};
 
 // --- a minimal W3C WebDriver client --------------------------------------------------------------------------------
 async function wd(method, path, body) {
@@ -154,6 +182,18 @@ class Session {
         ),
       timeoutMs,
     );
+  }
+  /** Flip the switch labelled `re`. */
+  async toggle(re) {
+    const ok = await this.script(
+      `const re = new RegExp(arguments[0], 'i');
+       const l = [...document.querySelectorAll('label')].find((x) => re.test(x.textContent || ''));
+       const sw = l && document.getElementById(l.htmlFor);
+       if (sw) sw.click();
+       return Boolean(sw);`,
+      re.source,
+    );
+    if (!ok) throw new Error(`no switch ${re}`);
   }
   /** Set a <select> the way a user does (React sees the change). */
   async choose(css, value) {
@@ -231,6 +271,14 @@ await step('an HLS master playlist shows its qualities and downloads as a playab
   decodesCleanly(out[0]);
 });
 
+await step('a system notification says the download finished', async () => {
+  await until(
+    'the notification',
+    () => readFileSync(notifyLog, 'utf8').includes('Download finished'),
+    15_000,
+  );
+});
+
 await step('a DRM-protected stream is refused', async () => {
   await s.type('input[data-testid="url"]', `${f.a}/hls-drm/index.m3u8`);
   await s.click('[data-testid="check"]');
@@ -284,6 +332,61 @@ await step('settings are saved and survive a restart (language, history)', async
   await s.button(/^Cronologia/);
   const done = await s.all('[data-testid="history"] li[data-stage="completed"]');
   if (done.length !== 2) throw new Error(`the history has ${done.length} completed entries after a restart`);
+});
+
+await step('start at login is registered when turned on and removed when turned off', async () => {
+  const entries = () =>
+    existsSync(join(home, '.config/autostart'))
+      ? files(join(home, '.config/autostart')).filter((f) => f.endsWith('.desktop'))
+      : [];
+  if (entries().length) throw new Error('registered before the user asked');
+  await s.button(/^Impostazioni/);
+  await s.toggle(/^Avvia all'accesso/);
+  await s.button(/^Salva$/);
+  const entry = await until('the autostart entry', () => entries()[0]);
+  if (!/--hidden/.test(readFileSync(entry, 'utf8'))) throw new Error('the app would not start in the tray');
+  await s.toggle(/^Avvia all'accesso/);
+  await s.button(/^Salva$/);
+  await until('the entry to go', () => entries().length === 0);
+});
+
+await step('closing the window keeps the app (and its queue) running in the tray', async () => {
+  const before = appPids();
+  // what a window manager's close button sends (WebDriver's own close would end the session instead)
+  const asked = String(
+    execFileSync('python3', ['-I', join(root, 'e2e/wm-close.py'), 'vdown-helper'], { env }),
+  );
+  if (Number(asked) < 1) throw new Error('the app window was not found');
+  await sleep(2000);
+  if (appPids().join() !== before.join()) throw new Error('the app quit when its window was closed');
+  // hidden, not gone: the page is still there and says it is not visible
+  await until(
+    'the window to hide',
+    async () => (await s.script('return document.visibilityState')) === 'hidden',
+  );
+});
+
+await step('a second launch brings the running app window back and exits', async () => {
+  const before = appPids();
+  if (before.length !== 1) throw new Error(`expected one app, found ${before.length}`);
+  const second = spawn(app, [], { env: busEnv(), stdio: 'ignore' });
+  const code = await new Promise((res) => {
+    const t = setTimeout(() => res('still running'), 15_000);
+    second.once('exit', (c) => {
+      clearTimeout(t);
+      res(c);
+    });
+  });
+  if (code !== 0) {
+    second.kill('SIGKILL');
+    throw new Error(`the second launch: ${code}`);
+  }
+  if (appPids().join() !== before.join()) throw new Error('the running app did not survive');
+  // the running app brings its window back (it was closed to the tray by the step before)
+  await until(
+    'the window to show',
+    async () => (await s.script('return document.visibilityState')) === 'visible',
+  );
 });
 
 await s.close().catch(() => {});

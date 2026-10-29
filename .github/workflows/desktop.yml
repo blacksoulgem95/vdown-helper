@@ -62,9 +62,9 @@ jobs:
         env:
           VDH_REQUIRE_FIXTURES: '1'
 
-  # The real app (window, queue, settings) driven through tauri-driver and WebKitWebDriver: an HLS download, a DRM
-  # refusal, a live recording stopped from the queue, settings that survive a restart. Files are checked with ffprobe and
-  # a full decode (e2e/desktop.mjs).
+  # The real app driven through tauri-driver and WebKitWebDriver in its own D-Bus session: downloads (checked with
+  # ffprobe and a full decode), a DRM refusal, a live recording, settings, notifications, start at login, close to tray
+  # and single instance (e2e/desktop.mjs).
   app-e2e:
     runs-on: ubuntu-latest # the runner (and ffmpeg) the fixtures are generated with
     steps:
@@ -78,7 +78,7 @@ jobs:
       - name: Linux libraries, WebKitWebDriver, Xvfb and ffmpeg
         run: >-
           sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev
-          librsvg2-dev libxdo-dev webkit2gtk-driver xvfb ffmpeg
+          librsvg2-dev libxdo-dev webkit2gtk-driver xvfb dbus ffmpeg
       - uses: actions/cache@v4
         id: driver
         with:
