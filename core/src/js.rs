@@ -273,6 +273,77 @@ pub fn round(x: f64) -> f64 {
     if x - f >= 0.5 { f + 1.0 } else { f }
 }
 
+/// `x.toFixed(digits)`: the exact decimal value rounded half away from zero (JavaScript picks the larger `n` on a tie),
+/// and `String(x)` from 1e21 on.
+pub fn to_fixed(x: f64, digits: usize) -> String {
+    if !x.is_finite() || x.abs() >= 1e21 {
+        return number_to_string(x);
+    }
+    // Rust prints the exact binary value with enough digits; round that decimal string by hand.
+    let exact = format!("{:.1100}", x.abs());
+    let (int, frac) = exact.split_once('.').unwrap_or((&exact, ""));
+    let mut kept: Vec<u8> = int.bytes().chain(frac.bytes().take(digits)).collect();
+    if frac.as_bytes().get(digits).is_some_and(|d| *d >= b'5') {
+        let mut i = kept.len();
+        loop {
+            if i == 0 {
+                kept.insert(0, b'1');
+                break;
+            }
+            i -= 1;
+            if kept[i] == b'9' {
+                kept[i] = b'0';
+            } else {
+                kept[i] += 1;
+                break;
+            }
+        }
+    }
+    let split = kept.len() - digits;
+    let (a, b) = kept.split_at(split);
+    let body = if digits == 0 {
+        String::from_utf8_lossy(a).into_owned()
+    } else {
+        format!(
+            "{}.{}",
+            String::from_utf8_lossy(a),
+            String::from_utf8_lossy(b)
+        )
+    };
+    // JavaScript keeps the sign of a negative number that rounds to zero (`(-0.04).toFixed(1)` is "-0.0").
+    if x < 0.0 { format!("-{body}") } else { body }
+}
+
+/// 32-bit FNV-1a over the UTF-16 code units of `s`, like the `Math.imul` loops of the TypeScript.
+pub fn fnv1a_utf16(s: &str) -> u32 {
+    s.encode_utf16().fold(0x811c_9dc5_u32, |h, c| {
+        (h ^ u32::from(c)).wrapping_mul(0x0100_0193)
+    })
+}
+
+/// `(h >>> 0).toString(16).padStart(8, '0')`.
+pub fn hex8(h: u32) -> String {
+    format!("{h:08x}")
+}
+
+/// `s.replace(/\s+/g, ' ').trim()`.
+pub fn collapse_spaces(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut space = false;
+    for c in s.chars() {
+        if is_js_space(c) {
+            space = true;
+        } else {
+            if space && !out.is_empty() {
+                out.push(' ');
+            }
+            space = false;
+            out.push(c);
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -338,6 +409,25 @@ mod tests {
         assert_eq!(parse_iso_date_ms("2023-02-29T00:00:00Z"), None);
         assert_eq!(parse_iso_date_ms("garbage"), None);
         assert_eq!(parse_iso_date_ms(""), None);
+    }
+
+    #[test]
+    fn to_fixed_matches_javascript() {
+        let cases: &[(f64, usize, &str)] = &[
+            (0.25, 1, "0.3"),
+            (0.35, 1, "0.3"),
+            (1.005, 2, "1.00"),
+            (99.95, 1, "100.0"),
+            (2.5, 0, "3"),
+            (-2.5, 0, "-3"),
+            (-0.04, 1, "-0.0"),
+            (1234.5678, 1, "1234.6"),
+            (0.0, 1, "0.0"),
+            (1e21, 1, "1e+21"),
+        ];
+        for (x, d, s) in cases {
+            assert_eq!(to_fixed(*x, *d), *s, "{x} {d}");
+        }
     }
 
     #[test]
