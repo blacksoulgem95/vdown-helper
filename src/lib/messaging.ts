@@ -38,6 +38,7 @@ const validators: { [K in RequestType]: (p: unknown) => p is RequestMap[K]['req'
     isObj(p) && isInt(p['tabId']) && isStr(p['url']) && (p['frameId'] === undefined || isInt(p['frameId'])),
   'start-download': (p): p is RequestMap['start-download']['req'] => {
     if (!isObj(p) || !isObj(p['request'])) return false;
+    if (p['desktop'] !== undefined && typeof p['desktop'] !== 'boolean') return false;
     const r = p['request'];
     return (
       isStr(r['resourceId']) &&
@@ -61,6 +62,7 @@ const validators: { [K in RequestType]: (p: unknown) => p is RequestMap[K]['req'
   'set-observer': (p): p is RequestMap['set-observer']['req'] =>
     isObj(p) && typeof p['enabled'] === 'boolean',
   'sync-hook': (p): p is RequestMap['sync-hook']['req'] => isObj(p),
+  'desktop-status': (p): p is RequestMap['desktop-status']['req'] => isObj(p),
 };
 
 export function parseEnvelope(raw: unknown): Envelope | undefined {

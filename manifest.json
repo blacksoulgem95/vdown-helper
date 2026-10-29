@@ -30,7 +30,7 @@
     "notifications",
     "sidePanel"
   ],
-  "optional_permissions": ["webRequest", "declarativeNetRequestWithHostAccess"],
+  "optional_permissions": ["webRequest", "declarativeNetRequestWithHostAccess", "nativeMessaging", "cookies"],
   "optional_host_permissions": ["<all_urls>"],
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"

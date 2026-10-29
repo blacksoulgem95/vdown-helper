@@ -5,6 +5,7 @@ import { Logo } from '@/components/Logo';
 import { QueueItem, type JobAction } from '@/components/QueueItem';
 import { Button, IconButton, Notice, TextField, cx } from '@/components/ui';
 import { useJobs } from '@/hooks/useJobs';
+import { useDesktop } from '@/hooks/useDesktop';
 import { useSettings } from '@/hooks/useSettings';
 import { useActiveTabId, useTabMedia } from '@/hooks/useTabMedia';
 import { t } from '@/lib/i18n';
@@ -47,6 +48,7 @@ export function PopupApp() {
   const { state, scanning, rescan } = useTabMedia(tabId);
   const jobs = useJobs();
   const { settings, update } = useSettings();
+  const { desktop } = useDesktop();
   const [busy, setBusy] = useState<string | undefined>();
   const [feedback, setFeedback] = useState<Record<string, Feedback>>({});
 
@@ -69,6 +71,23 @@ export function PopupApp() {
           out.ok
             ? { tone: 'acid', text: out.warning ? `${t('queuedOk')} ${out.warning}` : t('queuedOk') }
             : { tone: 'danger', text: out.error },
+        );
+      } finally {
+        setBusy(undefined);
+      }
+    },
+    [settings],
+  );
+
+  const onSendToDesktop = useCallback(
+    async (r: MediaResource) => {
+      setBusy(r.id);
+      setFb(r.id, undefined);
+      try {
+        const out = await quickDownload(r, settings, true);
+        setFb(
+          r.id,
+          out.ok ? { tone: 'acid', text: t('sentToDesktop') } : { tone: 'danger', text: out.error },
         );
       } finally {
         setBusy(undefined);
@@ -385,6 +404,7 @@ export function PopupApp() {
             onCapture={(x, speed) => void onCapture(x, speed)}
             onRecord={(x) => void onRecord(x)}
             onFixPlayer={(x) => void onFixPlayer(x)}
+            {...(desktop.enabled ? { onSendToDesktop: (x: MediaResource) => void onSendToDesktop(x) } : {})}
             onBulk={onBulk}
             onZip={onZip}
             onMinImage={(px) => void update({ imageMinPx: px })}

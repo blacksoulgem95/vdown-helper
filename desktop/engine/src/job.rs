@@ -28,11 +28,20 @@ pub enum Event {
         stage: &'static str,
     },
     Progress(Progress),
+    /// The job needs the browser's cookies for these origins (they are never stored, so after a restart it waits).
+    NeedsCookies {
+        origins: Vec<String>,
+    },
     /// The queue recorded how the job ended (`stage`: completed, failed, cancelled; or detected when held or paused).
     Finished {
         stage: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         path: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        bytes: Option<f64>,
+        /// The extension's `JobErrorCode` when it failed.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        code: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
     },

@@ -5,7 +5,7 @@ import { t } from '@/lib/i18n';
 import type { DownloadJob } from '@/types/download';
 import { StageTrack } from './StageTrack';
 import { jobErrorText } from './labels';
-import { Button, IconButton, ProgressBar, cx } from './ui';
+import { Badge, Button, IconButton, ProgressBar, cx } from './ui';
 
 export type JobAction = 'cancel' | 'retry' | 'pause' | 'resume' | 'open' | 'show' | 'remove' | 'stop';
 
@@ -35,11 +35,15 @@ export function QueueItem({
 }: {
   job: DownloadJob;
   onAction: (id: string, a: JobAction) => void;
-  /** Whether pause/resume is offered (default: a Chrome download that can pause). The desktop app pauses any job. */
+  /**
+   * Whether pause/resume is offered (default: a Chrome download that can pause, or a job the desktop app runs). The
+   * desktop app's own window pauses any job.
+   */
   pausable?: boolean;
 }) {
   const active = isActive(job);
-  const canPause = pausable ?? (job.canPause && active && job.chromeDownloadId !== undefined);
+  const canPause =
+    pausable ?? (active && (job.viaDesktop === true || (job.canPause && job.chromeDownloadId !== undefined)));
   const done = job.stage === 'completed';
   const tone =
     job.stage === 'failed'
@@ -63,6 +67,11 @@ export function QueueItem({
             {job.request.mode === 'audio-only' ? ` · ${job.request.audioFormat.toUpperCase()}` : ''}
             {job.attempts > 0 ? ` · ${t('attempt', job.attempts + 1)}` : ''}
           </p>
+          {job.viaDesktop && (
+            <p className="mt-1">
+              <Badge tone="magenta">{t('inDesktopApp')}</Badge>
+            </p>
+          )}
         </div>
         <span className={cx('mono shrink-0 text-[11px]', done ? 'text-acid' : 'text-neon')} aria-live="off">
           {job.paused ? t('paused') : pct}
@@ -144,7 +153,8 @@ export function QueueItem({
             {t('retry')}
           </Button>
         )}
-        {done && (
+        {/* Files the desktop app saved are opened from the app (Chrome does not know them). */}
+        {done && !job.viaDesktop && (
           <>
             <IconButton label={t('showInFolder')} onClick={() => onAction(job.id, 'show')}>
               <FolderOpen size={14} aria-hidden="true" />

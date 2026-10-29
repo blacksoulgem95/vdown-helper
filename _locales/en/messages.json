@@ -636,7 +636,7 @@
     "message": "optional"
   },
   "permOptional": {
-    "message": "All-sites access and network observation, only if you turn them on above. Per-site access is requested when a stream needs it."
+    "message": "All-sites access and network observation, only if you turn them on above. Per-site access is requested when a stream needs it. nativeMessaging and cookies, only while the desktop app is on."
   },
   "secData": {
     "message": "Data"
@@ -1066,5 +1066,59 @@
   },
   "issueTooLargeMerge": {
     "message": "Joining separate video and audio happens in browser memory, and this stream is larger than the memory limit in Settings."
+  },
+  "sendToDesktop": {
+    "message": "Send to desktop app"
+  },
+  "sentToDesktop": {
+    "message": "Sent to the desktop app. Track it in the queue."
+  },
+  "inDesktopApp": {
+    "message": "In desktop app"
+  },
+  "secDesktop": {
+    "message": "DESKTOP APP"
+  },
+  "secDesktopHint": {
+    "message": "The vdown-helper desktop app downloads streams of any size, converts them with native FFmpeg and keeps going when Chrome is closed."
+  },
+  "optDesktop": {
+    "message": "Hand downloads to the desktop app"
+  },
+  "optDesktopHint": {
+    "message": "Asks for permission to talk to the app and to read the cookies of sites you allowed. Turning it off gives both back."
+  },
+  "desktopConnected": {
+    "message": "Connected to vdown-helper desktop $1 (FFmpeg $2)."
+  },
+  "desktopNoFfmpeg": {
+    "message": "not found"
+  },
+  "desktopUnreachable": {
+    "message": "The desktop app did not answer. Install it, start it once (it registers itself with your browsers), or use Repair browser link in its settings."
+  },
+  "desktopCheck": {
+    "message": "Check again"
+  },
+  "optDesktopRouting": {
+    "message": "Send to the desktop app"
+  },
+  "optDesktopRoutingHint": {
+    "message": "Captures, recordings of a page and ZIPs always stay in Chrome. Every card also has Send to desktop app."
+  },
+  "routingNever": {
+    "message": "Only what I send there"
+  },
+  "routingStreams": {
+    "message": "Streams and conversions (recommended)"
+  },
+  "routingAlways": {
+    "message": "Everything it can take"
+  },
+  "optDesktopCookiesHint": {
+    "message": "For a download from a site you allowed, its cookies go to the app for that download only; the app keeps them in memory and never writes them."
+  },
+  "jobErrDesktop": {
+    "message": "The desktop app could not be reached, or no longer has this download"
   }
 }

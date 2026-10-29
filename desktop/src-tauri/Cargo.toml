@@ -18,6 +18,9 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 vdh-core = { path = "../../core" }
 vdh-engine = { path = "../engine" }
+dirs = "6"
+# the local socket (named pipe on Windows) between the browser's relay and the running app
+interprocess = { version = "2", features = ["tokio"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
@@ -26,9 +29,14 @@ tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-single-instance = "2"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "io-util", "io-std", "process"] }
 sys-locale = "0.3"
 tokio-util = "0.7"
+url = "2.5"
+
+[target.'cfg(windows)'.dependencies]
+# the native messaging host registration (HKCU)
+winreg = "0.55"
 
 [lints]
 workspace = true

@@ -6,11 +6,12 @@
 
 mod commands;
 mod i18n;
+mod link;
 mod settings;
 mod tray;
 
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use tauri::{AppHandle, Emitter as _, Manager as _, RunEvent, WindowEvent};
 use tauri_plugin_autostart::MacosLauncher;
@@ -23,8 +24,8 @@ use vdh_engine::store::Store;
 use commands::{AppState, show};
 use settings::AppSettings;
 
-/// Given when the app starts at login: it stays in the tray.
-const HIDDEN: &str = "--hidden";
+/// Given when the app starts at login, or when the browser's relay starts it: it stays in the tray.
+pub const HIDDEN: &str = "--hidden";
 
 /// Hold the running jobs (they continue at the next start) and leave.
 pub fn quit(app: &AppHandle) {
@@ -82,12 +83,15 @@ fn finished(app: &AppHandle, id: &str, stage: &str, path: Option<&str>) {
         .show();
 }
 
-fn sink(app: &AppHandle) -> EventSink {
+fn sink(app: &AppHandle, link: Arc<OnceLock<Arc<link::server::Link>>>) -> EventSink {
     let app = app.clone();
     Arc::new(move |id: &str, e: &Event| {
+        if let Some(l) = link.get() {
+            l.event(id, e);
+        }
         match e {
             // the window reads progress itself, a few times a second
-            Event::Progress(_) => return,
+            Event::Progress(_) | Event::NeedsCookies { .. } => return,
             Event::Stage { .. } => {}
             Event::Finished { stage, path, .. } => finished(&app, id, stage, path.as_deref()),
         }
@@ -95,7 +99,10 @@ fn sink(app: &AppHandle) -> EventSink {
     })
 }
 
-fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+fn setup(
+    app: &AppHandle,
+    browsers: Vec<link::host::Registered>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let data = app.path().app_data_dir()?;
     std::fs::create_dir_all(&data)?;
     let store = Arc::new(Store::open(&data.join("queue.db"))?);
@@ -106,11 +113,20 @@ fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         .or_else(|_| app.path().home_dir())?
         .join("vdown-helper");
     let staging = data.join("staging");
+    let link_cell = Arc::new(OnceLock::new());
     let manager = Arc::new(Manager::new(
         store,
         settings.options(&default_out, staging.clone()),
-        sink(app),
+        sink(app, link_cell.clone()),
     ));
+    // the browser link (registered with the browsers in `main`), served on the local socket
+    let server = link::server::Link::new(manager.clone());
+    let _ = link_cell.set(server.clone());
+    tauri::async_runtime::spawn(async move {
+        if let Err(e) = server.serve().await {
+            eprintln!("vdown-helper: the browser link stopped: {e}");
+        }
+    });
     let quit = CancellationToken::new();
     let queue = {
         let (m, q) = (manager.clone(), quit.clone());
@@ -128,6 +144,8 @@ fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         quit,
         queue: Mutex::new(Some(queue)),
         finished: Mutex::new(Vec::new()),
+        data,
+        browsers: Mutex::new(browsers),
     });
     tray::create(app)?;
     if !std::env::args().any(|a| a == HIDDEN) {
@@ -150,9 +168,23 @@ fn on_run(app: &AppHandle, e: RunEvent) {
 }
 
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    // started by the browser: only pass messages to the running app (starting it if needed)
+    if link::relay::launched_by_browser(&args) {
+        std::process::exit(link::relay::run());
+    }
+    // the browser link first: written for every browser found, before (and whatever happens to) the window
+    let browsers = link::host::program()
+        .zip(link::data_dir())
+        .map(|(p, d)| link::host::register(&p, &d))
+        .unwrap_or_default();
     tauri::Builder::default()
-        // first, so a second launch only brings the running app forward
-        .plugin(tauri_plugin_single_instance::init(|app, _, _| show(app)))
+        // first, so a second launch only brings the running app forward (one started for the browser stays hidden)
+        .plugin(tauri_plugin_single_instance::init(|app, args, _| {
+            if !args.iter().any(|a| a == HIDDEN) {
+                show(app);
+            }
+        }))
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -171,8 +203,10 @@ fn main() {
             commands::save_settings,
             commands::pick_folder,
             commands::open_file,
+            commands::browser_link,
+            commands::repair_browser_link,
         ])
-        .setup(|app| setup(app.handle()))
+        .setup(move |app| setup(app.handle(), browsers))
         .on_window_event(|window, e| {
             if let WindowEvent::CloseRequested { api, .. } = e {
                 api.prevent_close();

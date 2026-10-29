@@ -291,7 +291,18 @@ await step('a live recording runs until Stop and keeps what was recorded', async
   const before = new Set(files(downloads));
   await s.type('input[data-testid="url"]', `${f.a}/__live/hls/index.m3u8?id=app${process.pid}&len=60`);
   await s.click('[data-testid="check"]');
-  await s.find('[data-testid="probed"]');
+  await s.find('[data-testid="probed"]').catch(async (e) => {
+    // what the window shows instead (an error, a button still busy...)
+    const seen = await s.script(
+      `return JSON.stringify({
+         url: document.querySelector('input[data-testid="url"]')?.value,
+         message: document.querySelector('[data-testid="add-message"]')?.textContent,
+         check: document.querySelector('[data-testid="check"]')?.textContent,
+         busy: document.querySelector('[data-testid="check"]')?.disabled,
+       })`,
+    );
+    throw new Error(`${e.message}; the window shows ${seen}`);
+  });
   await s.click('[data-testid="add"]');
   await s.button(/^Queue/);
   await until('the recording', () =>

@@ -124,5 +124,20 @@
   },
   "folderRelative": {
     "message": "The download folder must be a full path."
+  },
+  "linkTitle": {
+    "message": "Browser link"
+  },
+  "linkHint": {
+    "message": "The vdown-helper extension hands downloads to this app from these browsers (turn on the desktop app in the extension's settings)."
+  },
+  "linkNone": {
+    "message": "No supported browser was found for this user. Install Chrome, Chromium, Edge, Brave, Vivaldi or Opera, then repair the link."
+  },
+  "linkRepair": {
+    "message": "Repair browser link"
+  },
+  "linkRepaired": {
+    "message": "The browser link was written again."
   }
 }

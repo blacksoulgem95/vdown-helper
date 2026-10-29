@@ -22,6 +22,9 @@ import type { DownloadJob, DownloadRequest, JobErrorCode } from '@/types/downloa
 import type { MediaResource } from '@/types/media';
 import type { OffscreenEvent, OffscreenPlan, Result } from '@/types/messages';
 import { isDataLabel } from '@/lib/dataUrl';
+import { routeToDesktop } from '@/lib/desktop';
+import type { AppJobStatus, AppMessage } from '@/types/desktop';
+import { askStatus, controlInDesktop, handOver, loadDesktop, onAppMessage, releaseIfIdle } from './desktop';
 import { isFileKind } from '@/lib/filetypes';
 import { planZip } from '@/lib/zip';
 import { inspectVariant } from './detect';
@@ -90,11 +93,14 @@ function limitsOf(s: { maxMemoryMb: number; maxEncodeDurationSec: number }) {
   return { maxMemoryMb: s.maxMemoryMb, maxEncodeDurationSec: s.maxEncodeDurationSec };
 }
 
+/** The desktop app writes to disk with native ffmpeg: none of the browser's memory limits apply (as in the app). */
+const APP_LIMITS = { maxMemoryMb: Infinity, maxEncodeDurationSec: Infinity };
+
 /**
  * Validate a request received from the UI and queue it. Never trusts UI-provided names, URLs or stream facts:
  * HLS requests are re-inspected here so DRM, live streams and size limits are checked against the real playlist.
  */
-export async function submit(raw: DownloadRequest): Promise<Result<{ jobId: string }>> {
+export async function submit(raw: DownloadRequest, toDesktop = false): Promise<Result<{ jobId: string }>> {
   const clean = sanitizeRequest(raw);
   if (!clean) return fail('unsafe-url');
   const settings = await loadSettings();
@@ -145,11 +151,15 @@ export async function submit(raw: DownloadRequest): Promise<Result<{ jobId: stri
       },
     };
   }
-  const plan = planFromRequest(req, limitsOf(settings));
+  const local = planFromRequest(req, limitsOf(settings));
+  // Streams and conversions go to the desktop app when it is on (or when the user sent this one there).
+  const viaDesktop = routeToDesktop(req, local, await loadDesktop(), toDesktop);
+  const plan = viaDesktop ? planFromRequest(req, APP_LIMITS) : local;
   if (!plan.valid) return fail(`plan:${plan.issues.join(',')}`);
 
   const job = createJob(crypto.randomUUID(), req, plan, Date.now());
-  if (plan.pipeline !== 'native' || req.held) job.viaOffscreen = true;
+  if (viaDesktop) job.viaDesktop = true;
+  else if (plan.pipeline !== 'native' || req.held) job.viaOffscreen = true;
   await putJob(job);
   void pump();
   return { ok: true, jobId: job.id };
@@ -204,13 +214,15 @@ export async function pump(): Promise<void> {
   const now = Date.now();
   const startIds = await mutateJobs((jobs) => {
     const all = Object.values(jobs);
-    const free = settings.maxConcurrentDownloads - all.filter(isActive).length;
-    const queued = all
-      .filter(isQueued)
-      .sort((a, b) => a.createdAt - b.createdAt)
-      .slice(0, Math.max(0, free));
-    for (const j of queued) jobs[j.id] = transition(j, 'preparing', now);
-    return queued.map((j) => j.id);
+    // the desktop app keeps its own queue: its jobs take no slot here and are handed over at once
+    const free = settings.maxConcurrentDownloads - all.filter((j) => isActive(j) && !j.viaDesktop).length;
+    const queued = all.filter(isQueued).sort((a, b) => a.createdAt - b.createdAt);
+    const starting = [
+      ...queued.filter((j) => j.viaDesktop),
+      ...queued.filter((j) => !j.viaDesktop).slice(0, Math.max(0, free)),
+    ];
+    for (const j of starting) jobs[j.id] = transition(j, 'preparing', now);
+    return starting.map((j) => j.id);
   });
   for (const id of startIds) void runJob(id);
 }
@@ -244,6 +256,7 @@ async function afterJobEnds(id: string): Promise<void> {
   meters.delete(id);
   await removeReplay(id);
   const job = await getJob(id);
+  if (job?.viaDesktop) await releaseIfIdle();
   if (job?.viaOffscreen) {
     await releaseInOffscreen(id);
     const stillBusy = (await listJobs()).some((j) => j.viaOffscreen && isActive(j));
@@ -257,6 +270,7 @@ async function runJob(id: string): Promise<void> {
     const job = await getJob(id);
     if (!job || job.stage !== 'preparing') return;
     const settings = await loadSettings();
+    if (job.viaDesktop) return void (await runInDesktop(job));
     const plan = planFromRequest(job.request, limitsOf(settings));
     if (!plan.valid) return void (await settle(id, 'invalid', plan.issues.join(', ')));
     if (job.request.replay) {
@@ -280,6 +294,99 @@ async function runJob(id: string): Promise<void> {
     await settle(id, 'unknown', e instanceof Error ? e.message : 'Failed to start');
   }
 }
+
+/** Hand the job to the desktop app; from here on, what the app reports moves it along (`handleAppMessage`). */
+async function runInDesktop(job: DownloadJob): Promise<void> {
+  const res = await handOver(job);
+  if (!res.ok) return void (await settle(job.id, res.code, res.message));
+  await updateJob(job.id, (j) => ({ ...j, stages: res.stages }));
+}
+
+/** Where the app says a job is, after the worker restarted (or the app paused or held it). */
+async function applyStatus(s: AppJobStatus): Promise<void> {
+  const now = Date.now();
+  const job = await getJob(s.jobId);
+  if (!job?.viaDesktop || isTerminal(job)) return;
+  switch (s.stage) {
+    case 'gone':
+      return void (await settle(s.jobId, 'desktop', 'The desktop app no longer has this job'));
+    case 'completed':
+      return handleAppMessage({
+        type: 'done',
+        jobId: s.jobId,
+        path: s.path ?? '',
+        ...(s.bytes ? { bytes: s.bytes } : {}),
+      });
+    case 'failed':
+      return void (await settle(s.jobId, s.error?.code ?? 'unknown', s.error?.message ?? ''));
+    case 'cancelled':
+      return handleAppMessage({ type: 'cancelled', jobId: s.jobId });
+    default: {
+      const stage = s.stage;
+      await updateJob(s.jobId, (j) => {
+        let next = canTransition(j.stage, stage) ? transition(j, stage, now) : j;
+        if (s.progress) next = withProgress(next, s.progress, now);
+        return { ...next, paused: s.paused === true };
+      });
+    }
+  }
+}
+
+/** What the desktop app reports about a job it runs for this extension. */
+export async function handleAppMessage(m: AppMessage): Promise<void> {
+  const now = Date.now();
+  const mine = async (id: string) => {
+    const j = await getJob(id);
+    return j?.viaDesktop === true && !isTerminal(j);
+  };
+  switch (m.type) {
+    case 'stage':
+      // how a job ends comes as done / error / cancelled, with what goes with it
+      if (m.stage === 'completed' || m.stage === 'failed' || m.stage === 'cancelled') return;
+      if (!(await mine(m.jobId))) return;
+      await updateJob(m.jobId, (j) =>
+        canTransition(j.stage, m.stage) ? { ...transition(j, m.stage, now), paused: false } : j,
+      );
+      return;
+    case 'progress':
+      if (!(await mine(m.jobId))) return;
+      await updateJob(m.jobId, (j) => (isActive(j) ? withProgress(j, m.progress, now) : j));
+      return;
+    case 'done': {
+      if (!(await mine(m.jobId))) return;
+      const done = await updateJob(m.jobId, (j) => {
+        if (!canTransition(j.stage, 'completed')) return j;
+        const bytes = m.bytes ?? j.progress.bytesDone;
+        const finished = withProgress(
+          j,
+          { fraction: 1, ...(bytes ? { bytesDone: bytes, bytesTotal: bytes } : {}) },
+          now,
+        );
+        return { ...transition(finished, 'completed', now), filePath: m.path, paused: false };
+      });
+      if (done?.stage === 'completed') await notifyJob(done);
+      await afterJobEnds(m.jobId);
+      return;
+    }
+    case 'error':
+      if (m.jobId && (await mine(m.jobId))) await settle(m.jobId, m.code, m.message);
+      return;
+    case 'cancelled':
+      if (!(await mine(m.jobId))) return;
+      await updateJob(m.jobId, (j) =>
+        canTransition(j.stage, 'cancelled') ? transition(j, 'cancelled', now) : j,
+      );
+      await afterJobEnds(m.jobId);
+      return;
+    case 'status':
+      for (const s of m.jobs) await applyStatus(s);
+      return;
+    default:
+      return;
+  }
+}
+
+onAppMessage(handleAppMessage);
 
 /** Run the capture in the page that owns the video; the offscreen document is already waiting for what it sends. */
 async function captureInPage(job: DownloadJob): Promise<void> {
@@ -600,6 +707,7 @@ export async function jobAction(
   switch (action) {
     case 'cancel': {
       if (isTerminal(job)) return ok();
+      if (job.viaDesktop) await controlInDesktop(jobId, 'cancel');
       if (job.chromeDownloadId !== undefined)
         await chrome.downloads.cancel(job.chromeDownloadId).catch(() => undefined);
       if (job.viaOffscreen) await cancelInOffscreen(jobId);
@@ -614,6 +722,7 @@ export async function jobAction(
     case 'stop': {
       // Stop and save: the recording ends here and what was recorded is kept (cancel would discard it).
       if (!canStop(job)) return fail('not-supported');
+      if (job.viaDesktop) return (await controlInDesktop(jobId, 'stop')) ? ok() : fail('desktop');
       if (job.request.liveRecord) await stopInOffscreen(jobId);
       else if (job.request.held)
         await finishRecordingInPage(job.request.tabId, job.request.held.frameId ?? 0, jobId);
@@ -628,6 +737,11 @@ export async function jobAction(
     }
     case 'pause':
     case 'resume': {
+      if (job.viaDesktop) {
+        if (!isActive(job) || !(await controlInDesktop(jobId, action))) return fail('not-supported');
+        await updateJob(jobId, (j) => ({ ...j, paused: action === 'pause' }));
+        return ok();
+      }
       if (!job.canPause || job.chromeDownloadId === undefined || !isActive(job)) return fail('not-supported');
       try {
         if (action === 'pause') await chrome.downloads.pause(job.chromeDownloadId);
@@ -668,4 +782,7 @@ export async function reconcile(): Promise<void> {
   await pruneReplay((await listJobs()).filter(isActive).map((j) => j.id));
   startPolling();
   void pump();
+  // jobs the desktop app runs keep running there: ask where they are now
+  const desktopJobs = (await listJobs()).filter((j) => j.viaDesktop && isActive(j)).map((j) => j.id);
+  if (desktopJobs.length > 0) void askStatus(desktopJobs);
 }

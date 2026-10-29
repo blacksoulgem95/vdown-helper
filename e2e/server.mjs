@@ -125,6 +125,12 @@ export function startServers(root, pagesDir) {
       res.write('<!doctype html><html><head><title>never finishes</title></head><body><p>loading…</p>');
       return;
     }
+    // /__cookie/<path>: served only with the cookie a signed-in visitor would have (the desktop link's cookie job).
+    if (origin === 'A' && path.startsWith('/__cookie/')) {
+      if (!/(^|;\s*)e2e_session=granted(;|$)/.test(req.headers.cookie ?? ''))
+        return void res.writeHead(403).end();
+      path = path.slice('/__cookie'.length);
+    }
     // /__stall/<path>: sends the first bytes, then goes silent.
     if (origin === 'A' && path.startsWith('/__stall/')) {
       res.writeHead(200, { 'Content-Type': 'video/mp2t', 'Content-Length': 1000000 });

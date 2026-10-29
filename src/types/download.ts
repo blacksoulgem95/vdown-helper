@@ -29,6 +29,8 @@ export type JobErrorCode =
   | 'capture'
   | 'interrupted'
   | 'invalid'
+  /** The desktop app could not be reached, or lost the job. */
+  | 'desktop'
   | 'unknown';
 
 export interface JobError {
@@ -156,6 +158,8 @@ export interface DownloadJob {
   canPause: boolean;
   /** True when the segment/FFmpeg pipeline in the offscreen document performs this job. */
   viaOffscreen?: boolean;
+  /** True when the desktop app performs this job (this queue mirrors it). */
+  viaDesktop?: boolean;
   /** A native download was refused (401/403) and this job was handed to the extension's own fetch pipeline. */
   staged?: boolean;
   paused: boolean;

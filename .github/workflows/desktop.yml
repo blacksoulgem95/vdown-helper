@@ -76,9 +76,14 @@ jobs:
       - run: npm ci
       - uses: ./.github/actions/setup-core
       - name: Linux libraries, WebKitWebDriver, Xvfb and ffmpeg
-        run: >-
-          sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev
-          librsvg2-dev libxdo-dev webkit2gtk-driver xvfb dbus ffmpeg
+        run: |
+          sudo apt-get update
+          # WebKitWebDriver: webkit2gtk-driver until Ubuntu 24.04, webkitgtk-webdriver from 26.04
+          driver=webkit2gtk-driver
+          if apt-cache policy webkitgtk-webdriver | grep -q 'Candidate: [0-9]'; then driver=webkitgtk-webdriver; fi
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev \
+            "$driver" xvfb dbus ffmpeg
+          command -v WebKitWebDriver
       - uses: actions/cache@v4
         id: driver
         with:
@@ -91,3 +96,27 @@ jobs:
       - run: npm run desktop:ui
       - run: cargo build -p vdown-helper-desktop --locked
       - run: xvfb-run -a npm run test:desktop
+
+  # The browser link: the production extension in real Chromium and the real app, through Chrome native messaging
+  # (the app registers itself with the test profile and the browser starts it through the relay). Files are checked
+  # with ffprobe and a full decode (e2e/link.mjs).
+  link-e2e:
+    runs-on: ubuntu-latest # the runner (and ffmpeg) the fixtures are generated with
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: ./.github/actions/setup-core
+      - name: Linux libraries, Chromium, Xvfb and ffmpeg
+        run: |
+          npx playwright install --with-deps chromium
+          sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+            librsvg2-dev libxdo-dev xvfb dbus ffmpeg
+      # the window first: the app embeds it when it is compiled
+      - run: npm run desktop:ui
+      - run: cargo build -p vdown-helper-desktop --locked
+      # a session bus, as on a desktop (the app's single-instance lock and notifications use it)
+      - run: xvfb-run -a dbus-run-session -- npm run test:link

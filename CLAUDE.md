@@ -13,7 +13,7 @@ frame) and downloads, captures or records them locally with an optional FFmpeg.w
   ID in the subject (`VDH-005: HLS parser`).
 - **Every completed stage goes to `main` through a new PR, which is then merged** (the owner's standing instruction): open a
   new PR from the session branch (never reuse a merged one), **run the full suite locally on the PR's exact head**
-  (`typecheck`, `lint`, `format:check`, `test`, `build`, `check:dist`, `test:e2e`, `test:desktop`, plus the `cargo` checks), wait for CI (`check`, `e2e` and the `Desktop` workflow) to be
+  (`typecheck`, `lint`, `format:check`, `test`, `build`, `check:dist`, `test:e2e`, `test:desktop`, `test:link`, plus the `cargo` checks), wait for CI (`check`, `e2e` and the `Desktop` workflow) to be
   green on that head, then merge it with a merge commit. A red or conflicting PR is fixed first, never merged red. Merging to `main` publishes a
   release: patch by default; put `#minor` / `#major` on a line of its own in the merge commit message (or `[minor]` /
   `[major]` in a commit subject) for a bigger bump, and never write those tokens in a message that is only describing them.
@@ -66,6 +66,7 @@ cargo fmt --check && cargo clippy --workspace -- -D warnings && cargo test --wor
 cargo run -p vdh-engine --bin vdh -- get <url> -o out   # the desktop engine from a terminal (probe / get / run)
 npm run desktop:ui && cargo build -p vdown-helper-desktop   # the desktop app (window first: the app embeds it)
 xvfb-run -a npm run test:desktop                         # the real app through tauri-driver (Linux)
+xvfb-run -a dbus-run-session -- npm run test:link        # the extension and the real app through native messaging
 ```
 
 ## Layout
@@ -90,3 +91,6 @@ verification limits.
   misleading "isn't UTF-8 encoded": write such characters as escapes (`check:dist` fails the build otherwise).
 - Test-only tools (hls.js, dash.js, Playwright) are devDependencies and must never reach `dist/` (`check:dist` asserts it).
 - Do not mark a backlog task `done` for something that was only unit-tested if it also needs a real browser.
+- Jobs handed to the desktop app (`viaDesktop`) take no download slot in the extension; their end comes only as
+  `done` / `error` / `cancelled` from the app (never a bare `stage`), and every message from the app goes through
+  `parseAppMessage` first.
