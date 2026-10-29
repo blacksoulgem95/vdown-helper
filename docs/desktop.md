@@ -201,7 +201,7 @@ release.
   `npm run desktop:ui` and `cargo build -p vdown-helper-desktop`), in its own D-Bus session: an HLS download and its
   notification, a DRM refusal, a live recording stopped from the queue, settings that survive a restart, start at login,
   closing the window to the tray (a real `WM_DELETE_WINDOW`) and a second launch bringing it back.
-- Extension ↔ app in real Chromium (`xvfb-run -a npm run test:link`): the app registers itself with the test
+- Extension ↔ app in real Chromium (`xvfb-run -a dbus-run-session -- npm run test:link`): the app registers itself with the test
   profile, the browser starts it through the relay, an HLS stream and a card sent with **Send to desktop app** are
   saved by the app, a cookie-protected file is fetched with the cookie of the granted site, cancel reaches the app, a
   forged request for a DRM stream is refused by the app, and a job finishes after the browser closed.

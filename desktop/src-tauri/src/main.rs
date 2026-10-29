@@ -99,7 +99,10 @@ fn sink(app: &AppHandle, link: Arc<OnceLock<Arc<link::server::Link>>>) -> EventS
     })
 }
 
-fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+fn setup(
+    app: &AppHandle,
+    browsers: Vec<link::host::Registered>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let data = app.path().app_data_dir()?;
     std::fs::create_dir_all(&data)?;
     let store = Arc::new(Store::open(&data.join("queue.db"))?);
@@ -116,10 +119,7 @@ fn setup(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         settings.options(&default_out, staging.clone()),
         sink(app, link_cell.clone()),
     ));
-    // the browser link: registered with the browsers found, then served on the local socket
-    let browsers = link::host::program()
-        .map(|p| link::host::register(&p, &data))
-        .unwrap_or_default();
+    // the browser link (registered with the browsers in `main`), served on the local socket
     let server = link::server::Link::new(manager.clone());
     let _ = link_cell.set(server.clone());
     tauri::async_runtime::spawn(async move {
@@ -173,6 +173,11 @@ fn main() {
     if link::relay::launched_by_browser(&args) {
         std::process::exit(link::relay::run());
     }
+    // the browser link first: written for every browser found, before (and whatever happens to) the window
+    let browsers = link::host::program()
+        .zip(link::data_dir())
+        .map(|(p, d)| link::host::register(&p, &d))
+        .unwrap_or_default();
     tauri::Builder::default()
         // first, so a second launch only brings the running app forward (one started for the browser stays hidden)
         .plugin(tauri_plugin_single_instance::init(|app, args, _| {
@@ -201,7 +206,7 @@ fn main() {
             commands::browser_link,
             commands::repair_browser_link,
         ])
-        .setup(|app| setup(app.handle()))
+        .setup(move |app| setup(app.handle(), browsers))
         .on_window_event(|window, e| {
             if let WindowEvent::CloseRequested { api, .. } = e {
                 api.prevent_close();

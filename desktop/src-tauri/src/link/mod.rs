@@ -10,17 +10,14 @@ pub mod relay;
 pub mod server;
 
 use std::io;
-#[cfg(unix)]
 use std::path::PathBuf;
 
 use interprocess::local_socket::Name;
 
 /// The app's identifier: its data folder, and Tauri's.
-#[cfg(unix)]
 pub const IDENTIFIER: &str = "io.github.blacksoulgem95.vdownhelper";
 
-/// The app's data folder (the same one Tauri uses), where the Unix socket lives.
-#[cfg(unix)]
+/// The app's data folder (the same one Tauri uses): the Unix socket, and the host manifest on Windows.
 pub fn data_dir() -> Option<PathBuf> {
     dirs::data_dir().map(|d| d.join(IDENTIFIER))
 }

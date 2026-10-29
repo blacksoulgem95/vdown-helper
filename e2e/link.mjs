@@ -3,7 +3,7 @@
 // through the relay, and every file the app writes is checked with ffprobe and a full decode.
 //
 //   npm run desktop:ui && cargo build -p vdown-helper-desktop   (the app, window first)
-//   xvfb-run -a npm run test:link                               (needs ffmpeg/ffprobe)
+//   xvfb-run -a dbus-run-session -- npm run test:link           (needs ffmpeg/ffprobe)
 //
 // VDH_APP points at another build of the app (default: target/debug/vdown-helper).
 import { execFileSync, spawn } from 'node:child_process';

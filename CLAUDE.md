@@ -66,7 +66,7 @@ cargo fmt --check && cargo clippy --workspace -- -D warnings && cargo test --wor
 cargo run -p vdh-engine --bin vdh -- get <url> -o out   # the desktop engine from a terminal (probe / get / run)
 npm run desktop:ui && cargo build -p vdown-helper-desktop   # the desktop app (window first: the app embeds it)
 xvfb-run -a npm run test:desktop                         # the real app through tauri-driver (Linux)
-xvfb-run -a npm run test:link                            # the extension and the real app through native messaging
+xvfb-run -a dbus-run-session -- npm run test:link        # the extension and the real app through native messaging
 ```
 
 ## Layout

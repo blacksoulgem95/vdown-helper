@@ -109,8 +109,9 @@ jobs:
         run: |
           npx playwright install --with-deps chromium
           sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
-            librsvg2-dev libxdo-dev xvfb ffmpeg
+            librsvg2-dev libxdo-dev xvfb dbus ffmpeg
       # the window first: the app embeds it when it is compiled
       - run: npm run desktop:ui
       - run: cargo build -p vdown-helper-desktop --locked
-      - run: xvfb-run -a npm run test:link
+      # a session bus, as on a desktop (the app's single-instance lock and notifications use it)
+      - run: xvfb-run -a dbus-run-session -- npm run test:link
