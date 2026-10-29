@@ -1,7 +1,7 @@
 ---
 id: VDH-065
 title: Desktop engine and CLI: fetching, HLS/DASH/AES-128, live recording, native ffmpeg
-status: in-progress
+status: done
 priority: P1
 area: desktop
 depends_on: [VDH-063]
@@ -24,7 +24,7 @@ from the hand-off and in-memory cookies; refuses DRM with `vdh-core`'s verdicts;
       addresses probed into the same resource the extension builds, then `vdh-core` builds the request
 - [x] `vdh` CLI (`probe`, `get`, `run`); integration tests against the E2E fixture servers: outputs checked with ffprobe +
       full decode, DRM fixtures refused, Referer replay, live end and stop
-- [ ] CI green on the PR head
+- [x] CI green on the PR head
 
 ## Notes
 
@@ -38,3 +38,7 @@ from the hand-off and in-memory cookies; refuses DRM with `vdh-core`'s verdicts;
   not set it.
 - The fixture tests run in CI on Linux (`engine-fixtures` job, `VDH_REQUIRE_FIXTURES=1`); on other systems they skip
   when node or ffmpeg is missing.
+- Verified on `0e8466a` (PR #16): local suite (unit 674/674, cargo with the fixtures required; E2E 113/113 on `a42dd08`,
+  whose extension is the same, and on this commit) and CI
+  runs 40805640171 / 40805643870 (`check`, `e2e`) and 40805640165 / 40805643911 (Desktop: rust on three systems,
+  `engine-fixtures`).
