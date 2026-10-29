@@ -8,7 +8,6 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::OnceLock;
-use std::time::{Duration, Instant};
 
 use serde_json::Value;
 
@@ -346,6 +345,7 @@ fn a_live_stream_is_recorded_until_it_ends() {
 #[cfg(unix)]
 #[test]
 fn stopping_a_recording_keeps_what_was_recorded() {
+    use std::time::{Duration, Instant};
     let Some(f) = fixtures() else { return };
     let dir = out_dir("live-stop");
     let url = format!(
