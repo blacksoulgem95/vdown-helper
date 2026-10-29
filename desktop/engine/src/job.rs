@@ -163,7 +163,7 @@ pub fn unique_path(dir: &Path, filename: &str, ext: &str) -> PathBuf {
 }
 
 /// A file moved to its final place (a copy when the staging folder is on another disk).
-async fn place(from: &Path, to: &Path) -> Result<()> {
+pub(crate) async fn place(from: &Path, to: &Path) -> Result<()> {
     if tokio::fs::rename(from, to).await.is_err() {
         tokio::fs::copy(from, to).await?;
         tokio::fs::remove_file(from).await?;

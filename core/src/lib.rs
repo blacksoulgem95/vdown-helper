@@ -28,6 +28,7 @@ pub mod settings;
 pub mod sniff;
 pub mod subtitles;
 pub mod tabs;
+pub mod transcode;
 pub mod url;
 pub mod xml;
 pub mod zip;

@@ -6,7 +6,7 @@
 //! queue, so they work from another process too. A global bandwidth cap and a schedule window apply to every job.
 
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -22,9 +22,16 @@ use crate::error::{EngineError, ErrorCode, Result};
 use crate::job::{self, Checkpoints, Event, JobContext};
 use crate::limit::RateLimit;
 use crate::net::{Net, OriginCookies, RequestHeaders};
+use crate::reencode::{self, Reencode};
 use crate::schedule::Window;
 use crate::stage::TrackCheckpoint;
 use crate::store::{HistoryEntry, Store, StoredHeaders, StoredJob};
+
+/// What a queued job does.
+enum Work {
+    Download(Box<DownloadRequest>),
+    Reencode(Reencode),
+}
 
 #[derive(Debug, Clone)]
 pub struct ManagerOptions {
@@ -221,6 +228,48 @@ impl Manager {
         self.insert(id.to_string(), req, headers)
     }
 
+    /// Queue a re-encode of a finished download or a local file. The job shows in the queue like a download (its
+    /// `request` names the new file and the encode's label) and keeps what to do under `reencode`.
+    pub fn add_reencode(&self, r: &Reencode) -> Result<String> {
+        reencode::validate(r)?;
+        let input = Path::new(&r.input);
+        let ext = r.encode.container.extension();
+        let shown = json!({
+            "resourceId": "reencode",
+            "sourceUrl": "",
+            "tabId": -1,
+            "pageUrl": "",
+            "host": "",
+            "mode": "original",
+            "container": ext,
+            "audioFormat": "",
+            "audioBitrate": 0,
+            "filename": format!("{}.{ext}", reencode::output_name(input, &r.label)),
+            "subfolder": "",
+            "qualityLabel": r.label,
+            "sourceFormat": input.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default(),
+            "isHls": false,
+            "hasMuxedAudio": true,
+            "hasVideo": true
+        });
+        let id = new_id();
+        let mut job = create_job(&id, &shown, &PlanStages::default(), now_ms());
+        if let Value::Object(m) = &mut job {
+            m.insert(
+                "stages".into(),
+                json!(["detected", "preparing", "encoding", "completed"]),
+            );
+            // pausing stops ffmpeg; the encode starts again from the beginning when resumed
+            m.insert("canPause".into(), true.into());
+            m.insert(
+                "reencode".into(),
+                serde_json::to_value(r).map_err(|e| EngineError::invalid(e.to_string()))?,
+            );
+        }
+        self.store.add(&id, &job, &StoredHeaders::default())?;
+        Ok(id)
+    }
+
     /// Cookies for a job, from the browser: kept in memory until the job ends.
     pub fn set_cookies(&self, id: &str, cookies: Vec<OriginCookies>) {
         if let Ok(mut c) = self.cookies.lock() {
@@ -286,7 +335,17 @@ impl Manager {
             return;
         }
         let req = job.get("request").unwrap_or(&Value::Null);
-        let source = req
+        // a re-encode's source is a file on this machine: its name, not its path
+        let input = job
+            .get("reencode")
+            .and_then(|r| r.get("input"))
+            .and_then(Value::as_str)
+            .map(|p| {
+                Path::new(p)
+                    .file_name()
+                    .map_or_else(String::new, |n| n.to_string_lossy().into_owned())
+            });
+        let url = req
             .get("masterUrl")
             .or_else(|| req.get("sourceUrl"))
             .and_then(Value::as_str)
@@ -300,7 +359,7 @@ impl Manager {
                 .and_then(Value::as_str)
                 .unwrap_or("")
                 .into(),
-            source: redact_url(source),
+            source: input.unwrap_or_else(|| redact_url(url)),
             path: path.map(Into::into),
             bytes,
             error: job.get("error").cloned(),
@@ -464,8 +523,16 @@ impl Manager {
 
     fn start(self: &Arc<Self>, j: StoredJob) -> Result<()> {
         let id = j.id.clone();
-        let req: DownloadRequest = serde_json::from_value(j.job["request"].clone())
-            .map_err(|e| EngineError::invalid(format!("Stored request: {e}")))?;
+        let work = match j.job.get("reencode") {
+            Some(r) => Work::Reencode(
+                serde_json::from_value(r.clone())
+                    .map_err(|e| EngineError::invalid(format!("Stored re-encode: {e}")))?,
+            ),
+            None => Work::Download(
+                serde_json::from_value(j.job["request"].clone())
+                    .map_err(|e| EngineError::invalid(format!("Stored request: {e}")))?,
+            ),
+        };
         let net = Net::new(RequestHeaders {
             referer: j.headers.referer.clone(),
             origin: j.headers.origin.clone(),
@@ -537,7 +604,10 @@ impl Manager {
         let me = self.clone();
         let (task_id, task_why) = (id.clone(), why.clone());
         let handle = tokio::spawn(async move {
-            let result = job::run(&req, &ctx).await;
+            let result = match &work {
+                Work::Download(req) => job::run(req, &ctx).await,
+                Work::Reencode(r) => reencode::run(r, &ctx).await,
+            };
             let why = task_why.lock().ok().and_then(|w| *w);
             me.finish(&task_id, &live, why, result).await;
         });
