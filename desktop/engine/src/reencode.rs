@@ -31,10 +31,14 @@ pub fn output_name(input: &Path, label: &str) -> String {
     format!("{stem} [{label}]")
 }
 
-/// Check a re-encode before it is queued: a readable file, and an encode the container can hold.
+/// Check a re-encode before it is queued: a readable file, an encode the container can hold and a short label.
 pub fn validate(r: &Reencode) -> Result<()> {
     check(&r.encode)
         .map_err(|code| EngineError::invalid(format!("Not a possible encode: {code}")))?;
+    let label = r.label.trim();
+    if label.is_empty() || label.chars().count() > 40 {
+        return Err(EngineError::invalid("Not a label for the new file"));
+    }
     let input = Path::new(&r.input);
     if !input.is_absolute() || !input.is_file() {
         return Err(EngineError::invalid("The file to re-encode is not there"));

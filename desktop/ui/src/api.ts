@@ -64,6 +64,36 @@ export interface Registered {
   location: string;
 }
 
+// --- re-encoding (`vdh-core`'s closed set: `core/src/transcode.rs`) ---------------------------------------------------
+export type Container = 'mp4' | 'mkv' | 'webm';
+export type VideoCodec = 'h264' | 'h265' | 'av1' | 'vp9' | 'copy';
+export type Encoder = 'software' | 'nvenc' | 'qsv' | 'amf' | 'videotoolbox' | 'vaapi';
+export type Quality = { kind: 'crf'; value: number } | { kind: 'bitrate'; kbps: number };
+export type AudioChoice =
+  { codec: 'copy' } | { codec: 'aac'; kbps: number } | { codec: 'opus'; kbps: number } | { codec: 'none' };
+
+export interface Encode {
+  container: Container;
+  codec: VideoCodec;
+  encoder: Encoder;
+  quality: Quality;
+  /** Scale down to this height; unset keeps the size. */
+  maxHeight?: number;
+  audio: AudioChoice;
+}
+
+export interface Preset {
+  id: string;
+  encode: Encode;
+}
+
+/** The encoders that work on this machine (hardware ones passed a test encode). */
+export interface Encoders {
+  video: Array<{ codec: Exclude<VideoCodec, 'copy'>; encoder: Encoder; name: string }>;
+  aac: boolean;
+  opus: boolean;
+}
+
 export type Control = 'pause' | 'resume' | 'retry' | 'cancel' | 'stop' | 'remove';
 
 export const api = {
@@ -79,6 +109,13 @@ export const api = {
   openFile: (path: string, reveal: boolean) => invoke<void>('open_file', { path, reveal }),
   browserLink: () => invoke<Registered[]>('browser_link'),
   repairBrowserLink: () => invoke<Registered[]>('repair_browser_link'),
+  presets: () => invoke<Preset[]>('presets'),
+  encoders: () => invoke<Encoders>('encoders'),
+  /** Why the encode cannot be done (a code), or null. */
+  checkEncode: (encode: Encode) => invoke<string | null>('check_encode', { encode }),
+  pickFiles: () => invoke<string[]>('pick_files'),
+  reencode: (inputs: string[], encode: Encode, label?: string) =>
+    invoke<string[]>('reencode', { inputs, encode, label: label ?? null }),
 };
 
 /** A rejected command's error, whatever shape it came in. */

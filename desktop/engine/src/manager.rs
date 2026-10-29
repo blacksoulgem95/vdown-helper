@@ -467,8 +467,6 @@ impl Manager {
                 }
                 let path = done.path.to_string_lossy().into_owned();
                 self.history(id, &next, Some(&path), Some(done.bytes as f64));
-                // a finished job leaves the queue: the history keeps it, without the addresses' tokens
-                let _ = self.store.remove(id);
                 (self.on_event)(
                     id,
                     &Event::Finished {
@@ -479,6 +477,9 @@ impl Manager {
                         error: None,
                     },
                 );
+                // a finished job leaves the queue (after it was announced: the listener can still read it); the
+                // history keeps it, without the addresses' tokens
+                let _ = self.store.remove(id);
                 return;
             }
             Err(e) if e.code == ErrorCode::Paused => requeue(&job, why == Some(Interrupt::Pause)),

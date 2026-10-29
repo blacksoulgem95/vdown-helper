@@ -17,6 +17,7 @@ const KEYS: Record<string, MessageKey> = {
 export function errorText(e: EngineError): string {
   if (e.code === 'invalid' && e.message.includes('schedule')) return td('setWindowInvalid');
   if (e.code === 'invalid' && e.message.includes('full path')) return td('folderRelative');
+  if (e.code === 'invalid' && e.message.includes('re-encode is not there')) return td('encFileGone');
   const key = KEYS[e.code];
   const base = key ? t(key) : t('errGeneric');
   return e.code === 'http-error' ? `${base} (${e.message})` : base;

@@ -63,7 +63,7 @@ npm run test:e2e       # real Chromium + fixtures; needs ffmpeg/ffprobe on PATH
 npm run serve:fixtures # the E2E sites, for manual testing
 node scripts/backlog.mjs set VDH-0xx done   # update a task status + the BACKLOG index
 cargo fmt --check && cargo clippy --workspace -- -D warnings && cargo test --workspace   # Rust core / desktop
-cargo run -p vdh-engine --bin vdh -- get <url> -o out   # the desktop engine from a terminal (probe / get / run)
+cargo run -p vdh-engine --bin vdh -- get <url> -o out   # the desktop engine from a terminal (probe / get / run / encode)
 npm run desktop:ui && cargo build -p vdown-helper-desktop   # the desktop app (window first: the app embeds it)
 xvfb-run -a npm run test:desktop                         # the real app through tauri-driver (Linux)
 xvfb-run -a dbus-run-session -- npm run test:link        # the extension and the real app through native messaging

@@ -1,5 +1,6 @@
 // End-to-end test of the real desktop app (Linux): the built binary driven through tauri-driver and WebKitWebDriver,
-// against the extension's fixture servers. Every file is checked with ffprobe and a full decode.
+// against the extension's fixture servers. Every file is checked with ffprobe and a full decode (re-encodes also for
+// their codecs).
 //
 //   cargo build -p vdown-helper-desktop && npm run desktop:ui   (the window must be built first)
 //   xvfb-run -a npm run test:desktop                            (needs tauri-driver, WebKitWebDriver, ffmpeg)
@@ -17,7 +18,8 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { createHash } from 'node:crypto';
+import { basename, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 
 const root = resolve(import.meta.dirname, '..');
@@ -73,7 +75,11 @@ function cleanup() {
       // already gone
     }
   }
-  rmSync(home, { recursive: true, force: true });
+  try {
+    rmSync(home, { recursive: true, force: true });
+  } catch {
+    // the document portal's mount under .cache/doc can still be going away: a temporary folder, left to the system
+  }
 }
 process.on('exit', cleanup);
 
@@ -223,8 +229,12 @@ function probe(file) {
     video: j.streams.some((s) => s.codec_type === 'video'),
     audio: j.streams.some((s) => s.codec_type === 'audio'),
     duration: Number(j.format.duration),
+    codecs: j.streams.map((s) => s.codec_name),
+    height: j.streams.find((s) => s.codec_type === 'video')?.height,
   };
 }
+
+const sha = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
 
 function decodesCleanly(file) {
   const r = execFileSync('ffmpeg', ['-v', 'error', '-i', file, '-f', 'null', '-'], {
@@ -326,6 +336,95 @@ await step('a live recording runs until Stop and keeps what was recorded', async
   decodesCleanly(recorded[0]);
 });
 
+/** Choose a finished file for re-encoding from its History entry. */
+async function reencodeFromHistory(name) {
+  await s.button(/^History/);
+  await s.find('[data-testid="history"]');
+  const ok = await s.script(
+    `const li = [...document.querySelectorAll('[data-testid="history"] li')].find((x) => x.querySelector('p')?.title === arguments[0]);
+     const b = li && li.querySelector('[data-testid="history-reencode"]');
+     if (b) b.click();
+     return Boolean(b);`,
+    name,
+  );
+  if (!ok) throw new Error(`no Re-encode on the History entry ${name}`);
+  await s.find('[data-testid="convert"]');
+}
+
+const completed = async () => (await s.all('[data-testid="history"] li[data-stage="completed"]')).length;
+
+let firstMp4 = '';
+await step('a finished download is re-encoded to H.265 in MKV, and the original is kept', async () => {
+  firstMp4 = files(downloads).filter((p) => p.endsWith('.mp4'))[0] ?? '';
+  if (!firstMp4) throw new Error('no finished MP4 to re-encode');
+  const before = sha(firstMp4);
+  await reencodeFromHistory(basename(firstMp4));
+  await until('one file chosen', async () => (await s.all('[data-testid="convert-inputs"] li')).length === 1);
+  // the codecs offered are the ones that work here (detected with test encodes)
+  await until('the encoders', () =>
+    s.script(
+      `return [...document.querySelectorAll('select[data-testid="codec"] option')].some((o) => o.value === 'h265')`,
+    ),
+  );
+  await s.choose('[data-testid="codec"]', 'h265');
+  await s.choose('[data-testid="container"]', 'mkv');
+  // an encode the container cannot hold is refused before it is queued
+  await s.choose('[data-testid="container"]', 'webm');
+  await s.find('[data-testid="encode-problem"][data-code="container-codec"]');
+  if ((await s.script(`return document.querySelector('[data-testid="reencode"]').disabled`)) !== true)
+    throw new Error('an impossible encode could be started');
+  await s.choose('[data-testid="container"]', 'mkv');
+  // the starting point (Compatible) stops at 1080p: keep the original size
+  await s.choose('[data-testid="size"]', '0');
+  await until(
+    'the encode to be possible',
+    async () => (await s.all('[data-testid="encode-problem"]')).length === 0,
+  );
+  await s.click('[data-testid="reencode"]');
+  await s.find('[data-testid="queue"]');
+  await s.button(/^History/);
+  await until('the re-encode in the history', async () => (await completed()) === 3, 120_000);
+  const out = files(downloads).filter((p) => p.endsWith('[H.265].mkv'));
+  if (out.length !== 1) throw new Error(`expected one H.265 file, found ${out.join(', ') || 'none'}`);
+  const p = probe(out[0]);
+  if (p.codecs.join() !== 'hevc,aac') throw new Error(`codecs ${p.codecs.join()}`);
+  if (Math.abs(p.duration - probe(firstMp4).duration) > 0.5) throw new Error(`duration ${p.duration}`);
+  decodesCleanly(out[0]);
+  if (sha(firstMp4) !== before) throw new Error('the original file changed');
+  await until(
+    'the notification',
+    () => readFileSync(notifyLog, 'utf8').includes('Re-encode finished'),
+    15_000,
+  );
+});
+
+await step('a batch of files is re-encoded with the Compatible preset', async () => {
+  const h265 = files(downloads).find((p) => p.endsWith('[H.265].mkv'));
+  if (!firstMp4 || !h265) throw new Error('the files of the step before are missing');
+  await reencodeFromHistory(basename(firstMp4));
+  await reencodeFromHistory(basename(h265));
+  await until(
+    'two files chosen',
+    async () => (await s.all('[data-testid="convert-inputs"] li')).length === 2,
+  );
+  await s.choose('[data-testid="preset"]', 'compatible');
+  await until('the encoders', () =>
+    s.script(`return !document.querySelector('[data-testid="reencode"]').disabled`),
+  );
+  await s.click('[data-testid="reencode"]');
+  await s.find('[data-testid="queue"]');
+  await s.button(/^History/);
+  await until('both re-encodes in the history', async () => (await completed()) === 5, 180_000);
+  const out = files(downloads).filter((p) => p.endsWith('[Compatible].mp4'));
+  if (out.length !== 2) throw new Error(`expected two Compatible files, found ${out.join(', ') || 'none'}`);
+  for (const file of out) {
+    const p = probe(file);
+    if (p.codecs.join() !== 'h264,aac') throw new Error(`${basename(file)}: codecs ${p.codecs.join()}`);
+    if (!(p.height <= 1080)) throw new Error(`${basename(file)}: height ${p.height}`);
+    decodesCleanly(file);
+  }
+});
+
 await step('settings are saved and survive a restart (language, history)', async () => {
   await s.button(/^Settings/);
   await s.find('[data-testid="settings"]');
@@ -342,7 +441,7 @@ await step('settings are saved and survive a restart (language, history)', async
   await s.find('[data-testid="app"][data-lang="it"]');
   await s.button(/^Cronologia/);
   const done = await s.all('[data-testid="history"] li[data-stage="completed"]');
-  if (done.length !== 2) throw new Error(`the history has ${done.length} completed entries after a restart`);
+  if (done.length !== 5) throw new Error(`the history has ${done.length} completed entries after a restart`);
 });
 
 await step('start at login is registered when turned on and removed when turned off', async () => {

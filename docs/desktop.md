@@ -168,10 +168,28 @@ sanitised and stay inside the download folder.
 
 ### Re-encoding (VDH-068)
 
-Only in the app and only when the user asks. Presets ("Smaller file", "Compatible H.264 1080p", "AV1 archive"…) and
-manual codec / resolution / quality / bitrate; hardware encoders (NVENC, Quick Sync, AMF, VideoToolbox, VAAPI) when a
-test encode succeeds; trim with a preview player, timeline and keyframe snapping (lossless when the cut allows); MKV
-output; soft subtitles; batch.
+Only in the app and only when the user asks: the **Convert** tab, or **Re-encode** on a finished download in the
+History. The original file is never written; the new one goes to the download folder as `name [label].ext` (the label
+is the preset's name or the encode's short name, `H.265 720p`), never over an existing file.
+
+- **What can be chosen** is a closed set in `vdh-core` (`core/src/transcode.rs`): container (MP4, MKV, WebM), video codec
+  (H.264, H.265, AV1, VP9, or keep the video as it is), encoder, constant quality or average bitrate, a maximum height
+  (never scaled up) and the audio (keep, AAC, Opus, none). `check()` refuses what a container cannot hold (VP9 or Opus
+  in MP4, H.264/H.265 or AAC in WebM; Matroska holds them all), out-of-range values and resizing a kept video, with a
+  stable code the window words in the user's language; the app checks again whatever the window sends.
+- **Presets** are starting points the controls then change: Compatible (H.264/AAC MP4 up to 1080p), Smaller (H.265),
+  Phone (H.264 up to 720p), Web (VP9/Opus WebM up to 1080p), Archive (AV1/Opus MKV).
+- **Encoders.** Software ones (libx264, libx265, libsvtav1, libvpx-vp9) are offered when ffmpeg lists them; hardware
+  ones (NVENC, Quick Sync, AMF, VideoToolbox, VAAPI) only after a one-frame test encode succeeds (ffmpeg lists them
+  whether or not a device and driver are there). Detection runs once, the first time the Convert tab opens.
+- **Jobs.** Each file is a queue job with the stages detected → preparing → encoding → completed, real progress from
+  ffmpeg's `-progress` against the input's duration (ffprobe), and pause, cancel, retry and remove like any job. A
+  paused encode starts again from the beginning (ffmpeg cannot continue a half-written file). Only files the queue
+  finished or the user picked in the file dialog can be re-encoded; batches are up to 50 files.
+- **From a terminal:** `vdh encode <file> --preset smaller -o DIR` (or `--codec`, `--container`, `--encoder`, `--crf`
+  / `--kbps`, `--height`, `--audio`), `vdh queue add-encode …` and `vdh encoders`.
+
+Trim with a preview player, timeline and keyframe snapping is VDH-079; subtitles embedded as soft subs are VDH-080.
 
 ### Packaging (VDH-069)
 
@@ -196,11 +214,13 @@ release.
 - `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` on Linux, Windows and macOS; golden fixtures shared with
   the extension's vitest suites.
 - The engine's integration tests against the E2E fixture servers (outputs checked with ffprobe and a full decode;
-  resume after `kill -9`; DRM refused).
+  resume after `kill -9`; DRM refused; re-encodes checked for their codecs, size and duration, a paused encode
+  finishing after it is resumed).
 - The real app on Linux driven by tauri-driver against the same servers (`xvfb-run -a npm run test:desktop`, after
   `npm run desktop:ui` and `cargo build -p vdown-helper-desktop`), in its own D-Bus session: an HLS download and its
-  notification, a DRM refusal, a live recording stopped from the queue, settings that survive a restart, start at login,
-  closing the window to the tray (a real `WM_DELETE_WINDOW`) and a second launch bringing it back.
+  notification, a DRM refusal, a live recording stopped from the queue, a finished download re-encoded to H.265 in
+  MKV and a batch with the Compatible preset (codecs checked with ffprobe, the original unchanged), settings that
+  survive a restart, start at login, closing the window to the tray (a real `WM_DELETE_WINDOW`) and a second launch bringing it back.
 - Extension ↔ app in real Chromium (`xvfb-run -a dbus-run-session -- npm run test:link`): the app registers itself with the test
   profile, the browser starts it through the relay, an HLS stream and a card sent with **Send to desktop app** are
   saved by the app, a cookie-protected file is fetched with the cookie of the granted site, cancel reaches the app, a

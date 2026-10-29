@@ -20,12 +20,24 @@ Trim (preview player, timeline, keyframe snapping) moved to VDH-079; subtitles e
 
 ## Acceptance criteria
 
-- [ ] Presets and codec/resolution/quality/bitrate controls; hardware encoders detected by a test encode
-- [ ] MKV (and WebM) output, with the codec/container combinations checked before anything runs
-- [ ] Batch re-encode of finished or local files, as queue jobs (pause, cancel, retry like any job)
-- [ ] Engine tests and the app E2E check the outputs with ffprobe (codec, size, a full decode)
+- [x] Presets and codec/resolution/quality/bitrate controls; hardware encoders detected by a test encode
+- [x] MKV (and WebM) output, with the codec/container combinations checked before anything runs
+- [x] Batch re-encode of finished or local files, as queue jobs (pause, cancel, retry like any job)
+- [x] Engine tests and the app E2E check the outputs with ffprobe (codec, size, a full decode)
 - [ ] CI green on the PR head
 
 ## Notes
 
 - Plan agreed with the owner: see `docs/desktop.md`.
+- `vdh-core::transcode`: the closed encode set, `check()` codes, argument vectors (one argument per value, no shell),
+  presets, the short label and the one-frame test encode. `vdh-engine`: `encoders::detect`, `reencode::run` (staged and
+  moved into place; the original is only read), `Manager::add_reencode`; `vdh encode` / `vdh encoders` /
+  `vdh queue add-encode`. App: `presets`, `encoders` (detected once), `check_encode`, `pick_files`, `reencode` (only
+  files the queue finished or the user picked), the Convert tab and **Re-encode** in the History; notifications say
+  "Re-encode finished" / "failed".
+- The manager now announces a finished job before removing it from the queue, so the app can tell a re-encode from a
+  download in its notification.
+- Verified locally: `cargo test` (incl. `tests/reencode.rs`: H.265 MKV, VP9 WebM at 144p, a remux, refusals, a batch
+  in the queue with its history, a paused encode resumed to the end), the desktop E2E 10/10 (re-encode to H.265 MKV
+  with the original unchanged and its notification, a batch with the Compatible preset; codecs checked with ffprobe).
+  Hardware encoders are covered by argument tests only: no GPU on the runners.
