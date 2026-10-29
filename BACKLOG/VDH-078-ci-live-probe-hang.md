@@ -1,7 +1,7 @@
 ---
 id: VDH-078
 title: CI: the app E2E's live probe sometimes never answers
-status: in-progress
+status: done
 priority: P2
 area: test
 depends_on: [VDH-067]
@@ -22,7 +22,7 @@ app or its window.
 
 - [x] The cause found from a failing run (the step now reports what the window shows: the address field, any message,
       whether Check is busy) and fixed in the app or the test
-- [ ] The step passes in repeated CI runs
+- [x] The step passes in repeated CI runs
 
 ## Notes
 
@@ -34,3 +34,4 @@ app or its window.
   `input` event React listens to, so React kept the old text; the test's `type` now empties the field the way a
   user's edit does (the native value setter and an `input` event) and checks the field holds exactly what was typed.
   The app was not at fault: a user's own edit sends those events.
+- Done: the step passed in both `app-e2e` runs on `1110509` (CI runs 40831516844 and 40831511667 (Desktop), 40831516905 and 40831511843 (check, e2e) on `1110509`) and in every local run since the fix.

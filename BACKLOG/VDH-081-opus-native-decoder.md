@@ -1,7 +1,7 @@
 ---
 id: VDH-081
-title: 'Desktop Opus re-encodes: FFmpeg 8 logs an error at the last Opus packet from Matroska'
-status: in-progress
+title: Desktop Opus re-encodes: FFmpeg 8 logs an error at the last Opus packet from Matroska
+status: done
 priority: P2
 area: desktop
 depends_on: [VDH-068]
@@ -27,7 +27,7 @@ libopus. Find which packets are rejected and whether the files the app writes ar
       even when the audio is dropped (`-discard:a all`) or not decoded
 - [x] The engine tests check every packet of a Matroska/WebM output with Opus: the video and the Opus packets are
       copied unchanged into files of their own (Matroska without the Opus, and Ogg) and each is decoded in full
-- [ ] CI green on the PR head
+- [x] CI green on the PR head
 
 ## Notes
 
@@ -36,3 +36,4 @@ libopus. Find which packets are rejected and whether the files the app writes ar
   the Matroska demuxer runs on every packet: players built on FFmpeg 8.0 may log it once at the end of such a file;
   browsers read WebM with their own demuxer and libopus.
 - When VDH-069 pins the app's ffmpeg, check the pinned build against the same test.
+- Done: `engine-fixtures` green on FFmpeg 8.0.1 in CI runs 40831516844 and 40831511667 (Desktop), 40831516905 and 40831511843 (check, e2e) on `1110509`.

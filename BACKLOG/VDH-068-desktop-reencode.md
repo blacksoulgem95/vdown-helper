@@ -1,7 +1,7 @@
 ---
 id: VDH-068
 title: Desktop re-encoding: presets, codec controls, hardware encoders, MKV, batch
-status: in-progress
+status: done
 priority: P2
 area: desktop
 depends_on: [VDH-066]
@@ -24,7 +24,7 @@ Trim (preview player, timeline, keyframe snapping) moved to VDH-079; subtitles e
 - [x] MKV (and WebM) output, with the codec/container combinations checked before anything runs
 - [x] Batch re-encode of finished or local files, as queue jobs (pause, cancel, retry like any job)
 - [x] Engine tests and the app E2E check the outputs with ffprobe (codec, size, a full decode)
-- [ ] CI green on the PR head
+- [x] CI green on the PR head
 
 ## Notes
 
@@ -41,3 +41,5 @@ Trim (preview player, timeline, keyframe snapping) moved to VDH-079; subtitles e
   in the queue with its history, a paused encode resumed to the end), the desktop E2E 10/10 (re-encode to H.265 MKV
   with the original unchanged and its notification, a batch with the Compatible preset; codecs checked with ffprobe).
   Hardware encoders are covered by argument tests only: no GPU on the runners.
+- Done: CI runs 40831516844 and 40831511667 (Desktop), 40831516905 and 40831511843 (check, e2e) on `1110509`, all green; the full local suite (incl. `test:e2e`, `test:desktop`, `test:link`, cargo) green on
+  the same head. Found on the way: VDH-081 (FFmpeg 8 and Opus in Matroska) and the cause of VDH-078.
