@@ -1,5 +1,5 @@
 import { FolderOpen, Save } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button, Notice, SelectField, TextField, Toggle } from '@/components/ui';
 import { api, asEngineError, type AppSettings, type SettingsView } from './api';
 import { errorText } from './errors';
@@ -14,7 +14,10 @@ const whole = (v: string, fallback: number) => {
 export function SettingsPanel({ view, onSaved }: { view: SettingsView; onSaved: (v: SettingsView) => void }) {
   const [s, setS] = useState<AppSettings>(view.settings);
   const [msg, setMsg] = useState<{ tone: 'acid' | 'danger'; text: string }>();
+  // bumped on every edit: a save that answers after the user changed something does not undo that change
+  const edits = useRef(0);
   const set = (patch: Partial<AppSettings>) => {
+    edits.current++;
     setS((cur) => ({ ...cur, ...patch }));
     setMsg(undefined);
   };
@@ -25,10 +28,13 @@ export function SettingsPanel({ view, onSaved }: { view: SettingsView; onSaved: 
   };
 
   const save = async () => {
+    const at = edits.current;
     try {
       const next = await api.saveSettings(s);
-      setS(next.settings);
       onSaved(next);
+      if (edits.current !== at) return;
+      // the values as the app checked them (numbers brought into range...)
+      setS(next.settings);
       setMsg({ tone: 'acid', text: td('saved') });
     } catch (e) {
       setMsg({ tone: 'danger', text: errorText(asEngineError(e)) });
