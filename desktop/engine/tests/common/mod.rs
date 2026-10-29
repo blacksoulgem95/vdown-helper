@@ -157,15 +157,17 @@ pub fn probe(file: &Path) -> Probe {
 
 /// Decoding the whole file reports no error.
 ///
-/// Opus in Matroska/WebM: FFmpeg 8.0's decoding of the last, end-trimmed Opus packet from Matroska fails although the
-/// stored bytes are correct (the same packet copied into Ogg decodes cleanly; VDH-081). So the rest of the file is
-/// decoded as it is and the Opus packets, copied unchanged into Ogg, are decoded there: every packet is still checked.
+/// Opus in Matroska/WebM: FFmpeg 8.0 logs `Error parsing Opus packet header` when it reads the last, end-trimmed Opus
+/// packet from Matroska, even when the audio is not decoded, although the stored bytes are correct (the same packet
+/// copied into Ogg decodes cleanly; VDH-081). So the rest of the file is decoded as it is and the Opus packets, copied
+/// unchanged into Ogg, are decoded there: every packet is still checked.
 pub fn decodes_cleanly(file: &Path) {
     let ext = file.extension().and_then(|e| e.to_str()).unwrap_or("");
     let opus_in_matroska =
         matches!(ext, "mkv" | "webm") && probe(file).codecs.iter().any(|c| c == "opus");
     if opus_in_matroska {
-        decodes(file, &["-map", "0", "-map", "-0:a"]);
+        // the audio is dropped before the demuxer reads it (FFmpeg 8 logs the error while reading)
+        decodes(file, &["-discard:a", "all"], &["-an"]);
         let ogg = file.with_extension("opus-check.ogg");
         let copied = Command::new("ffmpeg")
             .args(["-v", "error", "-y", "-i"])
@@ -180,18 +182,20 @@ pub fn decodes_cleanly(file: &Path) {
             file.display(),
             String::from_utf8_lossy(&copied.stderr)
         );
-        decodes(&ogg, &[]);
+        decodes(&ogg, &[], &[]);
         let _ = std::fs::remove_file(&ogg);
     } else {
-        decodes(file, &[]);
+        decodes(file, &[], &[]);
     }
 }
 
-fn decodes(file: &Path, map: &[&str]) {
+fn decodes(file: &Path, input: &[&str], output: &[&str]) {
     let out = Command::new("ffmpeg")
-        .args(["-v", "error", "-i"])
+        .args(["-v", "error"])
+        .args(input)
+        .arg("-i")
         .arg(file)
-        .args(map)
+        .args(output)
         .args(["-f", "null", "-"])
         .output()
         .expect("ffmpeg runs");

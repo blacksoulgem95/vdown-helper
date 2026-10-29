@@ -189,8 +189,9 @@ is the preset's name or the encode's short name, `H.265 720p`), never over an ex
 - **From a terminal:** `vdh encode <file> --preset smaller -o DIR` (or `--codec`, `--container`, `--encoder`, `--crf`
   / `--kbps`, `--height`, `--audio`), `vdh queue add-encode …` and `vdh encoders`.
 
-FFmpeg 8.0 reports an error when it decodes the last (end-trimmed) Opus packet of a WebM/MKV file, although the stored
-bytes are correct (the same packet decodes cleanly from Ogg; VDH-081): the engine tests decode Opus copied into Ogg.
+FFmpeg 8.0 logs `Error parsing Opus packet header` when it reads the last (end-trimmed) Opus packet of a WebM/MKV
+file, even without decoding it, although the stored bytes are correct (the same packet decodes cleanly from Ogg;
+VDH-081): the engine tests decode Opus copied into Ogg.
 
 Trim with a preview player, timeline and keyframe snapping is VDH-079; subtitles embedded as soft subs are VDH-080.
 
