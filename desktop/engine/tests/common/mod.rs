@@ -155,14 +155,10 @@ pub fn probe(file: &Path) -> Probe {
     }
 }
 
-/// Decoding the whole file reports no error. Opus is decoded with libopus, the reference decoder browsers use: FFmpeg
-/// 8.0's own Opus decoder rejects some packets libopus 1.6 writes (VDH-081).
+/// Decoding the whole file reports no error.
 pub fn decodes_cleanly(file: &Path) {
-    let opus = probe(file).codecs.iter().any(|c| c == "opus");
     let out = Command::new("ffmpeg")
-        .args(["-v", "error"])
-        .args(if opus { &["-c:a", "libopus"][..] } else { &[] })
-        .arg("-i")
+        .args(["-v", "error", "-i"])
         .arg(file)
         .args(["-f", "null", "-"])
         .output()
@@ -170,9 +166,78 @@ pub fn decodes_cleanly(file: &Path) {
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(
         out.status.success() && err.trim().is_empty(),
-        "{}: {err}",
-        file.display()
+        "{}: {err}\n{}",
+        file.display(),
+        decode_report(file)
     );
+}
+
+/// Which packets a failed decode stopped at: the lines before the first errors (with each packet's timestamps) and the
+/// audio packets of the file, first and last.
+fn decode_report(file: &Path) -> String {
+    let run = |args: &[&str]| {
+        Command::new(args[0])
+            .args(&args[1..])
+            .arg(file)
+            .args(if args[0] == "ffmpeg" {
+                &["-f", "null", "-"][..]
+            } else {
+                &[]
+            })
+            .output()
+            .map(|o| {
+                format!(
+                    "{}{}",
+                    String::from_utf8_lossy(&o.stdout),
+                    String::from_utf8_lossy(&o.stderr)
+                )
+            })
+            .unwrap_or_default()
+    };
+    let version = run(&["ffmpeg", "-hide_banner", "-version", "-i"]);
+    let traced = run(&["ffmpeg", "-hide_banner", "-debug_ts", "-i"]);
+    let lines: Vec<&str> = traced.lines().collect();
+    let errors: Vec<usize> = (0..lines.len())
+        .filter(|&i| lines[i].contains("Error") || lines[i].contains("error"))
+        .collect();
+    let mut report = format!(
+        "{}\n{} error line(s) of {} traced lines\n",
+        version.lines().next().unwrap_or(""),
+        errors.len(),
+        lines.len()
+    );
+    for &i in errors.iter().take(3) {
+        report.push_str("--- before an error:\n");
+        for l in &lines[i.saturating_sub(4)..=i] {
+            report.push_str(l);
+            report.push('\n');
+        }
+    }
+    let packets = run(&[
+        "ffprobe",
+        "-v",
+        "error",
+        "-select_streams",
+        "a:0",
+        "-show_entries",
+        "packet=pts,duration,size,flags:stream=codec_name,sample_rate,channels,initial_padding",
+        "-of",
+        "csv",
+    ]);
+    let p: Vec<&str> = packets.lines().collect();
+    report.push_str(&format!(
+        "--- {} audio packet line(s); first and last:\n",
+        p.len()
+    ));
+    for l in p
+        .iter()
+        .take(4)
+        .chain(p.iter().skip(p.len().saturating_sub(4)))
+    {
+        report.push_str(l);
+        report.push('\n');
+    }
+    report
 }
 
 pub fn video_and_audio(file: &Path, seconds: f64) {
