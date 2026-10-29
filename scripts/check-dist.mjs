@@ -141,6 +141,10 @@ for (const file of walk(dist).filter((f) => f.endsWith('.js') && !f.includes(`${
 // which parses playlists and re-checks every request.
 if (!read('background.js').includes('AGFzbQ'))
   fail('background.js does not carry the Rust core (src/lib/core.ts)');
+// ...and must never reach the scripts that run in every page frame: the page scanner reports raw facts instead.
+for (const f of ['content.js', 'hook.js'])
+  if (read(f).includes('AGFzbQ'))
+    fail(`${f} carries the Rust core: page scripts must not import it (see lib/classify)`);
 
 // Test-only players and tools (devDependencies) must never be part of the extension.
 for (const file of walk(dist).filter((f) => f.endsWith('.js') && !f.includes(`${join(dist, 'vendor')}`))) {

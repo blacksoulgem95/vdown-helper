@@ -1,7 +1,7 @@
 ---
 id: VDH-063
 title: Rust core: planner, ffmpeg arguments, requests, settings, security, file types, sniffing
-status: todo
+status: in-progress
 priority: P1
 area: lib
 depends_on: [VDH-062]

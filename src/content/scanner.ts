@@ -7,8 +7,6 @@
  * permission is needed to read media the page itself can read.
  */
 import { blobLabel, dataHandle, dataLabel, inspectDataUrl } from '@/lib/dataUrl';
-import { fileKindOfExtension, fileKindOfMime, urlExtension, type FileKind } from '@/lib/filetypes';
-import { sniffMime } from '@/lib/sniff';
 import { HELD_BLOB_LIMIT } from '@/types/ingest';
 import { fetchText, probeHeaders } from '@/lib/netprobe';
 import {
@@ -25,14 +23,27 @@ import {
   type RecordResult,
 } from './capture';
 import { pumpBlob, pumpData, type PumpResult } from './ingest';
-import { collectMetadata, feedMedia, siteMedia } from './metadata';
-import type { MetaMedia } from '@/lib/metadata';
+import { collectPageData, sameOriginText } from './metadata';
 import type { DetectionMethod, RawCandidate, ScanReport } from '@/types/media';
 
 const MEDIA_EXT =
   /\.(mp4|m4v|webm|mkv|mov|ogv|ts|mp3|m4a|aac|wav|ogg|oga|opus|flac|aif|aiff|aifc|wma|flv|avi|wmv|asf|3gp|3g2|mpg|mpeg|mpe|m3u8|m3u|mpd|vtt|srt|ttml|dfxp)(?:$|[?#])/i;
-/** Per kind, so a page with hundreds of images cannot crowd out its one video. */
-const CAPS = { media: 200, image: 300, document: 100, archive: 100, asset: 200 } as const;
+/**
+ * Per kind, so a page with hundreds of images cannot crowd out its one video. `link` and `resource` are raw facts the
+ * background classifies (it applies the per-kind limits again once it knows the kind).
+ */
+const CAPS = {
+  media: 200,
+  image: 300,
+  document: 100,
+  archive: 100,
+  asset: 200,
+  link: 400,
+  resource: 400,
+} as const;
+type FileKind = 'image' | 'document' | 'archive' | 'asset';
+/** Bytes of an untyped blob the background looks at to recognise it. */
+const BLOB_HEAD_BYTES = 600;
 const MAX_HELD = 40;
 const MAX_STYLE_ELEMENTS = 1500;
 /** data: images smaller than this are icons and sprites, not worth listing. */
@@ -98,7 +109,7 @@ interface Collector {
 }
 
 function add(c: Collector, candidate: RawCandidate): void {
-  const bucket = candidate.fileKind ?? 'media';
+  const bucket = candidate.fileKind ?? candidate.fileHint ?? 'media';
   if (c.counts[bucket] >= CAPS[bucket]) return;
   const key = `${candidate.url}|${candidate.method}`;
   if (c.seen.has(key)) return;
@@ -261,10 +272,9 @@ function scanFiles(c: Collector, doc: Document): void {
     for (const a of root.querySelectorAll<HTMLAnchorElement>('a[href]')) {
       const href = a.getAttribute('href');
       if (!href || /^(data|javascript|blob|mailto|tel):/i.test(href)) continue;
-      const abs0 = abs(href, base);
-      const kind = abs0 ? fileKindOfExtension(urlExtension(abs0)) : undefined;
-      // Assets are not links people follow; documents and archives are.
-      if (kind === 'document' || kind === 'archive') addFile(c, abs0, base, 'dom-link', kind);
+      const url = abs(href, base);
+      // Documents and archives are links people follow; the background tells them from the rest by their extension.
+      if (url && /^https?:/i.test(url)) add(c, { url, method: 'dom-link', fileHint: 'link' });
     }
     for (const s of root.querySelectorAll('script[src]'))
       addFile(c, s.getAttribute('src'), base, 'dom-element', 'asset');
@@ -310,36 +320,18 @@ function scanPerformance(c: Collector, base: string): void {
       addUrl(c, r.name, base, 'performance');
       continue;
     }
-    const kind =
-      fileKindOfExtension(urlExtension(r.name)) ?? (r.initiatorType === 'img' ? 'image' : undefined);
+    const url = abs(r.name, base);
+    if (!url || !/^https?:/i.test(url)) continue;
+    // What kind of file this is (if any) is the background's to decide, from the address and the initiator.
     // encodedBodySize is 0 for cross-origin responses that do not allow timing: then the size is simply unknown.
-    if (kind)
-      addFile(
-        c,
-        r.name,
-        base,
-        'performance',
-        kind,
-        r.encodedBodySize > 0 ? { sizeBytes: r.encodedBodySize } : {},
-      );
+    add(c, {
+      url,
+      method: 'performance',
+      fileHint: 'resource',
+      ...(r.initiatorType ? { initiator: r.initiatorType.slice(0, 20) } : {}),
+      ...(r.encodedBodySize > 0 ? { sizeBytes: r.encodedBodySize } : {}),
+    });
   }
-}
-
-/** Feeds the last scan's page offered; read (same origin only) by scanAsync(). */
-let pendingFeeds: string[] = [];
-
-/** A media address announced by metadata or an open site's API, as a candidate. */
-function metaCandidate(m: MetaMedia, method: 'metadata' | 'site-api'): RawCandidate {
-  return {
-    url: m.url,
-    method,
-    ...(m.title ? { title: m.title } : {}),
-    ...(m.mimeType ? { mimeType: m.mimeType } : {}),
-    ...(m.mediaType ? { mediaType: m.mediaType } : {}),
-    ...(m.durationSec ? { durationSec: m.durationSec } : {}),
-    ...(m.width && m.height ? { width: m.width, height: m.height } : {}),
-    ...(m.poster ? { poster: m.poster } : {}),
-  };
 }
 
 export function scan(): ScanReport {
@@ -350,15 +342,12 @@ export function scan(): ScanReport {
     candidates: [],
     notes: { blobSources: 0, inaccessibleFrames: 0, blockedFrameOrigins: [] },
     seen: new Set(),
-    counts: { media: 0, image: 0, document: 0, archive: 0, asset: 0 },
+    counts: { media: 0, image: 0, document: 0, archive: 0, asset: 0, link: 0, resource: 0 },
     blobUrls: new Set(),
   };
   const doc = document;
   scanElements(c, doc);
   scanFiles(c, doc);
-  const meta = collectMetadata(doc);
-  pendingFeeds = meta.feeds;
-  for (const m of meta.media) add(c, metaCandidate(m, 'metadata'));
   // Same-origin iframes are readable here; every frame is also scanned by its own copy of this script (allFrames).
   // Frames this script cannot read are reported by origin so the user can allow them.
   const blocked = new Set<string>();
@@ -384,6 +373,7 @@ export function scan(): ScanReport {
     pageTitle: document.title.slice(0, 300),
     candidates: c.candidates,
     notes: c.notes,
+    pageData: collectPageData(doc),
   };
 }
 
@@ -392,24 +382,22 @@ const BLOB_PROBE_MS = 2500;
 const withTimeout = <T>(p: Promise<T>, ms: number): Promise<T> =>
   Promise.race([p, new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms))]);
 
-/** Read what a blob: URL holds: its Blob, and its type (declared, or recognised from the first bytes). */
-async function probeBlob(url: string): Promise<{ blob: Blob; mime: string } | undefined> {
+/**
+ * Read what a blob: URL holds: its Blob, its declared type, and (when that type says nothing) its first bytes, which the
+ * background recognises.
+ */
+async function probeBlob(url: string): Promise<{ blob: Blob; mime: string; head?: number[] } | undefined> {
   try {
     const blob = await withTimeout(
       fetch(url).then((r) => r.blob()),
       BLOB_PROBE_MS,
     );
-    let mime = blob.type.split(';')[0]?.trim().toLowerCase() ?? '';
-    // An untyped Blob is served by fetch() as "text/plain" in Chrome, so that type says nothing either: look at the bytes.
-    if (
-      !mime ||
-      mime === 'application/octet-stream' ||
-      mime === 'binary/octet-stream' ||
-      mime === 'text/plain'
-    ) {
-      mime = sniffMime(new Uint8Array(await blob.slice(0, 600).arrayBuffer())) ?? mime;
-    }
-    return mime ? { blob, mime } : undefined;
+    const mime = blob.type.split(';')[0]?.trim().toLowerCase() ?? '';
+    // An untyped Blob is served by fetch() as "text/plain" in Chrome, so that type says nothing either.
+    const generic =
+      !mime || mime === 'application/octet-stream' || mime === 'binary/octet-stream' || mime === 'text/plain';
+    if (!generic) return { blob, mime };
+    return { blob, mime, head: [...new Uint8Array(await blob.slice(0, BLOB_HEAD_BYTES).arrayBuffer())] };
   } catch {
     // a MediaSource URL, a revoked URL or a blob from another origin: not readable from here
     return undefined;
@@ -424,8 +412,6 @@ export async function scanAsync(): Promise<ScanReport> {
   heldBlobs.clear();
   mseVideos.clear();
   const report = scan();
-  // Open sites and the page's own podcast feeds: a few anonymous same-origin requests, in parallel with the blobs below.
-  const lookups = Promise.all([siteMedia(), feedMedia(pendingFeeds)]);
   const pending = pendingBlobs;
   pendingBlobs = [];
   const urls = [...new Set(pending.map((p) => p.url))];
@@ -454,13 +440,12 @@ export async function scanAsync(): Promise<ScanReport> {
       continue;
     }
     const id = dataHandle(p.url);
-    const isMedia = /^(video|audio)\//.test(found.mime);
-    const kind = isMedia ? undefined : fileKindOfMime(found.mime);
-    // only media, images, documents, archives and page assets are listed; anything else stays unreadable
-    if (!isMedia && !kind) continue;
+    // Whether it is media or a file worth listing is the background's to decide (it may drop it, and then counts it as
+    // unreadable again); the page keeps the blob so a download it offers can still be handed over.
     heldBlobs.set(id, found.blob);
     // one URL may be referenced several times (src and <source>): it stops being "unreadable" once
-    if (p.counted && !uncounted.has(p.url)) {
+    const counted = p.counted && !uncounted.has(p.url);
+    if (counted) {
       uncounted.add(p.url);
       report.notes.blobSources = Math.max(0, report.notes.blobSources - 1);
     }
@@ -468,17 +453,12 @@ export async function scanAsync(): Promise<ScanReport> {
       ...p.extra,
       url: blobLabel(id),
       method: p.method,
-      mimeType: found.mime,
+      ...(found.mime ? { mimeType: found.mime } : {}),
       held: { kind: 'blob', id, bytes: found.blob.size },
-      ...(kind ? { fileKind: kind } : {}),
+      ...(found.head ? { blobHead: found.head } : {}),
+      ...(counted ? { blobCounted: true } : {}),
     });
   }
-  const [site, feeds] = await lookups;
-  const have = new Set(report.candidates.map((x) => `${x.url}|${x.method}`));
-  for (const m of site)
-    if (!have.has(`${m.url}|site-api`)) report.candidates.push(metaCandidate(m, 'site-api'));
-  for (const m of feeds)
-    if (!have.has(`${m.url}|metadata`)) report.candidates.push(metaCandidate(m, 'metadata'));
   return report;
 }
 
@@ -487,6 +467,8 @@ export interface VdhApi {
   scanAsync: typeof scanAsync;
   probeHeaders: (url: string) => ReturnType<typeof probeHeaders>;
   fetchText: (url: string) => ReturnType<typeof fetchText>;
+  /** A same-origin document (feed, open-site API), anonymously; the background parses it. */
+  sameOriginText: (url: string) => Promise<string | undefined>;
   /** Send the page-held bytes behind `handle` to the offscreen document of `jobId`. */
   pumpHeld: (jobId: string, handle: string) => Promise<PumpResult>;
   /** Capture the MediaSource video behind `handle` (resolves when the capture has ended). */
@@ -521,6 +503,7 @@ const api: VdhApi = {
   finishRecording,
   probeHeaders: (url) => probeHeaders(url),
   fetchText: (url) => fetchText(url),
+  sameOriginText: (url) => sameOriginText(url),
   pumpHeld: async (jobId, handle) => {
     // The handle is only known after a scan of this document: look again if the page changed since.
     if (!heldData.has(handle) && !heldBlobs.has(handle)) await scanAsync();
