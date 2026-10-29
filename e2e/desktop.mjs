@@ -168,8 +168,17 @@ class Session {
   }
   async type(css, text) {
     const el = await this.find(css);
-    await wd('POST', `${this.base}/element/${el}/clear`, {});
+    // WebKitWebDriver's clear empties the field without the input event React listens to, so React could keep the old
+    // text and the new one was typed after it (VDH-078): empty it the way a user's edit does, then type
+    await this.script(
+      `const i = document.querySelector(arguments[0]);
+       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(i, '');
+       i.dispatchEvent(new Event('input', { bubbles: true }));`,
+      css,
+    );
     await wd('POST', `${this.base}/element/${el}/value`, { text });
+    const now = await this.script('return document.querySelector(arguments[0]).value', css);
+    if (now !== text) throw new Error(`typed ${text} into ${css}, which holds ${now}`);
   }
   async script(source, ...args) {
     return wd('POST', `${this.base}/execute/sync`, { script: source, args });

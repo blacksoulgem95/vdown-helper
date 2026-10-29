@@ -95,7 +95,7 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-075](VDH-075-desktop-queue.md) | Desktop engine: persistent queue, resume after restart, bandwidth cap, schedule, history | done | P1 | desktop | VDH-065 |
 | [VDH-076](VDH-076-desktop-standalone-inputs.md) | Desktop app: page scan, local files, clipboard watch, folder rules | todo | P2 | desktop | VDH-066 |
 | [VDH-077](VDH-077-desktop-push-captures.md) | Desktop link: hand MSE captures and recordings to the app (push-bytes) | todo | P2 | desktop | VDH-067, VDH-068 |
-| [VDH-078](VDH-078-ci-live-probe-hang.md) | CI: the app E2E's live probe sometimes never answers | todo | P2 | test | VDH-067 |
+| [VDH-078](VDH-078-ci-live-probe-hang.md) | CI: the app E2E's live probe sometimes never answers | in-progress | P2 | test | VDH-067 |
 | [VDH-079](VDH-079-desktop-trim.md) | Desktop trim: preview player, timeline, keyframe snapping | todo | P3 | desktop | VDH-068 |
 | [VDH-080](VDH-080-desktop-soft-subtitles.md) | Desktop subtitles: download, convert and embed as soft subtitles | todo | P3 | desktop | VDH-068 |
 | [VDH-081](VDH-081-opus-native-decoder.md) | Desktop Opus re-encodes: FFmpeg 8 logs an error at the last Opus packet from Matroska | in-progress | P2 | desktop | VDH-068 |
