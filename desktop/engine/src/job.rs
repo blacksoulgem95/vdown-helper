@@ -24,8 +24,18 @@ use crate::{ffmpeg, live};
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum Event {
-    Stage { stage: &'static str },
+    Stage {
+        stage: &'static str,
+    },
     Progress(Progress),
+    /// The queue recorded how the job ended (`stage`: completed, failed, cancelled; or detected when held or paused).
+    Finished {
+        stage: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        path: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, Default, Serialize)]

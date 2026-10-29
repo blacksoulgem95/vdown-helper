@@ -323,11 +323,12 @@ pub fn parse_vtt(text: &str) -> Vec<Cue> {
         }
         // Optional cue identifier line, then the timing line.
         let mut t = timing(line);
-        if t.is_none() && i + 1 < lines.len() {
-            if let Some(next) = timing(lines[i + 1]) {
-                t = Some(next);
-                i += 1;
-            }
+        if t.is_none()
+            && i + 1 < lines.len()
+            && let Some(next) = timing(lines[i + 1])
+        {
+            t = Some(next);
+            i += 1;
         }
         let Some((a, b)) = t else {
             i += 1;
@@ -376,10 +377,10 @@ pub fn timestamp_map_offset(text: &str) -> Option<f64> {
         .find_map(|(i, key)| {
             let line = &head[i + key.len()..];
             let line = &line[..line.find(['\r', '\n']).unwrap_or(line.len())];
-            if let Some((mpegts, rest)) = find_field(line, "MPEGTS:", ts) {
-                if let Some((l, _)) = find_field(rest, "LOCAL:", local) {
-                    return Some((mpegts, l));
-                }
+            if let Some((mpegts, rest)) = find_field(line, "MPEGTS:", ts)
+                && let Some((l, _)) = find_field(rest, "LOCAL:", local)
+            {
+                return Some((mpegts, l));
             }
             let (l, rest) = find_field(line, "LOCAL:", local)?;
             let (mpegts, _) = find_field(rest, "MPEGTS:", ts)?;
@@ -464,10 +465,14 @@ fn ttml_time(value: Option<&str>, frame_rate: f64, tick_rate: f64) -> Option<f64
         let f = f
             .split_once('.')
             .map_or(Some(*f), |(a, b)| all(b).then_some(a));
-        if let Some(f) = f.filter(|f| all(f)) {
-            if all(h) && m.len() == 2 && all(m) && s.len() == 2 && all(s) {
-                return Some(n(h) * 3600.0 + n(m) * 60.0 + n(s) + n(f) / frame_rate);
-            }
+        if let Some(f) = f.filter(|f| all(f))
+            && all(h)
+            && m.len() == 2
+            && all(m)
+            && s.len() == 2
+            && all(s)
+        {
+            return Some(n(h) * 3600.0 + n(m) * 60.0 + n(s) + n(f) / frame_rate);
         }
         return None;
     }
@@ -576,14 +581,16 @@ fn visit(node: &XmlNode, inherit: f64, frame_rate: f64, tick_rate: f64, cues: &m
             _ => None,
         };
         let body = tidy_lines(&ttml_text(node));
-        if let Some(end) = end {
-            if end >= start && !body.is_empty() && cues.len() < MAX_CUES {
-                cues.push(Cue {
-                    start,
-                    end,
-                    text: body,
-                });
-            }
+        if let Some(end) = end
+            && end >= start
+            && !body.is_empty()
+            && cues.len() < MAX_CUES
+        {
+            cues.push(Cue {
+                start,
+                end,
+                text: body,
+            });
         }
         return;
     }

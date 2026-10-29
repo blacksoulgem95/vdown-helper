@@ -253,10 +253,10 @@ pub fn parse_xml(input: &str, limits: XmlLimits) -> Option<XmlNode> {
     while i < n {
         let lt = find_from(src, "<", i);
         let text_end = lt.unwrap_or(n);
-        if text_end > i {
-            if let Some(top) = stack.last_mut() {
-                top.append_text(&decode_entities(&src[i..text_end]));
-            }
+        if text_end > i
+            && let Some(top) = stack.last_mut()
+        {
+            top.append_text(&decode_entities(&src[i..text_end]));
         }
         let Some(lt) = lt else { break };
         i = lt;

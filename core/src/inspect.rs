@@ -43,10 +43,10 @@ fn http_origin(u: &str) -> Option<String> {
 pub fn origins_of<'a>(urls: impl IntoIterator<Item = &'a str>, max: usize) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for u in urls {
-        if let Some(o) = http_origin(u) {
-            if !out.contains(&o) {
-                out.push(o);
-            }
+        if let Some(o) = http_origin(u)
+            && !out.contains(&o)
+        {
+            out.push(o);
         }
         if out.len() >= max {
             break;
@@ -58,10 +58,10 @@ pub fn origins_of<'a>(urls: impl IntoIterator<Item = &'a str>, max: usize) -> Ve
 pub fn sample_by_origin<'a>(urls: impl IntoIterator<Item = &'a str>, max: usize) -> Attrs {
     let mut out = Attrs::default();
     for u in urls {
-        if let Some(o) = http_origin(u) {
-            if out.get(&o).is_none() {
-                out.set(&o, u.to_string());
-            }
+        if let Some(o) = http_origin(u)
+            && out.get(&o).is_none()
+        {
+            out.set(&o, u.to_string());
         }
         if out.len() >= max {
             break;
@@ -94,11 +94,11 @@ pub fn inspect_media_playlist(p: &HlsMediaPlaylist) -> VariantInspection {
         if let Some(m) = &s.map {
             urls.add(&m.uri);
         }
-        if let Some(k) = &s.key {
-            if let (Some(uri), KeyMethod::Aes128, false) = (&k.uri, k.method, k.protected_by_drm) {
-                key_uris.add(uri);
-                urls.add(uri);
-            }
+        if let Some(k) = &s.key
+            && let (Some(uri), KeyMethod::Aes128, false) = (&k.uri, k.method, k.protected_by_drm)
+        {
+            key_uris.add(uri);
+            urls.add(uri);
         }
     }
     let first = p

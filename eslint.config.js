@@ -17,13 +17,15 @@ export default tseslint.config(
       'docs/**',
       'src/wasm/gen/**',
       'target/**',
+      'desktop/ui/dist/**',
+      'desktop/src-tauri/gen/**',
     ],
   },
   js.configs.recommended,
   { languageOptions: { globals: { ...globals.browser, ...globals.node, chrome: 'readonly' } } },
   ...tseslint.configs.recommended,
   {
-    files: ['src/**/*.{ts,tsx}'],
+    files: ['src/**/*.{ts,tsx}', 'desktop/ui/src/**/*.{ts,tsx}'],
     plugins: { 'react-hooks': reactHooks },
     rules: {
       'react-hooks/rules-of-hooks': 'error',

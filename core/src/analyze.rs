@@ -253,10 +253,10 @@ pub fn dash_resource(text: &str, url: &str) -> DashResourcePatch {
         r.codecs = top.codecs.clone();
     }
     r.variants = Some(variants);
-    if videos.is_empty() {
-        if let Some(a) = audios.first() {
-            r.bitrate = Some(a.bandwidth);
-        }
+    if videos.is_empty()
+        && let Some(a) = audios.first()
+    {
+        r.bitrate = Some(a.bandwidth);
     }
     let dur = period_duration(&m, period);
     r.duration_sec = dur;

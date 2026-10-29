@@ -1,7 +1,8 @@
 name: Desktop
 
-# The Rust side: the shared core and the desktop engine. Formatting, lints and tests on every OS the app ships for, and
-# the engine against the E2E fixture servers on Linux. Design: docs/desktop.md.
+# The Rust side: the shared core, the desktop engine and the app. Formatting, lints and tests on every OS the app ships
+# for, the engine against the E2E fixture servers, and the real app driven through tauri-driver on Linux.
+# Design: docs/desktop.md.
 on:
   push:
   pull_request:
@@ -19,6 +20,9 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal --component rustfmt,clippy
           rustup default stable
+      - name: Linux libraries for the app (WebKitGTK 4.1, tray)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev
       - uses: actions/cache@v4
         with:
           path: |
@@ -57,3 +61,33 @@ jobs:
       - run: cargo test -p vdh-engine --locked
         env:
           VDH_REQUIRE_FIXTURES: '1'
+
+  # The real app (window, queue, settings) driven through tauri-driver and WebKitWebDriver: an HLS download, a DRM
+  # refusal, a live recording stopped from the queue, settings that survive a restart. Files are checked with ffprobe and
+  # a full decode (e2e/desktop.mjs).
+  app-e2e:
+    runs-on: ubuntu-latest # the runner (and ffmpeg) the fixtures are generated with
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: ./.github/actions/setup-core
+      - name: Linux libraries, WebKitWebDriver, Xvfb and ffmpeg
+        run: >-
+          sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev
+          librsvg2-dev libxdo-dev webkit2gtk-driver xvfb ffmpeg
+      - uses: actions/cache@v4
+        id: driver
+        with:
+          path: ~/.cargo/bin/tauri-driver
+          key: tauri-driver-${{ runner.os }}-2.1.0
+      - name: tauri-driver
+        if: steps.driver.outputs.cache-hit != 'true'
+        run: cargo install tauri-driver --version 2.1.0 --locked
+      # the window first: the app embeds it when it is compiled
+      - run: npm run desktop:ui
+      - run: cargo build -p vdown-helper-desktop --locked
+      - run: xvfb-run -a npm run test:desktop

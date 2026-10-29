@@ -31,11 +31,15 @@ function stats(job: DownloadJob): string {
 export function QueueItem({
   job,
   onAction,
+  pausable,
 }: {
   job: DownloadJob;
   onAction: (id: string, a: JobAction) => void;
+  /** Whether pause/resume is offered (default: a Chrome download that can pause). The desktop app pauses any job. */
+  pausable?: boolean;
 }) {
   const active = isActive(job);
+  const canPause = pausable ?? (job.canPause && active && job.chromeDownloadId !== undefined);
   const done = job.stage === 'completed';
   const tone =
     job.stage === 'failed'
@@ -109,9 +113,7 @@ export function QueueItem({
       )}
 
       <div className="mt-2 flex items-center justify-end gap-0.5">
-        {job.canPause &&
-          active &&
-          job.chromeDownloadId !== undefined &&
+        {canPause &&
           (job.paused ? (
             <IconButton label={t('resume')} onClick={() => onAction(job.id, 'resume')}>
               <Play size={14} aria-hidden="true" />

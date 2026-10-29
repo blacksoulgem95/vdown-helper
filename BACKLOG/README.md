@@ -83,7 +83,7 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-063](VDH-063-core-wasm-planner.md) | Rust core: planner, ffmpeg arguments, requests, settings, security, file types, sniffing | done | P1 | lib | VDH-062, VDH-071 |
 | [VDH-064](VDH-064-core-wasm-rest.md) | Rust core: the remaining pure modules | done | P2 | lib | VDH-063 |
 | [VDH-065](VDH-065-desktop-engine.md) | Desktop engine and CLI: fetching, HLS/DASH/AES-128, live recording, native ffmpeg | done | P1 | desktop | VDH-063 |
-| [VDH-066](VDH-066-desktop-app-standalone.md) | Desktop app (Tauri v2): standalone downloads, queue, history, tray | todo | P1 | desktop | VDH-065, VDH-075 |
+| [VDH-066](VDH-066-desktop-app-standalone.md) | Desktop app (Tauri v2): window, queue, history, settings, tray | in-progress | P1 | desktop | VDH-065, VDH-075 |
 | [VDH-067](VDH-067-native-link.md) | Native link: extension hands jobs to the desktop app | todo | P1 | desktop | VDH-066 |
 | [VDH-068](VDH-068-desktop-reencode.md) | Desktop re-encoding: presets, codec controls, trim, MKV, soft subtitles, batch | todo | P2 | desktop | VDH-066 |
 | [VDH-069](VDH-069-desktop-packaging.md) | Desktop packaging, updater and release workflow | todo | P1 | build | VDH-066 |
@@ -93,3 +93,4 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-073](VDH-073-e2e-recording-wait.md) | E2E: closing the tab while recording waits for relayed chunks, not a fixed sleep | done | P2 | test | - |
 | [VDH-074](VDH-074-core-wasm-analyze.md) | Rust core: candidate analysis (analyze, classify) | todo | P2 | lib | VDH-064 |
 | [VDH-075](VDH-075-desktop-queue.md) | Desktop engine: persistent queue, resume after restart, bandwidth cap, schedule, history | done | P1 | desktop | VDH-065 |
+| [VDH-076](VDH-076-desktop-standalone-inputs.md) | Desktop app: page scan, local files, clipboard watch, folder rules | todo | P2 | desktop | VDH-066 |

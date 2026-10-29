@@ -1,0 +1,128 @@
+{
+  "trayShow": {
+    "message": "Show vdown-helper"
+  },
+  "trayQuit": {
+    "message": "Quit"
+  },
+  "notifyCompleted": {
+    "message": "Download finished"
+  },
+  "notifyFailed": {
+    "message": "Download failed"
+  },
+  "tagline": {
+    "message": "Detect. Decode. Download."
+  },
+  "urlLabel": {
+    "message": "Media or playlist address"
+  },
+  "urlPlaceholder": {
+    "message": "https://… (.m3u8, .mpd, .mp4…)"
+  },
+  "check": {
+    "message": "Check"
+  },
+  "checking": {
+    "message": "Checking…"
+  },
+  "quality": {
+    "message": "Quality"
+  },
+  "fileName": {
+    "message": "File name"
+  },
+  "added": {
+    "message": "Added to the queue."
+  },
+  "liveNote": {
+    "message": "Live stream: it is recorded from now on, until you stop it."
+  },
+  "tabQueue": {
+    "message": "Queue"
+  },
+  "tabHistory": {
+    "message": "History"
+  },
+  "tabSettings": {
+    "message": "Settings"
+  },
+  "sectionsLabel": {
+    "message": "Sections"
+  },
+  "queueEmpty": {
+    "message": "Nothing in the queue. Paste an address above to start."
+  },
+  "historyEmpty": {
+    "message": "No finished downloads yet."
+  },
+  "historyOff": {
+    "message": "The history is turned off in Settings."
+  },
+  "finishedAt": {
+    "message": "Finished $1"
+  },
+  "setFolder": {
+    "message": "Download folder"
+  },
+  "setFolderHint": {
+    "message": "When none is chosen: $1"
+  },
+  "choose": {
+    "message": "Choose…"
+  },
+  "useDefault": {
+    "message": "Use the default"
+  },
+  "setJobs": {
+    "message": "Downloads at a time"
+  },
+  "setSegments": {
+    "message": "Segments at a time, per download"
+  },
+  "setRate": {
+    "message": "Bandwidth limit (KiB/s)"
+  },
+  "setRateHint": {
+    "message": "0 means no limit. It applies to all downloads together."
+  },
+  "setWindow": {
+    "message": "Download only during"
+  },
+  "setWindowHint": {
+    "message": "For example Mon-Fri 22:00-06:00. Leave empty to download at any time."
+  },
+  "setWindowInvalid": {
+    "message": "The schedule is not valid: write days and hours like Mon-Fri 22:00-06:00."
+  },
+  "setHistory": {
+    "message": "Keep a history of finished downloads"
+  },
+  "setHistoryHint": {
+    "message": "Addresses are kept without passwords or tokens."
+  },
+  "setCloseToTray": {
+    "message": "Keep running in the tray when the window is closed"
+  },
+  "setStartAtLogin": {
+    "message": "Start at login, in the tray"
+  },
+  "setNotifications": {
+    "message": "Notify me when a download ends"
+  },
+  "setLanguage": {
+    "message": "Language"
+  },
+  "langAuto": {
+    "message": "System language"
+  },
+  "save": {
+    "message": "Save"
+  },
+  "saved": {
+    "message": "Settings saved."
+  },
+  "folderRelative": {
+    "message": "The download folder must be a full path."
+  }
+}

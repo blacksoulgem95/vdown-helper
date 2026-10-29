@@ -16,11 +16,11 @@ use crate::security::normalize_url;
 pub fn resource_id(url: &str) -> String {
     let mut s = normalize_url(url);
     // A DASH representation (a subtitle track of a manifest) is a resource of its own: keep it apart from the manifest.
-    if parse_dash_ref(url).is_some() {
-        if let Some(i) = url.find("#vdh-rep=") {
-            s.push('#');
-            s.push_str(&url[i + 1..]);
-        }
+    if parse_dash_ref(url).is_some()
+        && let Some(i) = url.find("#vdh-rep=")
+    {
+        s.push('#');
+        s.push_str(&url[i + 1..]);
     }
     hex8(fnv1a_utf16(&s))
 }

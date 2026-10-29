@@ -42,10 +42,10 @@ impl Seen {
             return false;
         }
         self.order.push_back(k);
-        if self.order.len() > 4096 {
-            if let Some(old) = self.order.pop_front() {
-                self.set.remove(&old);
-            }
+        if self.order.len() > 4096
+            && let Some(old) = self.order.pop_front()
+        {
+            self.set.remove(&old);
         }
         true
     }

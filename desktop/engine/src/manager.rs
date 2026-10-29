@@ -177,6 +177,14 @@ impl Manager {
         }
     }
 
+    /// Change the options while the queue runs (they apply to jobs started from now on; the cap applies at once).
+    pub fn set_options(&self, opts: ManagerOptions) {
+        self.limit.set_rate(opts.rate_bps);
+        if let Ok(mut o) = self.opts.lock() {
+            *o = opts;
+        }
+    }
+
     /// Whether finished jobs are kept in the history (on unless turned off).
     pub fn history_enabled(&self) -> bool {
         self.store.setting("history").as_deref() != Some("off")
@@ -342,6 +350,14 @@ impl Manager {
                 self.history(id, &next, Some(&path), Some(done.bytes as f64));
                 // a finished job leaves the queue: the history keeps it, without the addresses' tokens
                 let _ = self.store.remove(id);
+                (self.on_event)(
+                    id,
+                    &Event::Finished {
+                        stage: "completed".into(),
+                        path: Some(path),
+                        error: None,
+                    },
+                );
                 return;
             }
             Err(e) if e.code == ErrorCode::Paused => requeue(&job, why == Some(Interrupt::Pause)),
@@ -364,6 +380,18 @@ impl Manager {
             }
         };
         let _ = self.store.update(id, &saved);
+        (self.on_event)(
+            id,
+            &Event::Finished {
+                stage: stage_of(&saved).into(),
+                path: None,
+                error: saved
+                    .get("error")
+                    .and_then(|e| e.get("message"))
+                    .and_then(Value::as_str)
+                    .map(Into::into),
+            },
+        );
     }
 
     fn start(self: &Arc<Self>, j: StoredJob) -> Result<()> {
@@ -404,6 +432,7 @@ impl Manager {
                             }
                             true
                         }
+                        Event::Finished { .. } => false,
                         Event::Progress(p) => {
                             let p = serde_json::to_value(p).unwrap_or(Value::Null);
                             l.job = with_progress(&l.job, &p, now_ms());

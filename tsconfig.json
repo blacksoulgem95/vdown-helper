@@ -21,5 +21,5 @@
     "types": ["chrome", "vite/client", "node"],
     "paths": { "@/*": ["./src/*"] }
   },
-  "include": ["src", "tests", "scripts", "vite.shared.ts", "vitest.config.ts"]
+  "include": ["src", "tests", "scripts", "desktop/ui/src", "vite.shared.ts", "vitest.config.ts"]
 }

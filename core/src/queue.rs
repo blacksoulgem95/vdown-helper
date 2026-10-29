@@ -256,13 +256,13 @@ impl SpeedMeter {
         if self.first_t.is_none() {
             self.first_t = Some(now_ms);
         }
-        if let (Some(t), Some(b)) = (self.last_t, self.last_bytes) {
-            if now_ms > t {
-                let inst = (bytes - b) * 1000.0 / (now_ms - t);
-                if inst >= 0.0 {
-                    self.rate = Some(self.rate.map_or(inst, |r| r * 0.7 + inst * 0.3));
-                    self.samples += 1;
-                }
+        if let (Some(t), Some(b)) = (self.last_t, self.last_bytes)
+            && now_ms > t
+        {
+            let inst = (bytes - b) * 1000.0 / (now_ms - t);
+            if inst >= 0.0 {
+                self.rate = Some(self.rate.map_or(inst, |r| r * 0.7 + inst * 0.3));
+                self.samples += 1;
             }
         }
         self.last_t = Some(now_ms);

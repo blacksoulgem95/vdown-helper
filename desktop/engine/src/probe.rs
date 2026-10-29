@@ -41,6 +41,12 @@ pub struct Probed {
     pub duration_sec: Option<f64>,
     /// `[height, bandwidth]` of each variant, in the playlist's order.
     pub variants: Vec<(Option<f64>, f64)>,
+    /// The variant chosen (an index into `variants`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub variant: Option<i64>,
+    /// Encryption whose key is delivered openly (`aes-128`): allowed, and labelled as such.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub encryption: Option<&'static str>,
     pub request: DownloadRequest,
 }
 
@@ -93,8 +99,13 @@ fn base_resource(url: &str, kind: &str, format: &str, media_type: &str) -> Media
     }
 }
 
+/// Encryption a downloadable media playlist uses (the key is fetched like any segment).
+fn open_encryption(v: &vdh_core::analyze::Downloadability) -> Option<&'static str> {
+    (v.detail.as_deref() == Some("aes-128")).then_some("aes-128")
+}
+
 /// The playlist of one variant: refused when protected, described otherwise.
-async fn inspect_variant(net: &Net, url: &str) -> Result<InspectionFacts> {
+async fn inspect_variant(net: &Net, url: &str) -> Result<(InspectionFacts, Option<&'static str>)> {
     let (text, final_url) = net.text(url).await?;
     let HlsParseResult::Ok {
         playlist: HlsPlaylist::Media(p),
@@ -109,15 +120,18 @@ async fn inspect_variant(net: &Net, url: &str) -> Result<InspectionFacts> {
             "This stream is protected and cannot be downloaded",
         ));
     }
-    Ok(InspectionFacts {
-        duration_sec: (p.total_duration > 0.0).then_some(p.total_duration),
-        fragmented: Some(p.fragmented),
-        live: Some(!p.end_list),
-    })
+    Ok((
+        InspectionFacts {
+            duration_sec: (p.total_duration > 0.0).then_some(p.total_duration),
+            fragmented: Some(p.fragmented),
+            live: Some(!p.end_list),
+        },
+        open_encryption(&verdict),
+    ))
 }
 
 /// Read an address far enough to know what it is, and describe it as a resource.
-async fn resource_of(net: &Net, url: &str) -> Result<(MediaResource, Option<InspectionFacts>)> {
+async fn resource_of(net: &Net, url: &str) -> Result<(MediaResource, Option<&'static str>)> {
     let mut res = net.get(url, None).await?;
     let final_url = res.url().to_string();
     let mime = res
@@ -222,7 +236,8 @@ async fn resource_of(net: &Net, url: &str) -> Result<(MediaResource, Option<Insp
             playlist: HlsPlaylist::Media(p),
             ..
         } => {
-            if media_playlist_verdict(&p).status == "protected" {
+            let verdict = media_playlist_verdict(&p);
+            if verdict.status == "protected" {
                 return Err(EngineError::protected(
                     "This stream is protected and cannot be downloaded",
                 ));
@@ -233,7 +248,7 @@ async fn resource_of(net: &Net, url: &str) -> Result<(MediaResource, Option<Insp
                 fragmented: Some(p.fragmented),
                 live: Some(!p.end_list),
             });
-            Ok((r, None))
+            Ok((r, open_encryption(&verdict)))
         }
         HlsParseResult::Err { error, .. } => Err(EngineError::invalid(format!(
             "Playlist error: {:?}",
@@ -244,7 +259,7 @@ async fn resource_of(net: &Net, url: &str) -> Result<(MediaResource, Option<Insp
 
 /// Describe `url` and build the request the user's choices make of it.
 pub async fn probe(net: &Net, url: &str, settings: &Settings, wanted: &Wanted) -> Result<Probed> {
-    let (resource, _) = resource_of(net, url).await?;
+    let (resource, mut encryption) = resource_of(net, url).await?;
     let mut choices: Choices = default_choices(&resource, settings);
     if let Some(m) = &wanted.mode {
         choices.mode.clone_from(m);
@@ -270,7 +285,11 @@ pub async fn probe(net: &Net, url: &str, settings: &Settings, wanted: &Wanted) -
             .ok()
             .and_then(|i| resource.variants.get(i))
         {
-            Some(v) => Some(inspect_variant(net, &v.uri).await?),
+            Some(v) => {
+                let (facts, enc) = inspect_variant(net, &v.uri).await?;
+                encryption = enc;
+                Some(facts)
+            }
             None => None,
         }
     } else {
@@ -304,6 +323,8 @@ pub async fn probe(net: &Net, url: &str, settings: &Settings, wanted: &Wanted) -
             .iter()
             .map(|v| (v.height, v.bandwidth))
             .collect(),
+        variant: (!resource.variants.is_empty()).then_some(choices.variant_index),
+        encryption,
         request,
     })
 }
