@@ -88,4 +88,4 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-068](VDH-068-desktop-reencode.md) | Desktop re-encoding: presets, codec controls, trim, MKV, soft subtitles, batch | todo | P2 | desktop | VDH-066 |
 | [VDH-069](VDH-069-desktop-packaging.md) | Desktop packaging, updater and release workflow | todo | P1 | build | VDH-066 |
 | [VDH-070](VDH-070-owner-extension-key.md) | Pin the extension ID with the owner's public key | done | P1 | build | VDH-061 |
-| [VDH-071](VDH-071-page-scanner-without-core.md) | The page scanner never loads the shared core (content.js back to ~20 KB) | in-progress | P0 | content | VDH-062 |
+| [VDH-071](VDH-071-page-scanner-without-core.md) | The page scanner never loads the shared core (content.js back to ~20 KB) | done | P0 | content | VDH-062 |
