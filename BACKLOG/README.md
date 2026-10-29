@@ -98,3 +98,4 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-078](VDH-078-ci-live-probe-hang.md) | CI: the app E2E's live probe sometimes never answers | todo | P2 | test | VDH-067 |
 | [VDH-079](VDH-079-desktop-trim.md) | Desktop trim: preview player, timeline, keyframe snapping | todo | P3 | desktop | VDH-068 |
 | [VDH-080](VDH-080-desktop-soft-subtitles.md) | Desktop subtitles: download, convert and embed as soft subtitles | todo | P3 | desktop | VDH-068 |
+| [VDH-081](VDH-081-opus-native-decoder.md) | Desktop Opus output: FFmpeg 8 native decoder rejects packets from libopus 1.6 | todo | P3 | desktop | VDH-068 |

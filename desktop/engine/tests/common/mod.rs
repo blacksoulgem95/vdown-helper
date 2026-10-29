@@ -155,10 +155,14 @@ pub fn probe(file: &Path) -> Probe {
     }
 }
 
-/// Decoding the whole file reports no error.
+/// Decoding the whole file reports no error. Opus is decoded with libopus, the reference decoder browsers use: FFmpeg
+/// 8.0's own Opus decoder rejects some packets libopus 1.6 writes (VDH-081).
 pub fn decodes_cleanly(file: &Path) {
+    let opus = probe(file).codecs.iter().any(|c| c == "opus");
     let out = Command::new("ffmpeg")
-        .args(["-v", "error", "-i"])
+        .args(["-v", "error"])
+        .args(if opus { &["-c:a", "libopus"][..] } else { &[] })
+        .arg("-i")
         .arg(file)
         .args(["-f", "null", "-"])
         .output()
