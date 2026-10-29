@@ -156,10 +156,42 @@ pub fn probe(file: &Path) -> Probe {
 }
 
 /// Decoding the whole file reports no error.
+///
+/// Opus in Matroska/WebM: FFmpeg 8.0's decoding of the last, end-trimmed Opus packet from Matroska fails although the
+/// stored bytes are correct (the same packet copied into Ogg decodes cleanly; VDH-081). So the rest of the file is
+/// decoded as it is and the Opus packets, copied unchanged into Ogg, are decoded there: every packet is still checked.
 pub fn decodes_cleanly(file: &Path) {
+    let ext = file.extension().and_then(|e| e.to_str()).unwrap_or("");
+    let opus_in_matroska =
+        matches!(ext, "mkv" | "webm") && probe(file).codecs.iter().any(|c| c == "opus");
+    if opus_in_matroska {
+        decodes(file, &["-map", "0", "-map", "-0:a"]);
+        let ogg = file.with_extension("opus-check.ogg");
+        let copied = Command::new("ffmpeg")
+            .args(["-v", "error", "-y", "-i"])
+            .arg(file)
+            .args(["-map", "0:a", "-c", "copy"])
+            .arg(&ogg)
+            .output()
+            .expect("ffmpeg runs");
+        assert!(
+            copied.status.success(),
+            "{}: {}",
+            file.display(),
+            String::from_utf8_lossy(&copied.stderr)
+        );
+        decodes(&ogg, &[]);
+        let _ = std::fs::remove_file(&ogg);
+    } else {
+        decodes(file, &[]);
+    }
+}
+
+fn decodes(file: &Path, map: &[&str]) {
     let out = Command::new("ffmpeg")
         .args(["-v", "error", "-i"])
         .arg(file)
+        .args(map)
         .args(["-f", "null", "-"])
         .output()
         .expect("ffmpeg runs");
