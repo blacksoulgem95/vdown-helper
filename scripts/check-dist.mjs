@@ -44,7 +44,7 @@ const ALLOWED = {
     'notifications',
     'sidePanel',
   ],
-  optional_permissions: ['webRequest', 'declarativeNetRequestWithHostAccess'],
+  optional_permissions: ['webRequest', 'declarativeNetRequestWithHostAccess', 'nativeMessaging', 'cookies'],
   optional_host_permissions: ['<all_urls>'],
 };
 for (const [key, allowed] of Object.entries(ALLOWED))

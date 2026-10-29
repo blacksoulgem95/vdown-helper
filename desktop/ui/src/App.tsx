@@ -7,6 +7,7 @@ import { Notice } from '@/components/ui';
 import { isActive, isQueued } from '@/lib/queue';
 import type { DownloadJob } from '@/types/download';
 import { AddPanel } from './AddPanel';
+import { BrowserLink } from './BrowserLink';
 import { api, asEngineError, type Control, type HistoryEntry, type SettingsView } from './api';
 import { errorText } from './errors';
 import { HistoryList } from './HistoryList';
@@ -123,7 +124,12 @@ export function App({ initial }: { initial: SettingsView }) {
             onClear={() => void api.clearHistory().then(refresh)}
           />
         )}
-        {section === 'settings' && <SettingsPanel key={view.language} view={view} onSaved={saved} />}
+        {section === 'settings' && (
+          <div className="space-y-6">
+            <SettingsPanel key={view.language} view={view} onSaved={saved} />
+            <BrowserLink key={`link-${view.language}`} />
+          </div>
+        )}
       </Tabs>
     </main>
   );

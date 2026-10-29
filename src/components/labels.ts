@@ -162,6 +162,7 @@ export function jobErrorText(job: DownloadJob): string {
     interrupted: 'jobErrInterrupted',
     invalid: 'jobErrInvalid',
     capture: 'jobErrCapture',
+    desktop: 'jobErrDesktop',
   };
   if (e.code === 'too-large' && job.request.zip) return t('zipTooLarge');
   const chromeKey = e.code === 'chrome-download' ? CHROME_REASONS[e.message.trim()] : undefined;

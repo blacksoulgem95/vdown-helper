@@ -8,6 +8,7 @@ import {
   Layers,
   Radio,
   ListMusic,
+  MonitorDown,
   Settings2,
   ShieldCheck,
 } from 'lucide-react';
@@ -17,7 +18,7 @@ import { parseUrl, redactUrl } from '@/lib/security';
 import { t } from '@/lib/i18n';
 import type { MediaResource } from '@/types/media';
 import { cardHeadline, reasonText, statusBadge } from './labels';
-import { Badge, Button, Notice, cx } from './ui';
+import { Badge, Button, IconButton, Notice, cx } from './ui';
 
 /** Where page-held bytes come from, in words. */
 export const heldSource = (r: MediaResource): string =>
@@ -78,6 +79,8 @@ export interface MediaCardProps {
   best?: boolean;
   /** A player the page hook could not watch: allow its site (and turn the hook on) as needed, then reload. */
   onFixPlayer?: (r: MediaResource) => void;
+  /** Hand this one to the desktop app (shown while the app is on). */
+  onSendToDesktop?: (r: MediaResource) => void;
 }
 
 export function MediaCard({
@@ -91,6 +94,7 @@ export function MediaCard({
   onRecord,
   best,
   onFixPlayer,
+  onSendToDesktop,
 }: MediaCardProps) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
@@ -255,6 +259,11 @@ export function MediaCard({
             >
               {t('configure')}
             </Button>
+          )}
+          {onSendToDesktop && ok && !r.held && r.kind !== 'subtitle' && (
+            <IconButton label={t('sendToDesktop')} onClick={() => onSendToDesktop(r)} disabled={busy}>
+              <MonitorDown size={14} aria-hidden="true" />
+            </IconButton>
           )}
           <button
             type="button"

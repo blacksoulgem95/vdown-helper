@@ -1,7 +1,7 @@
 import { Eraser, RotateCcw, ShieldCheck } from 'lucide-react';
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Logo } from '@/components/Logo';
-import { Badge, Button, Notice, Panel, SelectField, TextField, Toggle } from '@/components/ui';
+import { Badge, Button, Notice, SelectField, TextField, Toggle } from '@/components/ui';
 import { useSettings } from '@/hooks/useSettings';
 import { t } from '@/lib/i18n';
 import { send } from '@/lib/messaging';
@@ -10,6 +10,8 @@ import { renderNameTemplate, NAME_TOKENS } from '@/lib/security';
 import { requestAllSites } from '@/lib/uiActions';
 import type { AudioBitrate, AudioFormat, OutputMode } from '@/types/download';
 import type { QualityPreset } from '@/types/settings';
+import { DesktopSection } from './DesktopSection';
+import { Section } from './Section';
 
 const ALL_SITES: chrome.permissions.Permissions = { origins: ['<all_urls>'] };
 const OBSERVER: chrome.permissions.Permissions = { permissions: ['webRequest'], origins: ['<all_urls>'] };
@@ -17,17 +19,6 @@ const OBSERVER: chrome.permissions.Permissions = { permissions: ['webRequest'], 
 // The typings expose a callback/promise hybrid; this pins the promise form.
 const contains = (p: chrome.permissions.Permissions) =>
   chrome.permissions.contains(p) as unknown as Promise<boolean>;
-
-function Section({ title, children, hint }: { title: string; children: ReactNode; hint?: string }) {
-  return (
-    <Panel className="p-5">
-      <h2 className="mono text-[12px] uppercase tracking-[0.16em] text-neon">{title}</h2>
-      {hint && <p className="mt-1 text-[12px] text-muted">{hint}</p>}
-      <div className="rule my-3" />
-      <div className="space-y-4">{children}</div>
-    </Panel>
-  );
-}
 
 export function OptionsApp() {
   const { settings, loaded, update, reset } = useSettings();
@@ -324,6 +315,8 @@ export function OptionsApp() {
                 />
               </div>
             </Section>
+
+            <DesktopSection />
 
             <Section title={t('secNotifications')}>
               <Toggle

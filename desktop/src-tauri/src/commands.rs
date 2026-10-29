@@ -20,6 +20,7 @@ use vdh_engine::store::{HistoryEntry, StoredHeaders};
 use vdh_engine::{EngineError, ErrorCode, Result};
 
 use crate::i18n;
+use crate::link::host::{self, Registered};
 use crate::settings::AppSettings;
 
 pub struct AppState {
@@ -33,6 +34,10 @@ pub struct AppState {
     pub queue: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
     /// Files finished since the app started (they can be opened even with the history turned off).
     pub finished: Mutex<Vec<String>>,
+    /// The app's data folder (the browser link's manifest lives there on Windows).
+    pub data: PathBuf,
+    /// The browsers the app registered with at startup (or at the last repair).
+    pub browsers: Mutex<Vec<Registered>>,
 }
 
 impl AppState {
@@ -230,4 +235,22 @@ pub fn show(app: &AppHandle) {
         let _ = w.show();
         let _ = w.set_focus();
     }
+}
+
+/// The browsers the extension can reach the app from.
+#[tauri::command]
+pub fn browser_link(state: State<'_, AppState>) -> Vec<Registered> {
+    state.browsers.lock().map(|b| b.clone()).unwrap_or_default()
+}
+
+/// Write the browser link again (the app moved, or a browser was installed after it).
+#[tauri::command]
+pub fn repair_browser_link(state: State<'_, AppState>) -> Vec<Registered> {
+    let done = host::program()
+        .map(|p| host::register(&p, &state.data))
+        .unwrap_or_default();
+    if let Ok(mut b) = state.browsers.lock() {
+        b.clone_from(&done);
+    }
+    done
 }

@@ -636,7 +636,7 @@
     "message": "opzionali"
   },
   "permOptional": {
-    "message": "Accesso a tutti i siti e osservazione di rete, solo se li attivi qui sopra. L'accesso al singolo sito viene richiesto quando uno stream ne ha bisogno."
+    "message": "Accesso a tutti i siti e osservazione di rete, solo se li attivi qui sopra. L'accesso al singolo sito viene richiesto quando uno stream ne ha bisogno. nativeMessaging e cookies, solo mentre l'app desktop è attiva."
   },
   "secData": {
     "message": "Dati"
@@ -1066,5 +1066,59 @@
   },
   "issueTooLargeMerge": {
     "message": "Unire video e audio separati avviene nella memoria del browser, e questo stream supera il limite di memoria nelle Impostazioni."
+  },
+  "sendToDesktop": {
+    "message": "Invia all'app desktop"
+  },
+  "sentToDesktop": {
+    "message": "Inviato all'app desktop. Seguilo nella coda."
+  },
+  "inDesktopApp": {
+    "message": "Nell'app desktop"
+  },
+  "secDesktop": {
+    "message": "APP DESKTOP"
+  },
+  "secDesktopHint": {
+    "message": "L'app desktop vdown-helper scarica stream di qualsiasi dimensione, li converte con FFmpeg nativo e continua anche a Chrome chiuso."
+  },
+  "optDesktop": {
+    "message": "Passa i download all'app desktop"
+  },
+  "optDesktopHint": {
+    "message": "Chiede il permesso di comunicare con l'app e di leggere i cookie dei siti che hai consentito. Disattivandolo li restituisce entrambi."
+  },
+  "desktopConnected": {
+    "message": "Collegato a vdown-helper desktop $1 (FFmpeg $2)."
+  },
+  "desktopNoFfmpeg": {
+    "message": "non trovato"
+  },
+  "desktopUnreachable": {
+    "message": "L'app desktop non ha risposto. Installala, avviala una volta (si registra da sola nei tuoi browser) oppure usa Ripara il collegamento col browser nelle sue impostazioni."
+  },
+  "desktopCheck": {
+    "message": "Verifica di nuovo"
+  },
+  "optDesktopRouting": {
+    "message": "Invia all'app desktop"
+  },
+  "optDesktopRoutingHint": {
+    "message": "Catture, registrazioni di una pagina e ZIP restano sempre in Chrome. Ogni scheda ha anche Invia all'app desktop."
+  },
+  "routingNever": {
+    "message": "Solo ciò che invio io"
+  },
+  "routingStreams": {
+    "message": "Stream e conversioni (consigliato)"
+  },
+  "routingAlways": {
+    "message": "Tutto ciò che può gestire"
+  },
+  "optDesktopCookiesHint": {
+    "message": "Per un download da un sito che hai consentito, i suoi cookie vanno all'app solo per quel download; l'app li tiene in memoria e non li scrive mai."
+  },
+  "jobErrDesktop": {
+    "message": "Impossibile raggiungere l'app desktop, oppure non ha più questo download"
   }
 }

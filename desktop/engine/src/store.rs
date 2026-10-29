@@ -28,6 +28,9 @@ pub struct StoredHeaders {
     pub origin: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub user_agent: Option<String>,
+    /// Origins the browser gave cookies for (the origins only: the cookies themselves stay in memory).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cookie_origins: Vec<String>,
 }
 
 #[derive(Debug, Clone)]

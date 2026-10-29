@@ -282,6 +282,7 @@ fn stored(n: &Network) -> StoredHeaders {
         referer: n.referer.clone(),
         origin: n.origin.clone(),
         user_agent: n.user_agent.clone(),
+        cookie_origins: Vec::new(),
     }
 }
 

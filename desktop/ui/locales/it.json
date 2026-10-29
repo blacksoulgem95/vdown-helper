@@ -124,5 +124,20 @@
   },
   "folderRelative": {
     "message": "La cartella dei download deve essere un percorso completo."
+  },
+  "linkTitle": {
+    "message": "Collegamento col browser"
+  },
+  "linkHint": {
+    "message": "L'estensione vdown-helper passa i download a questa app da questi browser (attiva l'app desktop nelle impostazioni dell'estensione)."
+  },
+  "linkNone": {
+    "message": "Nessun browser supportato trovato per questo utente. Installa Chrome, Chromium, Edge, Brave, Vivaldi o Opera, poi ripara il collegamento."
+  },
+  "linkRepair": {
+    "message": "Ripara il collegamento col browser"
+  },
+  "linkRepaired": {
+    "message": "Il collegamento col browser è stato riscritto."
   }
 }

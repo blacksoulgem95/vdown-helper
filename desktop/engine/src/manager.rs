@@ -5,7 +5,7 @@
 //! Requests to pause, resume, retry, cancel, stop or remove a job are written to the database and applied by the running
 //! queue, so they work from another process too. A global bandwidth cap and a schedule window apply to every job.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -21,7 +21,7 @@ use vdh_core::security::redact_url;
 use crate::error::{EngineError, ErrorCode, Result};
 use crate::job::{self, Checkpoints, Event, JobContext};
 use crate::limit::RateLimit;
-use crate::net::{Net, RequestHeaders};
+use crate::net::{Net, OriginCookies, RequestHeaders};
 use crate::schedule::Window;
 use crate::stage::TrackCheckpoint;
 use crate::store::{HistoryEntry, Store, StoredHeaders, StoredJob};
@@ -88,6 +88,10 @@ pub struct Manager {
     opts: Mutex<ManagerOptions>,
     limit: Arc<RateLimit>,
     running: Mutex<HashMap<String, Running>>,
+    /// Cookies the browser handed over, per job: in memory only, dropped when the job ends.
+    cookies: Mutex<HashMap<String, Vec<OriginCookies>>>,
+    /// Jobs already told the browser they wait for its cookies.
+    asked: Mutex<HashSet<String>>,
     on_event: EventSink,
 }
 
@@ -148,6 +152,8 @@ impl Manager {
             opts: Mutex::new(opts),
             limit,
             running: Mutex::new(HashMap::new()),
+            cookies: Mutex::new(HashMap::new()),
+            asked: Mutex::new(HashSet::new()),
             on_event,
         }
     }
@@ -192,8 +198,56 @@ impl Manager {
 
     /// Queue a request. It is planned right away, so a request that cannot run is refused here.
     pub fn add(&self, req: &DownloadRequest, headers: StoredHeaders) -> Result<String> {
+        self.insert(new_id(), req, headers)
+    }
+
+    /// Queue a request under the id the browser gave it, so both sides name the job alike. Handing the same job over
+    /// again (the browser reconnected) changes nothing.
+    pub fn add_with_id(
+        &self,
+        id: &str,
+        req: &DownloadRequest,
+        headers: StoredHeaders,
+    ) -> Result<String> {
+        let valid = !id.is_empty()
+            && id.len() <= 80
+            && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
+        if !valid {
+            return Err(EngineError::invalid("Not a job id"));
+        }
+        if self.store.get(id)?.is_some() {
+            return Ok(id.to_string());
+        }
+        self.insert(id.to_string(), req, headers)
+    }
+
+    /// Cookies for a job, from the browser: kept in memory until the job ends.
+    pub fn set_cookies(&self, id: &str, cookies: Vec<OriginCookies>) {
+        if let Ok(mut c) = self.cookies.lock() {
+            c.insert(id.to_string(), cookies);
+        }
+        if let Ok(mut a) = self.asked.lock() {
+            a.remove(id);
+        }
+    }
+
+    pub fn forget_cookies(&self, id: &str) {
+        if let Ok(mut c) = self.cookies.lock() {
+            c.remove(id);
+        }
+        if let Ok(mut a) = self.asked.lock() {
+            a.remove(id);
+        }
+    }
+
+    /// A job that was given cookies cannot run without them: after a restart it waits for the browser.
+    fn lacks_cookies(&self, j: &StoredJob) -> bool {
+        !j.headers.cookie_origins.is_empty()
+            && !self.cookies.lock().is_ok_and(|c| c.contains_key(&j.id))
+    }
+
+    fn insert(&self, id: String, req: &DownloadRequest, headers: StoredHeaders) -> Result<String> {
         let plan = job::plan(req)?;
-        let id = new_id();
         let request = serde_json::to_value(req).map_err(|e| EngineError::invalid(e.to_string()))?;
         let job = create_job(
             &id,
@@ -312,6 +366,7 @@ impl Manager {
             return Ok(());
         };
         self.store.clear_checkpoints(&j.id)?;
+        self.forget_cookies(&j.id);
         let _ = tokio::fs::remove_dir_all(self.staging(&j.id)).await;
         self.store.update(&j.id, &next)?;
         self.history(&j.id, &next, None, None);
@@ -323,6 +378,7 @@ impl Manager {
         if self.interrupt(id, Interrupt::Remove) {
             return Ok(());
         }
+        self.forget_cookies(id);
         let _ = tokio::fs::remove_dir_all(self.staging(id)).await;
         self.store.remove(id)
     }
@@ -337,6 +393,10 @@ impl Manager {
     ) {
         let job = live.lock().map(|l| l.job.clone()).unwrap_or(Value::Null);
         let now = now_ms();
+        // a paused or held job keeps its cookies (in memory) for when it continues
+        if !matches!(&result, Err(e) if e.code == ErrorCode::Paused) {
+            self.forget_cookies(id);
+        }
         let saved = match result {
             Ok(done) => {
                 let mut next = transition(&job, "completed", now, None).unwrap_or(job);
@@ -355,6 +415,8 @@ impl Manager {
                     &Event::Finished {
                         stage: "completed".into(),
                         path: Some(path),
+                        bytes: Some(done.bytes as f64),
+                        code: None,
                         error: None,
                     },
                 );
@@ -385,6 +447,12 @@ impl Manager {
             &Event::Finished {
                 stage: stage_of(&saved).into(),
                 path: None,
+                bytes: None,
+                code: saved
+                    .get("error")
+                    .and_then(|e| e.get("code"))
+                    .and_then(Value::as_str)
+                    .map(Into::into),
                 error: saved
                     .get("error")
                     .and_then(|e| e.get("message"))
@@ -402,7 +470,12 @@ impl Manager {
             referer: j.headers.referer.clone(),
             origin: j.headers.origin.clone(),
             user_agent: j.headers.user_agent.clone(),
-            cookies: Vec::new(),
+            cookies: self
+                .cookies
+                .lock()
+                .ok()
+                .and_then(|c| c.get(&id).cloned())
+                .unwrap_or_default(),
         })?
         .with_limit(self.limit.clone());
         let opts = self.options();
@@ -432,7 +505,7 @@ impl Manager {
                             }
                             true
                         }
-                        Event::Finished { .. } => false,
+                        Event::Finished { .. } | Event::NeedsCookies { .. } => false,
                         Event::Progress(p) => {
                             let p = serde_json::to_value(p).unwrap_or(Value::Null);
                             l.job = with_progress(&l.job, &p, now_ms());
@@ -507,12 +580,23 @@ impl Manager {
             }
         }
         let jobs = self.store.jobs()?;
-        let waiting: Vec<StoredJob> = jobs
+        let (waiting, blocked): (Vec<StoredJob>, Vec<StoredJob>) = jobs
             .into_iter()
             .filter(|j| {
                 stage_of(&j.job) == "detected" && !is_paused(&j.job) && !running.contains(&j.id)
             })
-            .collect();
+            .partition(|j| !self.lacks_cookies(j));
+        for j in &blocked {
+            let first = self.asked.lock().is_ok_and(|mut a| a.insert(j.id.clone()));
+            if first {
+                (self.on_event)(
+                    &j.id,
+                    &Event::NeedsCookies {
+                        origins: j.headers.cookie_origins.clone(),
+                    },
+                );
+            }
+        }
         if open {
             let free = opts.max_jobs.max(1).saturating_sub(running.len());
             for j in waiting.iter().take(free) {
@@ -523,6 +607,16 @@ impl Manager {
                         &json!({ "code": e.code.as_str(), "message": e.message }),
                     );
                     self.store.update(&j.id, &failed)?;
+                    (self.on_event)(
+                        &j.id,
+                        &Event::Finished {
+                            stage: "failed".into(),
+                            path: None,
+                            bytes: None,
+                            code: Some(e.code.as_str().into()),
+                            error: Some(e.message.clone()),
+                        },
+                    );
                 }
             }
         }
@@ -577,5 +671,114 @@ impl Manager {
         }
         self.hold_all().await;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn request() -> DownloadRequest {
+        serde_json::from_value(json!({
+            "resourceId": "r",
+            // nothing listens here: a job that starts fails at once, which is all these tests need to see
+            "sourceUrl": "http://127.0.0.1:9/clip.mp4",
+            "tabId": 1,
+            "pageUrl": "http://127.0.0.1:9/",
+            "host": "127.0.0.1",
+            "mode": "original",
+            "container": "original",
+            "audioFormat": "mp3",
+            "audioBitrate": 192,
+            "filename": "clip.mp4",
+            "subfolder": "",
+            "qualityLabel": "",
+            "sourceFormat": "mp4",
+            "isHls": false,
+            "hasMuxedAudio": true,
+            "hasVideo": true
+        }))
+        .expect("request")
+    }
+
+    fn manager(events: Arc<Mutex<Vec<String>>>) -> Arc<Manager> {
+        let dir = std::env::temp_dir().join(format!("vdh-mgr-{}", std::process::id()));
+        let opts = ManagerOptions::new(dir.join("out"), dir.join("staging"));
+        let sink: EventSink = Arc::new(move |id, e| {
+            if let Event::NeedsCookies { origins } = e
+                && let Ok(mut ev) = events.lock()
+            {
+                ev.push(format!("{id}:{}", origins.join(",")));
+            }
+        });
+        Arc::new(Manager::new(
+            Arc::new(Store::in_memory().expect("store")),
+            opts,
+            sink,
+        ))
+    }
+
+    #[test]
+    fn ids_from_the_browser_are_checked_and_kept() {
+        let m = manager(Arc::default());
+        assert!(
+            m.add_with_id("bad id", &request(), StoredHeaders::default())
+                .is_err()
+        );
+        assert!(
+            m.add_with_id("", &request(), StoredHeaders::default())
+                .is_err()
+        );
+        let id = m
+            .add_with_id("6f1c-ab", &request(), StoredHeaders::default())
+            .expect("added");
+        assert_eq!(id, "6f1c-ab");
+        // the same job again changes nothing
+        m.add_with_id("6f1c-ab", &request(), StoredHeaders::default())
+            .expect("again");
+        assert_eq!(m.store().jobs().expect("jobs").len(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_job_given_cookies_waits_for_them_after_a_restart() {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let m = manager(events.clone());
+        let headers = StoredHeaders {
+            cookie_origins: vec!["https://site.example".into()],
+            ..StoredHeaders::default()
+        };
+        // as after a restart: the job is stored, its cookies (memory only) are gone
+        m.add_with_id("j1", &request(), headers).expect("added");
+        m.tick().await.expect("tick");
+        m.tick().await.expect("tick");
+        assert_eq!(
+            stage_of(&m.store().get("j1").expect("get").expect("job").job),
+            "detected"
+        );
+        assert_eq!(
+            *events.lock().expect("events"),
+            ["j1:https://site.example"],
+            "asked once, not on every turn"
+        );
+        // the browser answers: the job runs (and here fails at once: nothing listens)
+        m.set_cookies(
+            "j1",
+            vec![OriginCookies {
+                origin: "https://site.example".into(),
+                header: "sid=1".into(),
+            }],
+        );
+        m.tick().await.expect("tick");
+        let mut stage = String::new();
+        for _ in 0..200 {
+            stage = stage_of(&m.store().get("j1").expect("get").expect("job").job).to_string();
+            if stage == "failed" {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        assert_eq!(stage, "failed", "the job did not run");
+        // and its cookies are dropped once it ended
+        assert!(m.cookies.lock().expect("cookies").is_empty());
     }
 }

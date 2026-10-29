@@ -1,3 +1,4 @@
+import type { DesktopStatus } from './desktop';
 import type { DownloadJob, DownloadRequest, JobProgress, JobStage } from './download';
 import type { MediaResource, ScanNotes } from './media';
 import type { HlsKey } from './hls';
@@ -52,7 +53,11 @@ export interface RequestMap {
     req: { tabId: number; url: string; frameId?: number };
     res: Result<{ inspection: VariantInspection }>;
   };
-  'start-download': { req: { request: DownloadRequest }; res: Result<{ jobId: string }> };
+  /** `desktop`: the user pressed "Send to desktop app" (honoured only while the desktop app is on). */
+  'start-download': {
+    req: { request: DownloadRequest; desktop?: boolean };
+    res: Result<{ jobId: string }>;
+  };
   'job-action': {
     req: { jobId: string; action: 'cancel' | 'retry' | 'pause' | 'resume' | 'remove' | 'stop' };
     res: Result<object>;
@@ -62,6 +67,8 @@ export interface RequestMap {
   'set-observer': { req: { enabled: boolean }; res: Result<object> };
   /** Bring the page hook's registration up to date now (after a grant), so a reload that follows finds it in place. */
   'sync-hook': { req: Record<string, never>; res: Result<{ registered: boolean }> };
+  /** Whether the desktop app is on and answers (the options page). */
+  'desktop-status': { req: Record<string, never>; res: Result<{ status: DesktopStatus }> };
 }
 
 export type RequestType = keyof RequestMap;

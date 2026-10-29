@@ -20,6 +20,7 @@
     "test:watch": "vitest",
     "test:e2e": "node e2e/run.mjs",
     "test:desktop": "node e2e/desktop.mjs",
+    "test:link": "node e2e/link.mjs",
     "check:dist": "node scripts/check-dist.mjs",
     "serve:fixtures": "node e2e/serve.mjs",
     "package": "node scripts/build.mjs && node scripts/check-dist.mjs && node scripts/package.mjs",

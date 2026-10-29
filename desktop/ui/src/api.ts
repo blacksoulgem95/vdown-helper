@@ -58,6 +58,12 @@ export interface SettingsView {
   language: Lang;
 }
 
+/** A browser the extension can reach the app from (where its link was written). */
+export interface Registered {
+  browser: string;
+  location: string;
+}
+
 export type Control = 'pause' | 'resume' | 'retry' | 'cancel' | 'stop' | 'remove';
 
 export const api = {
@@ -71,6 +77,8 @@ export const api = {
   saveSettings: (settings: AppSettings) => invoke<SettingsView>('save_settings', { settings }),
   pickFolder: () => invoke<string | null>('pick_folder'),
   openFile: (path: string, reveal: boolean) => invoke<void>('open_file', { path, reveal }),
+  browserLink: () => invoke<Registered[]>('browser_link'),
+  repairBrowserLink: () => invoke<Registered[]>('repair_browser_link'),
 };
 
 /** A rejected command's error, whatever shape it came in. */

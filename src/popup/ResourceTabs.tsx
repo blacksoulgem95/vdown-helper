@@ -46,6 +46,8 @@ export interface ResourceTabsProps {
   onCapture: (r: MediaResource, speed: 'fast' | 'realtime') => void;
   onRecord: (r: MediaResource) => void;
   onFixPlayer: (r: MediaResource) => void;
+  /** Present while the desktop app is on: "Send to desktop app" on each card. */
+  onSendToDesktop?: (r: MediaResource) => void;
   /** Queue several resources; resolves with how many were queued and how many could not be. */
   onBulk: (list: MediaResource[]) => Promise<{ queued: number; failed: number }>;
   /** Pack several files into one ZIP. */
@@ -190,6 +192,7 @@ export function ResourceTabs(props: ResourceTabsProps) {
             resource={best}
             best
             onFixPlayer={props.onFixPlayer}
+            {...(props.onSendToDesktop ? { onSendToDesktop: props.onSendToDesktop } : {})}
             busy={busy === best.id}
             {...(feedback[best.id] ? { feedback: feedback[best.id] as Feedback } : {})}
             onDownload={props.onDownload}
@@ -251,6 +254,7 @@ export function ResourceTabs(props: ResourceTabsProps) {
                             onCapture={props.onCapture}
                             onRecord={props.onRecord}
                             onFixPlayer={props.onFixPlayer}
+                            {...(props.onSendToDesktop ? { onSendToDesktop: props.onSendToDesktop } : {})}
                           />
                         ))}
                       </ul>

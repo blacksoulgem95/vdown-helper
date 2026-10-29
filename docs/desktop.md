@@ -109,9 +109,9 @@ natively and by `tests/core-golden.test.ts` through the wasm. The existing vites
 
 - Host name `io.github.blacksoulgem95.vdownhelper`; `allowed_origins` is the extension's ID, which `manifest.json`
   pins with its `key` (unpacked installs and the store build share it).
-- The app writes the host manifest for the current user at every launch, for each Chromium-family browser it finds;
-  Settings has **Repair browser link**. Windows installers also write the registry keys; `.deb`/`.rpm` write the system
-  folders.
+- The app writes the host manifest for the current user at every launch, for each Chromium-family browser whose folder
+  exists (on Windows: a manifest in its data folder and a key per browser under HKCU); Settings has **Repair browser
+  link** and lists the browsers found. An AppImage registers the AppImage itself (its mount moves at every launch).
 
 | Browser  | Windows (HKCU\Software\…\NativeMessagingHosts) | macOS (~/Library/Application Support/…/NativeMessagingHosts) | Linux (~/.config/…/NativeMessagingHosts) |
 | -------- | ---------------------------------------------- | ------------------------------------------------------------ | ---------------------------------------- |
@@ -122,33 +122,49 @@ natively and by `tests/core-golden.test.ts` through the wasm. The existing vites
 | Vivaldi  | `Vivaldi`                                      | `Vivaldi`                                                    | `vivaldi`                                |
 | Opera    | `Opera Software`                               | `com.operasoftware.Opera`                                    | `opera`                                  |
 
-- Extension side: optional `nativeMessaging` and `cookies` permissions, asked when the user turns the desktop app on.
-  A `desktop` pipeline next to `native` and the offscreen document. The background re-derives URLs, headers and cookies
-  from **its own scan**, as for every request; cookies only for `credentialedFor` origins.
-- Routing setting: never / **streams and re-encodes** (default: every HLS/DASH stream and every re-encode go to the app,
-  direct files stay Chrome downloads) / always. Every card also has **Send to desktop app**.
-- Desktop jobs appear in the extension's queue with the same stages and an "In desktop app" badge.
+- Relay: the browser starts the app's own binary with the extension's origin on its command line. That process only
+  connects to the running app's local socket (a socket in a folder only the user can enter, or a named pipe on Windows)
+  and passes frames through, starting the app in the tray first when it is not running. The browser only ever owns the
+  relay: closing it never stops the app or its jobs.
+- Extension side: optional `nativeMessaging` and `cookies` permissions, asked when the user switches on _Hand downloads
+  to the desktop app_ in Settings (and given back when it is switched off). Jobs for the app are marked `viaDesktop`;
+  the background re-derives URLs, headers and cookies from **its own scan**, as for every request; the Referer/Origin
+  are the ones it would replay itself; cookies only for `credentialedOrigins`, and only for sites the user granted.
+- Routing setting: only what I send there / **streams and conversions** (default: every HLS/DASH stream and every
+  download that needs FFmpeg) / everything it can take. Every card also has **Send to desktop app**. Page-held media
+  (captures, recordings of a page, `blob:`), ZIPs of page files and subtitles always stay in the browser (handing
+  captures and recordings to the app for re-encoding is VDH-077).
+- Desktop jobs appear in the extension's queue with the app's stages, its progress (a few times a second) and an
+  "In desktop app" badge; pause, resume, stop and cancel go to the app. The port is open only while the app runs a job
+  for the extension. After the service worker restarts it asks the app where its jobs are (`status`).
+- Jobs keep the extension's id in the app. Cookies are never stored: after the app restarts, a job that was given
+  cookies waits, and the app asks the browser for them again (`needs-cookies`).
 
 #### Protocol v1
 
 4-byte little-endian length + UTF-8 JSON, every message `{ "v": 1, "type": … }`. Messages to the browser stay under
 1 MB (Chrome's limit).
 
-| Direction | Type            | Payload                                                                          |
-| --------- | --------------- | -------------------------------------------------------------------------------- |
-| ext → app | `hello`         | `{ extVersion, userAgent }`                                                      |
-| app → ext | `hello`         | `{ appVersion, ffmpeg: { version, encoders[] } }`                                |
-| ext → app | `run-job`       | `{ jobId, request, plan, headers, cookies? }`                                    |
-| app → ext | `progress`      | `JobProgress` (the extension's own type)                                         |
-| app → ext | `done`          | `{ jobId, path, bytes }`                                                         |
-| app → ext | `error`         | `{ jobId, code }` (`JobErrorCode`)                                               |
-| ext → app | `cancel` …      | `cancel`, `pause`, `resume` `{ jobId }`                                          |
-| app → ext | `needs-cookies` | `{ jobId, origins[] }`                                                           |
-| ext → app | `cookies`       | `{ jobId, cookies[] }`                                                           |
-| ext → app | `push-bytes`    | `{ jobId, seq, chunk, last }`: an MSE capture or recording handed over to encode |
+| Direction | Type            | Payload                                                                                                                                   |
+| --------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| ext → app | `hello`         | `{ extVersion, userAgent }`                                                                                                               |
+| app → ext | `hello`         | `{ appVersion, ffmpeg }` (ffmpeg's version, or `null` when there is none)                                                                 |
+| ext → app | `run-job`       | `{ jobId, request, headers: { referer, origin, userAgent }, cookies?: [{ origin, header }] }`                                             |
+| app → ext | `accepted`      | `{ jobId, stages }` (the app's plan; a job handed over again after it ended is retried)                                                   |
+| app → ext | `stage`         | `{ jobId, stage }` (never the end: that comes as `done`, `error` or `cancelled`)                                                          |
+| app → ext | `progress`      | `{ jobId, progress }` (`JobProgress`, the extension's own type)                                                                           |
+| app → ext | `done`          | `{ jobId, path, bytes }`                                                                                                                  |
+| app → ext | `error`         | `{ jobId?, code, message }` (`JobErrorCode`)                                                                                              |
+| app → ext | `cancelled`     | `{ jobId }`                                                                                                                               |
+| ext → app | `pause` …       | `pause`, `resume`, `stop` (a live recording), `cancel` `{ jobId }`                                                                        |
+| ext → app | `status`        | `{ jobIds }`; the app answers `status { jobs: [{ jobId, stage, paused, progress, path, error }] }` (`gone` when it does not know the job) |
+| app → ext | `needs-cookies` | `{ jobId, origins }`                                                                                                                      |
+| ext → app | `cookies`       | `{ jobId, cookies: [{ origin, header }] }`                                                                                                |
 
-The app validates every message: unknown types and versions are refused, DRM is re-checked on the app side even if a
-request claims otherwise, and output paths stay inside the configured folder.
+The app validates every message: unknown types, fields and versions are refused; a request must plan, name http(s)
+addresses and carry no page-held media; cookies are kept only for the origins the request names as credentialed;
+DRM is re-checked by the engine on the playlists it reads itself whatever the request claims; output names are
+sanitised and stay inside the download folder.
 
 ### Re-encoding (VDH-068)
 
@@ -185,5 +201,8 @@ release.
   `npm run desktop:ui` and `cargo build -p vdown-helper-desktop`), in its own D-Bus session: an HLS download and its
   notification, a DRM refusal, a live recording stopped from the queue, settings that survive a restart, start at login,
   closing the window to the tray (a real `WM_DELETE_WINDOW`) and a second launch bringing it back.
-- Extension ↔ app in real Chromium with the host registered in the test profile.
+- Extension ↔ app in real Chromium (`xvfb-run -a npm run test:link`): the app registers itself with the test
+  profile, the browser starts it through the relay, an HLS stream and a card sent with **Send to desktop app** are
+  saved by the app, a cookie-protected file is fetched with the cookie of the granted site, cancel reaches the app, a
+  forged request for a DRM stream is refused by the app, and a job finishes after the browser closed.
 - Installer smoke tests on each OS runner.

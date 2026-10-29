@@ -4,6 +4,7 @@ import { isExtensionPage, isSafeFetchUrl, log } from '@/lib/security';
 import type { OffscreenEvent } from '@/types/messages';
 import { forgetTab, inspectVariant, rescanTab, scanTab } from './detect';
 import { sameDocument } from '@/lib/deadline';
+import { desktopStatus } from './desktop';
 import { addManual, manualUrl } from './manual';
 import { listJobs } from './jobStore';
 import { syncHook } from './hooks';
@@ -28,7 +29,7 @@ registerHandlers({
       return { ok: false, error: e instanceof Error ? e.message : 'inspect-failed' };
     }
   },
-  'start-download': async ({ request }) => submit(request),
+  'start-download': async ({ request, desktop }) => submit(request, desktop === true),
   'job-action': async ({ jobId, action }) => jobAction(jobId, action),
   'clear-history': async () => {
     await clearHistory();
@@ -36,6 +37,7 @@ registerHandlers({
   },
   'get-jobs': async () => ({ ok: true, jobs: await listJobs() }),
   'sync-hook': async () => ({ ok: true, registered: await syncHook() }),
+  'desktop-status': async () => ({ ok: true, status: await desktopStatus() }),
   'set-observer': async ({ enabled }) => {
     const active = setObserverEnabled(enabled);
     return enabled && !active ? { ok: false, error: 'no-permission' } : { ok: true };
