@@ -127,7 +127,8 @@ export function startServers(root, pagesDir) {
     }
     // /__cookie/<path>: served only with the cookie a signed-in visitor would have (the desktop link's cookie job).
     if (origin === 'A' && path.startsWith('/__cookie/')) {
-      if (!/(^|;\s*)e2e_session=granted(;|$)/.test(req.headers.cookie ?? '')) return void res.writeHead(403).end();
+      if (!/(^|;\s*)e2e_session=granted(;|$)/.test(req.headers.cookie ?? ''))
+        return void res.writeHead(403).end();
       path = path.slice('/__cookie'.length);
     }
     // /__stall/<path>: sends the first bytes, then goes silent.
