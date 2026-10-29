@@ -308,3 +308,207 @@ fn a_paused_re_encode_starts_again_and_finishes() {
     assert!((p.duration - 20.0).abs() < 0.5, "duration {}", p.duration);
     decodes_cleanly(&file);
 }
+
+/// TEMPORARY (VDH-081): which Opus encodes decode cleanly with this ffmpeg. Fails on purpose to print the table.
+#[test]
+fn opus_variants_vdh_081() {
+    let Some(f) = fixtures() else { return };
+    let dir = out_dir("opus-variants");
+    let sample = f.root.join("media/sample.mp4");
+    let sample = sample.to_str().expect("utf-8");
+    let sine = "sine=frequency=440:sample_rate=48000:duration=6";
+    let variants: Vec<(&str, Vec<&str>, &str)> = vec![
+        (
+            "baseline",
+            vec!["-i", sample, "-vn", "-c:a", "libopus", "-b:a", "128k"],
+            "webm",
+        ),
+        (
+            "vbr-off",
+            vec![
+                "-i", sample, "-vn", "-c:a", "libopus", "-b:a", "128k", "-vbr", "off",
+            ],
+            "webm",
+        ),
+        (
+            "vbr-constrained",
+            vec![
+                "-i",
+                sample,
+                "-vn",
+                "-c:a",
+                "libopus",
+                "-b:a",
+                "128k",
+                "-vbr",
+                "constrained",
+            ],
+            "webm",
+        ),
+        (
+            "frame-10",
+            vec![
+                "-i",
+                sample,
+                "-vn",
+                "-c:a",
+                "libopus",
+                "-b:a",
+                "128k",
+                "-frame_duration",
+                "10",
+            ],
+            "webm",
+        ),
+        (
+            "frame-60",
+            vec![
+                "-i",
+                sample,
+                "-vn",
+                "-c:a",
+                "libopus",
+                "-b:a",
+                "128k",
+                "-frame_duration",
+                "60",
+            ],
+            "webm",
+        ),
+        (
+            "lowdelay",
+            vec![
+                "-i",
+                sample,
+                "-vn",
+                "-c:a",
+                "libopus",
+                "-b:a",
+                "128k",
+                "-application",
+                "lowdelay",
+            ],
+            "webm",
+        ),
+        (
+            "no-phase-inv",
+            vec![
+                "-i",
+                sample,
+                "-vn",
+                "-c:a",
+                "libopus",
+                "-b:a",
+                "128k",
+                "-apply_phase_inv",
+                "0",
+            ],
+            "webm",
+        ),
+        (
+            "ar-48000",
+            vec![
+                "-i", sample, "-vn", "-c:a", "libopus", "-b:a", "128k", "-ar", "48000",
+            ],
+            "webm",
+        ),
+        (
+            "stereo",
+            vec![
+                "-i", sample, "-vn", "-c:a", "libopus", "-b:a", "128k", "-ac", "2",
+            ],
+            "webm",
+        ),
+        (
+            "ogg",
+            vec!["-i", sample, "-vn", "-c:a", "libopus", "-b:a", "128k"],
+            "ogg",
+        ),
+        (
+            "mkv",
+            vec!["-i", sample, "-vn", "-c:a", "libopus", "-b:a", "128k"],
+            "mkv",
+        ),
+        (
+            "sine48k",
+            vec!["-f", "lavfi", "-i", sine, "-c:a", "libopus", "-b:a", "128k"],
+            "webm",
+        ),
+        (
+            "sine48k-5.99",
+            vec![
+                "-f", "lavfi", "-i", sine, "-t", "5.99", "-c:a", "libopus", "-b:a", "128k",
+            ],
+            "webm",
+        ),
+        (
+            "b64k",
+            vec!["-i", sample, "-vn", "-c:a", "libopus", "-b:a", "64k"],
+            "webm",
+        ),
+        (
+            "native-opus",
+            vec![
+                "-i", sample, "-vn", "-c:a", "opus", "-strict", "-2", "-b:a", "128k",
+            ],
+            "webm",
+        ),
+    ];
+    let errors = |args: &[&str], file: &Path| {
+        let out = Command::new("ffmpeg")
+            .args(["-v", "error"])
+            .args(args)
+            .arg("-i")
+            .arg(file)
+            .args(["-f", "null", "-"])
+            .output()
+            .expect("ffmpeg");
+        String::from_utf8_lossy(&out.stderr).lines().count()
+    };
+    let mut table =
+        String::from("\nvariant | encode ok | errors(native) | errors(libopus) | last packets\n");
+    for (name, args, ext) in variants {
+        let file = dir.join(format!("{name}.{ext}"));
+        let enc = Command::new("ffmpeg")
+            .args(["-v", "error", "-y"])
+            .args(&args)
+            .arg(&file)
+            .output()
+            .expect("ffmpeg");
+        let packets = Command::new("ffprobe")
+            .args([
+                "-v",
+                "error",
+                "-select_streams",
+                "a:0",
+                "-show_entries",
+                "packet=pts,duration,size,flags",
+                "-of",
+                "csv",
+            ])
+            .arg(&file)
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+            .unwrap_or_default();
+        let last: Vec<&str> = packets.lines().rev().take(2).collect();
+        table.push_str(&format!(
+            "{name} | {} {} | {} | {} | {:?}\n",
+            enc.status.success(),
+            String::from_utf8_lossy(&enc.stderr).trim(),
+            errors(&[], &file),
+            errors(&["-c:a", "libopus"], &file),
+            last
+        ));
+    }
+    let version = Command::new("ffmpeg")
+        .arg("-version")
+        .output()
+        .expect("ffmpeg");
+    panic!(
+        "{}{table}",
+        String::from_utf8_lossy(&version.stdout)
+            .lines()
+            .next()
+            .unwrap_or("")
+    );
+}
