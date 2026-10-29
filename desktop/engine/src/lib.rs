@@ -5,6 +5,7 @@
 //! (SQLite) with pause, resume after a restart, a bandwidth cap, a schedule window and a history. Design:
 //! `docs/desktop.md`.
 
+pub mod encoders;
 pub mod error;
 pub mod ffmpeg;
 pub mod job;
@@ -13,6 +14,7 @@ pub mod live;
 pub mod manager;
 pub mod net;
 pub mod probe;
+pub mod reencode;
 pub mod schedule;
 pub mod segments;
 pub mod stage;

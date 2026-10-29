@@ -8,13 +8,14 @@ import { isActive, isQueued } from '@/lib/queue';
 import type { DownloadJob } from '@/types/download';
 import { AddPanel } from './AddPanel';
 import { BrowserLink } from './BrowserLink';
+import { ConvertPanel } from './ConvertPanel';
 import { api, asEngineError, type Control, type HistoryEntry, type SettingsView } from './api';
 import { errorText } from './errors';
 import { HistoryList } from './HistoryList';
 import { setLanguage, td } from './i18n';
 import { SettingsPanel } from './SettingsPanel';
 
-type Section = 'queue' | 'history' | 'settings';
+type Section = 'queue' | 'history' | 'convert' | 'settings';
 
 /** How often the queue is read while the window is visible (progress is not pushed to the window). */
 const POLL_MS = 700;
@@ -25,6 +26,8 @@ export function App({ initial }: { initial: SettingsView }) {
   const [jobs, setJobs] = useState<DownloadJob[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [error, setError] = useState<string>();
+  /** Files chosen for re-encoding (from the history or the file dialog). */
+  const [toConvert, setToConvert] = useState<string[]>([]);
 
   const refresh = useCallback(async () => {
     try {
@@ -95,6 +98,7 @@ export function App({ initial }: { initial: SettingsView }) {
         tabs={[
           { key: 'queue', label: td('tabQueue'), count: jobs.length },
           { key: 'history', label: td('tabHistory'), count: history.length },
+          { key: 'convert', label: td('tabConvert'), count: toConvert.length },
           { key: 'settings', label: td('tabSettings'), count: 0 },
         ]}
       >
@@ -122,6 +126,20 @@ export function App({ initial }: { initial: SettingsView }) {
             lang={view.language}
             onOpen={(path, reveal) => void open(path, reveal)}
             onClear={() => void api.clearHistory().then(refresh)}
+            onReencode={(path) => {
+              setToConvert((now) => (now.includes(path) ? now : [...now, path]));
+              setSection('convert');
+            }}
+          />
+        )}
+        {section === 'convert' && (
+          <ConvertPanel
+            inputs={toConvert}
+            onInputs={setToConvert}
+            onQueued={() => {
+              void refresh();
+              setSection('queue');
+            }}
           />
         )}
         {section === 'settings' && (

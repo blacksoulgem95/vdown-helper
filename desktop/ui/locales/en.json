@@ -139,5 +139,161 @@
   },
   "linkRepaired": {
     "message": "The browser link was written again."
+  },
+  "notifyEncoded": {
+    "message": "Re-encode finished"
+  },
+  "notifyEncodeFailed": {
+    "message": "Re-encode failed"
+  },
+  "tabConvert": {
+    "message": "Convert"
+  },
+  "reencodeFile": {
+    "message": "Re-encode"
+  },
+  "presetCompatible": {
+    "message": "Compatible"
+  },
+  "presetCompatibleHint": {
+    "message": "H.264 and AAC in MP4, up to 1080p: plays everywhere."
+  },
+  "presetSmaller": {
+    "message": "Smaller"
+  },
+  "presetSmallerHint": {
+    "message": "H.265: about half the size at the same look; older devices may not play it."
+  },
+  "presetPhone": {
+    "message": "Phone"
+  },
+  "presetPhoneHint": {
+    "message": "H.264 at up to 720p: small files for a phone."
+  },
+  "presetWeb": {
+    "message": "Web"
+  },
+  "presetWebHint": {
+    "message": "VP9 and Opus in WebM, up to 1080p: for web pages."
+  },
+  "presetArchive": {
+    "message": "Archive"
+  },
+  "presetArchiveHint": {
+    "message": "AV1 and Opus in MKV at the original size: the smallest files, slow to make."
+  },
+  "presetCustom": {
+    "message": "Custom"
+  },
+  "codecCopy": {
+    "message": "Keep the video as it is (no re-encode)"
+  },
+  "encoderSoftware": {
+    "message": "Processor (software)"
+  },
+  "encProblemEncoder": {
+    "message": "This encoder cannot make that codec."
+  },
+  "encProblemUnavailable": {
+    "message": "That encoder does not work on this computer."
+  },
+  "encProblemCopyResize": {
+    "message": "A video that is kept as it is cannot be resized."
+  },
+  "encProblemQuality": {
+    "message": "The quality must be between 0 and 51."
+  },
+  "encProblemBitrate": {
+    "message": "The bitrate must be between 100 and 200000 kbit/s."
+  },
+  "encProblemSize": {
+    "message": "Not a size that can be made."
+  },
+  "encProblemAudioBitrate": {
+    "message": "The audio bitrate must be between 32 and 512 kbit/s."
+  },
+  "encProblemContainerCodec": {
+    "message": "This container cannot hold that video codec (MKV holds them all)."
+  },
+  "encProblemContainerAudio": {
+    "message": "This container cannot hold that audio (MKV holds them all)."
+  },
+  "encFiles": {
+    "message": "Files to re-encode"
+  },
+  "encAddFiles": {
+    "message": "Add files…"
+  },
+  "encNoFiles": {
+    "message": "No files yet: add some from your computer, or use Re-encode on a finished download in the History."
+  },
+  "encRemoveFile": {
+    "message": "Remove $1"
+  },
+  "encPreset": {
+    "message": "Preset"
+  },
+  "encContainer": {
+    "message": "Container"
+  },
+  "encCodec": {
+    "message": "Video codec"
+  },
+  "encEncoder": {
+    "message": "Encoder"
+  },
+  "encDetecting": {
+    "message": "Checking which encoders work on this computer…"
+  },
+  "encQuality": {
+    "message": "Quality"
+  },
+  "encQualityCrf": {
+    "message": "Constant quality"
+  },
+  "encQualityBitrate": {
+    "message": "Average bitrate"
+  },
+  "encCrf": {
+    "message": "Quality level"
+  },
+  "encCrfHint": {
+    "message": "Lower is better and bigger (18–28 is usual)."
+  },
+  "encKbps": {
+    "message": "Video bitrate (kbit/s)"
+  },
+  "encSize": {
+    "message": "Size"
+  },
+  "encSizeOriginal": {
+    "message": "Original"
+  },
+  "encSizeUpTo": {
+    "message": "Up to $1p"
+  },
+  "encAudio": {
+    "message": "Audio"
+  },
+  "encAudioCopy": {
+    "message": "Keep as it is"
+  },
+  "encAudioNone": {
+    "message": "No audio"
+  },
+  "encAudioKbps": {
+    "message": "Audio bitrate"
+  },
+  "encQueued": {
+    "message": "$1 re-encode(s) added to the queue."
+  },
+  "encOriginalsKept": {
+    "message": "The original files are not changed: new files go to the download folder."
+  },
+  "encStart": {
+    "message": "Re-encode $1"
+  },
+  "encFileGone": {
+    "message": "That file is no longer there, or was not chosen here."
   }
 }

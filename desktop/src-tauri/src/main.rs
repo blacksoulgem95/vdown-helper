@@ -5,6 +5,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod convert;
 mod i18n;
 mod link;
 mod settings;
@@ -56,21 +57,26 @@ fn finished(app: &AppHandle, id: &str, stage: &str, path: Option<&str>) {
     if !s.notifications {
         return;
     }
-    let (title, name) = match stage {
-        "completed" => (
-            "notifyCompleted",
+    // the job is still in the queue while its end is announced
+    let job = state.manager.store().get(id).ok().flatten().map(|j| j.job);
+    let encoded = job.as_ref().is_some_and(|j| j.get("reencode").is_some());
+    let (title, name) = match (stage, encoded) {
+        ("completed", _) => (
+            if encoded {
+                "notifyEncoded"
+            } else {
+                "notifyCompleted"
+            },
             path.and_then(|p| Path::new(p).file_name())
                 .map(|n| n.to_string_lossy().into_owned()),
         ),
-        "failed" => (
-            "notifyFailed",
-            state
-                .manager
-                .store()
-                .get(id)
-                .ok()
-                .flatten()
-                .and_then(|j| j.job["request"]["filename"].as_str().map(String::from)),
+        ("failed", _) => (
+            if encoded {
+                "notifyEncodeFailed"
+            } else {
+                "notifyFailed"
+            },
+            job.and_then(|j| j["request"]["filename"].as_str().map(String::from)),
         ),
         _ => return,
     };
@@ -147,6 +153,7 @@ fn setup(
         data,
         browsers: Mutex::new(browsers),
     });
+    app.manage(convert::Convert::default());
     tray::create(app)?;
     if !std::env::args().any(|a| a == HIDDEN) {
         show(app);
@@ -205,6 +212,11 @@ fn main() {
             commands::open_file,
             commands::browser_link,
             commands::repair_browser_link,
+            convert::presets,
+            convert::encoders,
+            convert::check_encode,
+            convert::pick_files,
+            convert::reencode,
         ])
         .setup(move |app| setup(app.handle(), browsers))
         .on_window_event(|window, e| {

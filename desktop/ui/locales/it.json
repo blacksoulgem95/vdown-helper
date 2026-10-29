@@ -139,5 +139,161 @@
   },
   "linkRepaired": {
     "message": "Il collegamento col browser è stato riscritto."
+  },
+  "notifyEncoded": {
+    "message": "Ricodifica completata"
+  },
+  "notifyEncodeFailed": {
+    "message": "Ricodifica non riuscita"
+  },
+  "tabConvert": {
+    "message": "Converti"
+  },
+  "reencodeFile": {
+    "message": "Ricodifica"
+  },
+  "presetCompatible": {
+    "message": "Compatibile"
+  },
+  "presetCompatibleHint": {
+    "message": "H.264 e AAC in MP4, fino a 1080p: si riproduce ovunque."
+  },
+  "presetSmaller": {
+    "message": "Più leggero"
+  },
+  "presetSmallerHint": {
+    "message": "H.265: circa metà dello spazio a parità di resa; i dispositivi più vecchi potrebbero non riprodurlo."
+  },
+  "presetPhone": {
+    "message": "Telefono"
+  },
+  "presetPhoneHint": {
+    "message": "H.264 fino a 720p: file piccoli per il telefono."
+  },
+  "presetWeb": {
+    "message": "Web"
+  },
+  "presetWebHint": {
+    "message": "VP9 e Opus in WebM, fino a 1080p: per le pagine web."
+  },
+  "presetArchive": {
+    "message": "Archivio"
+  },
+  "presetArchiveHint": {
+    "message": "AV1 e Opus in MKV alla dimensione originale: i file più piccoli, lenti da creare."
+  },
+  "presetCustom": {
+    "message": "Personalizzato"
+  },
+  "codecCopy": {
+    "message": "Mantieni il video com'è (senza ricodifica)"
+  },
+  "encoderSoftware": {
+    "message": "Processore (software)"
+  },
+  "encProblemEncoder": {
+    "message": "Questo encoder non può produrre quel codec."
+  },
+  "encProblemUnavailable": {
+    "message": "Quell'encoder non funziona su questo computer."
+  },
+  "encProblemCopyResize": {
+    "message": "Un video mantenuto com'è non può essere ridimensionato."
+  },
+  "encProblemQuality": {
+    "message": "La qualità deve essere tra 0 e 51."
+  },
+  "encProblemBitrate": {
+    "message": "Il bitrate deve essere tra 100 e 200000 kbit/s."
+  },
+  "encProblemSize": {
+    "message": "Non è una dimensione possibile."
+  },
+  "encProblemAudioBitrate": {
+    "message": "Il bitrate audio deve essere tra 32 e 512 kbit/s."
+  },
+  "encProblemContainerCodec": {
+    "message": "Questo contenitore non può contenere quel codec video (MKV li contiene tutti)."
+  },
+  "encProblemContainerAudio": {
+    "message": "Questo contenitore non può contenere quell'audio (MKV li contiene tutti)."
+  },
+  "encFiles": {
+    "message": "File da ricodificare"
+  },
+  "encAddFiles": {
+    "message": "Aggiungi file…"
+  },
+  "encNoFiles": {
+    "message": "Nessun file: aggiungine dal computer, oppure usa Ricodifica su un download completato nella Cronologia."
+  },
+  "encRemoveFile": {
+    "message": "Rimuovi $1"
+  },
+  "encPreset": {
+    "message": "Preimpostazione"
+  },
+  "encContainer": {
+    "message": "Contenitore"
+  },
+  "encCodec": {
+    "message": "Codec video"
+  },
+  "encEncoder": {
+    "message": "Encoder"
+  },
+  "encDetecting": {
+    "message": "Verifica degli encoder che funzionano su questo computer…"
+  },
+  "encQuality": {
+    "message": "Qualità"
+  },
+  "encQualityCrf": {
+    "message": "Qualità costante"
+  },
+  "encQualityBitrate": {
+    "message": "Bitrate medio"
+  },
+  "encCrf": {
+    "message": "Livello di qualità"
+  },
+  "encCrfHint": {
+    "message": "Più basso è migliore e più pesante (di solito 18–28)."
+  },
+  "encKbps": {
+    "message": "Bitrate video (kbit/s)"
+  },
+  "encSize": {
+    "message": "Dimensione"
+  },
+  "encSizeOriginal": {
+    "message": "Originale"
+  },
+  "encSizeUpTo": {
+    "message": "Fino a $1p"
+  },
+  "encAudio": {
+    "message": "Audio"
+  },
+  "encAudioCopy": {
+    "message": "Mantieni com'è"
+  },
+  "encAudioNone": {
+    "message": "Senza audio"
+  },
+  "encAudioKbps": {
+    "message": "Bitrate audio"
+  },
+  "encQueued": {
+    "message": "$1 ricodifiche aggiunte alla coda."
+  },
+  "encOriginalsKept": {
+    "message": "I file originali non vengono modificati: i nuovi file vanno nella cartella dei download."
+  },
+  "encStart": {
+    "message": "Ricodifica $1"
+  },
+  "encFileGone": {
+    "message": "Quel file non c'è più, oppure non è stato scelto qui."
   }
 }

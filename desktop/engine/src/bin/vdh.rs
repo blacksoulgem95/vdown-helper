@@ -3,7 +3,9 @@
 //!   vdh probe <url>                       what the address is and the request it would make
 //!   vdh get <url> [-o DIR] [options]      download it (a live stream is recorded until it ends or Ctrl+C)
 //!   vdh run <request.json|-> [-o DIR]     run a request as the extension would hand it over
-//!   vdh queue add|add-request|list|run|pause|resume|retry|cancel|stop|remove ...   the persistent queue (SQLite)
+//!   vdh encode <file> [--preset P] [...]  re-encode a file into a new one (the original is never touched)
+//!   vdh encoders                          the video encoders that work on this machine
+//!   vdh queue add|add-request|add-encode|list|run|pause|resume|retry|cancel|stop|remove ...   the persistent queue (SQLite)
 //!   vdh history [--clear] [--off|--on]    finished jobs (addresses without credentials or tokens)
 //!
 //! Ctrl+C once stops a recording and keeps it; twice cancels. A running queue holds its jobs on Ctrl+C: they continue
@@ -19,8 +21,10 @@ use serde_json::json;
 use tokio_util::sync::CancellationToken;
 use vdh_core::request::DownloadRequest;
 use vdh_core::settings::Settings;
+use vdh_core::transcode::{Audio, Encode, PRESETS, Quality, VideoCodec, label};
 use vdh_engine::manager::{Manager, ManagerOptions};
 use vdh_engine::probe::{Wanted, probe};
+use vdh_engine::reencode::{self, Reencode};
 use vdh_engine::schedule::Window;
 use vdh_engine::store::{Store, StoredHeaders};
 use vdh_engine::{EngineError, ErrorCode, JobContext, Net, RequestHeaders, run};
@@ -92,6 +96,104 @@ impl Choose {
     }
 }
 
+#[derive(Args, Clone)]
+struct EncodeOpts {
+    /// The file to re-encode (never written).
+    input: PathBuf,
+    /// compatible, smaller, phone, web or archive: the starting point the options below change (without one: H.264
+    /// and AAC in MP4, at the original size).
+    #[arg(long)]
+    preset: Option<String>,
+    /// mp4, mkv or webm.
+    #[arg(long)]
+    container: Option<String>,
+    /// h264, h265, av1, vp9 or copy.
+    #[arg(long)]
+    codec: Option<String>,
+    /// software, nvenc, qsv, amf, videotoolbox or vaapi.
+    #[arg(long)]
+    encoder: Option<String>,
+    /// Constant quality (lower is better and bigger).
+    #[arg(long, conflicts_with = "kbps")]
+    crf: Option<u8>,
+    /// Video bitrate in kbit/s instead of a constant quality.
+    #[arg(long)]
+    kbps: Option<u32>,
+    /// Scale down to this height (0 keeps the size).
+    #[arg(long)]
+    height: Option<u32>,
+    /// copy, aac, opus or none.
+    #[arg(long)]
+    audio: Option<String>,
+    /// Audio bitrate in kbit/s (aac, opus).
+    #[arg(long, default_value_t = 160)]
+    audio_kbps: u32,
+    /// What the new file is called after (`clip [label].mkv`); the codec (and size) by default.
+    #[arg(long)]
+    label: Option<String>,
+}
+
+fn named<T: serde::de::DeserializeOwned>(what: &str, value: &str) -> Result<T, EngineError> {
+    serde_json::from_value(json!(value))
+        .map_err(|_| EngineError::invalid(format!("Not a {what}: {value}")))
+}
+
+impl EncodeOpts {
+    fn reencode(&self) -> Result<Reencode, EngineError> {
+        let mut e: Encode = match &self.preset {
+            Some(id) => {
+                PRESETS
+                    .iter()
+                    .find(|p| p.id == id)
+                    .ok_or_else(|| EngineError::invalid(format!("Not a preset: {id}")))?
+                    .encode
+            }
+            // H.264 and AAC in MP4, at the original size
+            None => Encode {
+                max_height: None,
+                ..PRESETS[0].encode
+            },
+        };
+        if let Some(c) = &self.container {
+            e.container = named("container", c)?;
+        }
+        if let Some(c) = &self.codec {
+            e.codec = named("codec", c)?;
+        }
+        if let Some(c) = &self.encoder {
+            e.encoder = named("encoder", c)?;
+        }
+        if let Some(value) = self.crf {
+            e.quality = Quality::Crf { value };
+        }
+        if let Some(kbps) = self.kbps {
+            e.quality = Quality::Bitrate { kbps };
+        }
+        if let Some(h) = self.height {
+            e.max_height = (h > 0).then_some(h);
+        } else if e.codec == VideoCodec::Copy {
+            // a copy keeps the size
+            e.max_height = None;
+        }
+        if let Some(a) = &self.audio {
+            let kbps = self.audio_kbps;
+            e.audio = match a.as_str() {
+                "copy" => Audio::Copy,
+                "aac" => Audio::Aac { kbps },
+                "opus" => Audio::Opus { kbps },
+                "none" => Audio::None,
+                _ => return Err(EngineError::invalid(format!("Not an audio choice: {a}"))),
+            };
+        }
+        let input = std::path::absolute(&self.input).map_err(EngineError::from)?;
+        Ok(Reencode {
+            input: input.to_string_lossy().into_owned(),
+            encode: e,
+            label: self.label.clone().unwrap_or_else(|| label(&e)),
+        })
+    }
+}
+
 #[derive(Args)]
 struct Db {
     /// The queue's database.
@@ -114,6 +216,11 @@ enum QueueCommand {
         request: String,
         #[command(flatten)]
         net: Network,
+    },
+    /// Queue a re-encode of a file.
+    AddEncode {
+        #[command(flatten)]
+        what: EncodeOpts,
     },
     /// The queued jobs, in order.
     List,
@@ -189,6 +296,15 @@ enum Command {
         #[command(flatten)]
         output: Output,
     },
+    /// Re-encode a file into a new one next to the downloads.
+    Encode {
+        #[command(flatten)]
+        what: EncodeOpts,
+        #[command(flatten)]
+        output: Output,
+    },
+    /// The video encoders that work here (hardware ones after a test encode) and the audio encoders.
+    Encoders,
     /// The persistent queue.
     Queue {
         #[command(flatten)]
@@ -233,11 +349,13 @@ fn fail(e: &EngineError) -> ExitCode {
     })
 }
 
-async fn execute(
-    req: DownloadRequest,
-    net: Net,
-    output: &Output,
-) -> Result<serde_json::Value, EngineError> {
+/// What a one-off command runs.
+enum Work {
+    Download(Box<DownloadRequest>),
+    Reencode(Reencode),
+}
+
+async fn execute(work: Work, net: Net, output: &Output) -> Result<serde_json::Value, EngineError> {
     let stop = CancellationToken::new();
     let cancel = CancellationToken::new();
     let (s, c) = (stop.clone(), cancel.clone());
@@ -254,13 +372,16 @@ async fn execute(
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_millis());
     let events = output.events;
+    let tag = match &work {
+        Work::Download(req) => req.resource_id.as_str(),
+        Work::Reencode(_) => "encode",
+    };
     let ctx = JobContext {
         net,
-        work_dir: output.out.join(".vdh-partial").join(format!(
-            "{}-{}-{stamp}",
-            req.resource_id,
-            std::process::id()
-        )),
+        work_dir: output
+            .out
+            .join(".vdh-partial")
+            .join(format!("{tag}-{}-{stamp}", std::process::id())),
         out_dir: output.out.clone(),
         concurrency: output.concurrency.max(1),
         cancel,
@@ -273,7 +394,10 @@ async fn execute(
             }
         }),
     };
-    let done = run(&req, &ctx).await?;
+    let done = match &work {
+        Work::Download(req) => run(req, &ctx).await?,
+        Work::Reencode(r) => reencode::run(r, &ctx).await?,
+    };
     Ok(json!({ "ok": true, "path": done.path, "bytes": done.bytes }))
 }
 
@@ -335,6 +459,15 @@ async fn queue(
                 Arc::new(|_, _| {}),
             );
             let id = m.add(&req, stored(&net))?;
+            Ok(json!({ "ok": true, "id": id }))
+        }
+        QueueCommand::AddEncode { what } => {
+            let m = Manager::new(
+                store.clone(),
+                ManagerOptions::new(".".into(), staging_for(db)),
+                Arc::new(|_, _| {}),
+            );
+            let id = m.add_reencode(&what.reencode()?)?;
             Ok(json!({ "ok": true, "id": id }))
         }
         QueueCommand::List => {
@@ -434,12 +567,19 @@ async fn main() -> ExitCode {
             let wanted = choose.wanted();
             match Net::new(headers(&net)) {
                 Ok(n) => match probe(&n, &url, &settings, &wanted).await {
-                    Ok(p) => execute(p.request, n, &output).await,
+                    Ok(p) => execute(Work::Download(Box::new(p.request)), n, &output).await,
                     Err(e) => Err(e),
                 },
                 Err(e) => Err(e),
             }
         }
+        Command::Encode { what, output } => {
+            match (what.reencode(), Net::new(RequestHeaders::default())) {
+                (Ok(r), Ok(n)) => execute(Work::Reencode(r), n, &output).await,
+                (Err(e), _) | (_, Err(e)) => Err(e),
+            }
+        }
+        Command::Encoders => Ok(json!(vdh_engine::encoders::detect().await)),
         Command::Queue { db, command } => queue(&db.db, command, &settings).await,
         Command::History { db, clear, off, on } => history(&db.db, clear, off, on),
         Command::Run {
@@ -447,7 +587,7 @@ async fn main() -> ExitCode {
             net,
             output,
         } => match (read_request(&request), Net::new(headers(&net))) {
-            (Ok(r), Ok(n)) => execute(r, n, &output).await,
+            (Ok(r), Ok(n)) => execute(Work::Download(Box::new(r)), n, &output).await,
             (Err(e), _) | (_, Err(e)) => Err(e),
         },
     };

@@ -1,4 +1,4 @@
-import { Eraser, ExternalLink, FolderOpen } from 'lucide-react';
+import { Eraser, ExternalLink, FolderOpen, Wand2 } from 'lucide-react';
 import { stageLabel } from '@/components/labels';
 import { Button, IconButton, cx } from '@/components/ui';
 import { t } from '@/lib/i18n';
@@ -8,19 +8,22 @@ import type { HistoryEntry } from './api';
 import { errorText } from './errors';
 import { td, type Lang } from './i18n';
 
-/** Finished downloads, newest first: completed ones can be opened or shown in their folder. */
+/** Finished jobs, newest first: completed ones can be opened, shown in their folder or re-encoded. */
 export function HistoryList({
   entries,
   enabled,
   lang,
   onOpen,
   onClear,
+  onReencode,
 }: {
   entries: HistoryEntry[];
   enabled: boolean;
   lang: Lang;
   onOpen: (path: string, reveal: boolean) => void;
   onClear: () => void;
+  /** Choose a finished file for re-encoding. */
+  onReencode: (path: string) => void;
 }) {
   if (entries.length === 0)
     return (
@@ -61,6 +64,13 @@ export function HistoryList({
               </div>
               {done && h.path && (
                 <div className="mt-1 flex justify-end gap-0.5">
+                  <IconButton
+                    label={td('reencodeFile')}
+                    onClick={() => onReencode(h.path ?? '')}
+                    data-testid="history-reencode"
+                  >
+                    <Wand2 size={14} aria-hidden="true" />
+                  </IconButton>
                   <IconButton label={t('openFile')} onClick={() => onOpen(h.path ?? '', false)}>
                     <ExternalLink size={14} aria-hidden="true" />
                   </IconButton>

@@ -22,18 +22,74 @@ fn tail(stderr: &str) -> String {
     lines[lines.len().saturating_sub(4)..].join(" | ")
 }
 
+/// The ffprobe next to the ffmpeg in use: `VDH_FFPROBE`, else beside `VDH_FFMPEG`, else `ffprobe` on the PATH.
+pub fn ffprobe_program() -> PathBuf {
+    if let Some(p) = std::env::var_os("VDH_FFPROBE") {
+        return PathBuf::from(p);
+    }
+    let ffmpeg = ffmpeg_program();
+    let name = if cfg!(windows) {
+        "ffprobe.exe"
+    } else {
+        "ffprobe"
+    };
+    match ffmpeg.parent().filter(|d| !d.as_os_str().is_empty()) {
+        Some(dir) => dir.join(name),
+        None => PathBuf::from(name),
+    }
+}
+
+/// A file's duration in seconds, from ffprobe (`None` when it cannot tell).
+pub async fn duration(path: &std::path::Path) -> Option<f64> {
+    let out = Command::new(ffprobe_program())
+        .args([
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=nw=1:nk=1",
+        ])
+        .arg(path)
+        .stdin(Stdio::null())
+        .kill_on_drop(true)
+        .output()
+        .await
+        .ok()?;
+    String::from_utf8_lossy(&out.stdout)
+        .trim()
+        .parse::<f64>()
+        .ok()
+        .filter(|d| d.is_finite() && *d > 0.0)
+}
+
 /// Run one ffmpeg operation. `duration_sec` turns its progress into a fraction.
 pub async fn run(
     input: &FfmpegArgsInput,
     duration_sec: Option<f64>,
     cancel: &CancellationToken,
-    mut on_fraction: impl FnMut(f64),
+    on_fraction: impl FnMut(f64),
 ) -> Result<()> {
     let mut input = input.clone();
     input.progress = Some(true);
-    let args = build_ffmpeg_args(&input);
+    run_args(
+        &build_ffmpeg_args(&input),
+        duration_sec,
+        cancel,
+        on_fraction,
+    )
+    .await
+}
+
+/// Run ffmpeg with an argument vector `vdh-core` built (with `-progress pipe:1` in it).
+pub async fn run_args(
+    args: &[String],
+    duration_sec: Option<f64>,
+    cancel: &CancellationToken,
+    mut on_fraction: impl FnMut(f64),
+) -> Result<()> {
     let mut child = Command::new(ffmpeg_program())
-        .args(&args)
+        .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

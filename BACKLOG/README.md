@@ -85,7 +85,7 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-065](VDH-065-desktop-engine.md) | Desktop engine and CLI: fetching, HLS/DASH/AES-128, live recording, native ffmpeg | done | P1 | desktop | VDH-063 |
 | [VDH-066](VDH-066-desktop-app-standalone.md) | Desktop app (Tauri v2): window, queue, history, settings, tray | done | P1 | desktop | VDH-065, VDH-075 |
 | [VDH-067](VDH-067-native-link.md) | Native link: extension hands jobs to the desktop app | done | P1 | desktop | VDH-066 |
-| [VDH-068](VDH-068-desktop-reencode.md) | Desktop re-encoding: presets, codec controls, trim, MKV, soft subtitles, batch | todo | P2 | desktop | VDH-066 |
+| [VDH-068](VDH-068-desktop-reencode.md) | Desktop re-encoding: presets, codec controls, hardware encoders, MKV, batch | done | P2 | desktop | VDH-066 |
 | [VDH-069](VDH-069-desktop-packaging.md) | Desktop packaging, updater and release workflow | todo | P1 | build | VDH-066 |
 | [VDH-070](VDH-070-owner-extension-key.md) | Pin the extension ID with the owner's public key | done | P1 | build | VDH-061 |
 | [VDH-071](VDH-071-page-scanner-without-core.md) | The page scanner never loads the shared core (content.js back to ~20 KB) | done | P0 | content | VDH-062 |
@@ -95,4 +95,7 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-075](VDH-075-desktop-queue.md) | Desktop engine: persistent queue, resume after restart, bandwidth cap, schedule, history | done | P1 | desktop | VDH-065 |
 | [VDH-076](VDH-076-desktop-standalone-inputs.md) | Desktop app: page scan, local files, clipboard watch, folder rules | todo | P2 | desktop | VDH-066 |
 | [VDH-077](VDH-077-desktop-push-captures.md) | Desktop link: hand MSE captures and recordings to the app (push-bytes) | todo | P2 | desktop | VDH-067, VDH-068 |
-| [VDH-078](VDH-078-ci-live-probe-hang.md) | CI: the app E2E's live probe sometimes never answers | todo | P2 | test | VDH-067 |
+| [VDH-078](VDH-078-ci-live-probe-hang.md) | CI: the app E2E's live probe sometimes never answers | done | P2 | test | VDH-067 |
+| [VDH-079](VDH-079-desktop-trim.md) | Desktop trim: preview player, timeline, keyframe snapping | todo | P3 | desktop | VDH-068 |
+| [VDH-080](VDH-080-desktop-soft-subtitles.md) | Desktop subtitles: download, convert and embed as soft subtitles | todo | P3 | desktop | VDH-068 |
+| [VDH-081](VDH-081-opus-native-decoder.md) | Desktop Opus re-encodes: FFmpeg 8 logs an error at the last Opus packet from Matroska | done | P2 | desktop | VDH-068 |
