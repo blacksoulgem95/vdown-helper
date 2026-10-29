@@ -1,0 +1,128 @@
+{
+  "trayShow": {
+    "message": "Mostra vdown-helper"
+  },
+  "trayQuit": {
+    "message": "Esci"
+  },
+  "notifyCompleted": {
+    "message": "Download completato"
+  },
+  "notifyFailed": {
+    "message": "Download non riuscito"
+  },
+  "tagline": {
+    "message": "Rileva. Decodifica. Scarica."
+  },
+  "urlLabel": {
+    "message": "Indirizzo del media o della playlist"
+  },
+  "urlPlaceholder": {
+    "message": "https://… (.m3u8, .mpd, .mp4…)"
+  },
+  "check": {
+    "message": "Verifica"
+  },
+  "checking": {
+    "message": "Verifica in corso…"
+  },
+  "quality": {
+    "message": "Qualità"
+  },
+  "fileName": {
+    "message": "Nome del file"
+  },
+  "added": {
+    "message": "Aggiunto alla coda."
+  },
+  "liveNote": {
+    "message": "Diretta: viene registrata da ora in poi, finché non la fermi."
+  },
+  "tabQueue": {
+    "message": "Coda"
+  },
+  "tabHistory": {
+    "message": "Cronologia"
+  },
+  "tabSettings": {
+    "message": "Impostazioni"
+  },
+  "sectionsLabel": {
+    "message": "Sezioni"
+  },
+  "queueEmpty": {
+    "message": "La coda è vuota. Incolla un indirizzo qui sopra per iniziare."
+  },
+  "historyEmpty": {
+    "message": "Nessun download terminato."
+  },
+  "historyOff": {
+    "message": "La cronologia è disattivata nelle Impostazioni."
+  },
+  "finishedAt": {
+    "message": "Terminato $1"
+  },
+  "setFolder": {
+    "message": "Cartella dei download"
+  },
+  "setFolderHint": {
+    "message": "Se non ne scegli una: $1"
+  },
+  "choose": {
+    "message": "Scegli…"
+  },
+  "useDefault": {
+    "message": "Usa quella predefinita"
+  },
+  "setJobs": {
+    "message": "Download contemporanei"
+  },
+  "setSegments": {
+    "message": "Segmenti contemporanei per download"
+  },
+  "setRate": {
+    "message": "Limite di banda (KiB/s)"
+  },
+  "setRateHint": {
+    "message": "0 significa nessun limite. Vale per tutti i download insieme."
+  },
+  "setWindow": {
+    "message": "Scarica solo nella fascia"
+  },
+  "setWindowHint": {
+    "message": "Per esempio Mon-Fri 22:00-06:00. Lascia vuoto per scaricare a qualsiasi ora."
+  },
+  "setWindowInvalid": {
+    "message": "La fascia oraria non è valida: scrivi giorni e ore come Mon-Fri 22:00-06:00."
+  },
+  "setHistory": {
+    "message": "Tieni la cronologia dei download terminati"
+  },
+  "setHistoryHint": {
+    "message": "Gli indirizzi sono salvati senza password né token."
+  },
+  "setCloseToTray": {
+    "message": "Resta attiva nell'area di notifica quando chiudi la finestra"
+  },
+  "setStartAtLogin": {
+    "message": "Avvia all'accesso, nell'area di notifica"
+  },
+  "setNotifications": {
+    "message": "Avvisami quando un download termina"
+  },
+  "setLanguage": {
+    "message": "Lingua"
+  },
+  "langAuto": {
+    "message": "Lingua del sistema"
+  },
+  "save": {
+    "message": "Salva"
+  },
+  "saved": {
+    "message": "Impostazioni salvate."
+  },
+  "folderRelative": {
+    "message": "La cartella dei download deve essere un percorso completo."
+  }
+}

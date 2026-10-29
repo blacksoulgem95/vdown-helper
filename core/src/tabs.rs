@@ -36,10 +36,10 @@ pub fn split_by_tab(resources: &[Value]) -> Map<String, Value> {
 /// The preferred tab while it has something in it, else the first tab that does.
 pub fn active_tab(counts: &Value, preferred: Option<&str>) -> &'static str {
     let has = |k: &str| num_of(counts, k).is_some_and(|n| n > 0.0);
-    if let Some(p) = preferred.and_then(|p| TAB_ORDER.iter().find(|k| **k == p)) {
-        if has(p) {
-            return p;
-        }
+    if let Some(p) = preferred.and_then(|p| TAB_ORDER.iter().find(|k| **k == p))
+        && has(p)
+    {
+        return p;
     }
     TAB_ORDER
         .iter()

@@ -144,11 +144,11 @@ impl Net {
             set(USER_AGENT, ua);
         }
         let origin = url.origin().ascii_serialization();
-        if let Some(c) = self.headers.cookies.iter().find(|c| c.origin == origin) {
-            if let Ok(mut v) = HeaderValue::from_str(&c.header) {
-                v.set_sensitive(true);
-                h.insert(COOKIE, v);
-            }
+        if let Some(c) = self.headers.cookies.iter().find(|c| c.origin == origin)
+            && let Ok(mut v) = HeaderValue::from_str(&c.header)
+        {
+            v.set_sensitive(true);
+            h.insert(COOKIE, v);
         }
         h
     }

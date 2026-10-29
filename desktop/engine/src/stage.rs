@@ -149,17 +149,16 @@ pub async fn stage_stream(
     from: Option<&TrackCheckpoint>,
     mut progress: impl FnMut(SegmentProgress, &TrackCheckpoint),
 ) -> Result<Staged> {
-    if let Some(cp) = from.filter(|c| c.complete) {
-        if tokio::fs::metadata(path)
+    if let Some(cp) = from.filter(|c| c.complete)
+        && tokio::fs::metadata(path)
             .await
             .is_ok_and(|m| m.len() >= cp.sink.bytes)
-        {
-            return Ok(Staged {
-                bytes: cp.sink.bytes,
-                fragmented: cp.fragmented,
-                duration_sec: cp.duration_sec,
-            });
-        }
+    {
+        return Ok(Staged {
+            bytes: cp.sink.bytes,
+            fragmented: cp.fragmented,
+            duration_sec: cp.duration_sec,
+        });
     }
     let (segs, duration_sec, fragmented) = if dash {
         let (segs, d, _) = load_dash_representation(opts, url, false, now_ms()).await?;

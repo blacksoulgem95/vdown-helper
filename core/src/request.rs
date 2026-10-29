@@ -1028,10 +1028,10 @@ pub fn sanitize_request(req: &Value) -> Option<Value> {
     } else if !is_safe_fetch_url(source_url) {
         return None;
     }
-    if let Some(a) = audio_url {
-        if !a.as_str().is_some_and(is_safe_fetch_url) {
-            return None;
-        }
+    if let Some(a) = audio_url
+        && !a.as_str().is_some_and(is_safe_fetch_url)
+    {
+        return None;
     }
     let filename = r.get("filename")?.as_str()?;
     let (stem, ext) = match filename.rfind('.') {

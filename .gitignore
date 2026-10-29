@@ -11,3 +11,5 @@ site/dist/
 store/.tmp/
 target/
 src/wasm/gen/
+desktop/ui/dist/
+desktop/src-tauri/gen/

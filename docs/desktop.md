@@ -86,7 +86,24 @@ natively and by `tests/core-golden.test.ts` through the wasm. The existing vites
   or killed; requests to pause or cancel are written to the database and reach the running queue from any process;
   global bandwidth cap; schedule window (local time); history kept until cleared, can be turned off (URLs stored with
   credentials and tokens stripped); folder rules like `{type}/{host}/{title}` under `~/Downloads/vdown-helper` (with
-  the app, VDH-066); filenames sanitised with the extension's rules.
+  the app, VDH-076); filenames sanitised with the extension's rules.
+
+### App (VDH-066; page scan, local files, clipboard and folder rules VDH-076)
+
+- `desktop/src-tauri` (Tauri v2): the queue runs in the app's process (`Manager::run`), with its database and staging
+  in the app's data folder; finished files go to `Downloads/vdown-helper` unless the user picks a folder.
+- The window (`desktop/ui`, built by `npm run desktop:ui`) talks to the app only through its own commands: `probe` and
+  `add` take an address and the user's choices, and the app probes the address itself before queueing it (the window's
+  description is never trusted); `jobs`, `control` (pause, resume, retry, cancel, stop, remove), `history`,
+  `get_settings` / `save_settings`, `pick_folder`, `open_file` (only files the queue finished). The window has no file
+  system, shell or HTTP access; its CSP allows only its own files and the core's wasm.
+- The window reuses the extension's components (`QueueItem`, `Tabs`, fields), theme, fonts, Rust core and catalogs;
+  the app's own strings are in `desktop/ui/locales/{en,it}.json` (also used for the tray and notifications). The
+  language follows the system unless the user picks one.
+- Settings live in the queue database and apply while jobs run (jobs and segments at a time, bandwidth cap, schedule
+  window, history on/off). Closing the window keeps the app and its jobs in the tray (can be turned off); quitting holds
+  the running jobs, which continue at the next start. Start at login is off until the user turns it on. A second launch
+  brings the running app forward. A notification when a job finishes or fails (can be turned off).
 
 ### Native link (VDH-067)
 
@@ -162,7 +179,11 @@ release.
 
 - `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` on Linux, Windows and macOS; golden fixtures shared with
   the extension's vitest suites.
-- The real app on Linux driven by tauri-driver against the E2E fixture servers (outputs checked with ffprobe and a full
-  decode; resume after `kill -9`; DRM refused).
+- The engine's integration tests against the E2E fixture servers (outputs checked with ffprobe and a full decode;
+  resume after `kill -9`; DRM refused).
+- The real app on Linux driven by tauri-driver against the same servers (`xvfb-run -a npm run test:desktop`, after
+  `npm run desktop:ui` and `cargo build -p vdown-helper-desktop`), in its own D-Bus session: an HLS download and its
+  notification, a DRM refusal, a live recording stopped from the queue, settings that survive a restart, start at login,
+  closing the window to the tray (a real `WM_DELETE_WINDOW`) and a second launch bringing it back.
 - Extension ↔ app in real Chromium with the host registered in the test profile.
 - Installer smoke tests on each OS runner.

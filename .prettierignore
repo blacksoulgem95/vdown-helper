@@ -11,3 +11,5 @@ store-assets
 src/wasm/gen
 target
 core/fixtures
+desktop/ui/dist
+desktop/src-tauri/gen
