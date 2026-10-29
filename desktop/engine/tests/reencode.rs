@@ -309,203 +309,111 @@ fn a_paused_re_encode_starts_again_and_finishes() {
     decodes_cleanly(&file);
 }
 
-/// TEMPORARY (VDH-081): which Opus encodes decode cleanly with this ffmpeg. Fails on purpose to print the table.
+/// TEMPORARY (VDH-081): the last Opus packet as the Ogg and Matroska demuxers return it, and the raw end of the WebM
+/// file. Fails on purpose to print it.
 #[test]
-fn opus_variants_vdh_081() {
+fn opus_matroska_last_block_vdh_081() {
     let Some(f) = fixtures() else { return };
-    let dir = out_dir("opus-variants");
-    let sample = f.root.join("media/sample.mp4");
-    let sample = sample.to_str().expect("utf-8");
-    let sine = "sine=frequency=440:sample_rate=48000:duration=6";
-    let variants: Vec<(&str, Vec<&str>, &str)> = vec![
-        (
-            "baseline",
-            vec!["-i", sample, "-vn", "-c:a", "libopus", "-b:a", "128k"],
-            "webm",
-        ),
-        (
-            "vbr-off",
-            vec![
-                "-i", sample, "-vn", "-c:a", "libopus", "-b:a", "128k", "-vbr", "off",
-            ],
-            "webm",
-        ),
-        (
-            "vbr-constrained",
-            vec![
-                "-i",
-                sample,
-                "-vn",
-                "-c:a",
-                "libopus",
-                "-b:a",
-                "128k",
-                "-vbr",
-                "constrained",
-            ],
-            "webm",
-        ),
-        (
-            "frame-10",
-            vec![
-                "-i",
-                sample,
-                "-vn",
-                "-c:a",
-                "libopus",
-                "-b:a",
-                "128k",
-                "-frame_duration",
-                "10",
-            ],
-            "webm",
-        ),
-        (
-            "frame-60",
-            vec![
-                "-i",
-                sample,
-                "-vn",
-                "-c:a",
-                "libopus",
-                "-b:a",
-                "128k",
-                "-frame_duration",
-                "60",
-            ],
-            "webm",
-        ),
-        (
-            "lowdelay",
-            vec![
-                "-i",
-                sample,
-                "-vn",
-                "-c:a",
-                "libopus",
-                "-b:a",
-                "128k",
-                "-application",
-                "lowdelay",
-            ],
-            "webm",
-        ),
-        (
-            "no-phase-inv",
-            vec![
-                "-i",
-                sample,
-                "-vn",
-                "-c:a",
-                "libopus",
-                "-b:a",
-                "128k",
-                "-apply_phase_inv",
-                "0",
-            ],
-            "webm",
-        ),
-        (
-            "ar-48000",
-            vec![
-                "-i", sample, "-vn", "-c:a", "libopus", "-b:a", "128k", "-ar", "48000",
-            ],
-            "webm",
-        ),
-        (
-            "stereo",
-            vec![
-                "-i", sample, "-vn", "-c:a", "libopus", "-b:a", "128k", "-ac", "2",
-            ],
-            "webm",
-        ),
-        (
-            "ogg",
-            vec!["-i", sample, "-vn", "-c:a", "libopus", "-b:a", "128k"],
-            "ogg",
-        ),
-        (
-            "mkv",
-            vec!["-i", sample, "-vn", "-c:a", "libopus", "-b:a", "128k"],
-            "mkv",
-        ),
-        (
-            "sine48k",
-            vec!["-f", "lavfi", "-i", sine, "-c:a", "libopus", "-b:a", "128k"],
-            "webm",
-        ),
-        (
-            "sine48k-5.99",
-            vec![
-                "-f", "lavfi", "-i", sine, "-t", "5.99", "-c:a", "libopus", "-b:a", "128k",
-            ],
-            "webm",
-        ),
-        (
-            "b64k",
-            vec!["-i", sample, "-vn", "-c:a", "libopus", "-b:a", "64k"],
-            "webm",
-        ),
-        (
-            "native-opus",
-            vec![
-                "-i", sample, "-vn", "-c:a", "opus", "-strict", "-2", "-b:a", "128k",
-            ],
-            "webm",
-        ),
-    ];
-    let errors = |args: &[&str], file: &Path| {
-        let out = Command::new("ffmpeg")
-            .args(["-v", "error"])
+    let dir = out_dir("opus-mkv");
+    let ogg = dir.join("a.ogg");
+    let webm = dir.join("b.webm");
+    let back = dir.join("c.ogg");
+    let ff = |args: &[&std::ffi::OsStr]| {
+        let o = Command::new("ffmpeg")
+            .args(["-v", "error", "-y"])
             .args(args)
-            .arg("-i")
+            .output()
+            .expect("ffmpeg");
+        String::from_utf8_lossy(&o.stderr).into_owned()
+    };
+    let os = |s: &str| std::ffi::OsString::from(s);
+    let sample = f.root.join("media/sample.mp4");
+    let mut report = String::new();
+    report += &ff(&[
+        os("-i").as_os_str(),
+        sample.as_os_str(),
+        os("-vn").as_os_str(),
+        os("-c:a").as_os_str(),
+        os("libopus").as_os_str(),
+        ogg.as_os_str(),
+    ]);
+    report += &ff(&[
+        os("-i").as_os_str(),
+        ogg.as_os_str(),
+        os("-c").as_os_str(),
+        os("copy").as_os_str(),
+        webm.as_os_str(),
+    ]);
+    report += &ff(&[
+        os("-i").as_os_str(),
+        webm.as_os_str(),
+        os("-c").as_os_str(),
+        os("copy").as_os_str(),
+        back.as_os_str(),
+    ]);
+    let decode = |file: &Path| {
+        let o = Command::new("ffmpeg")
+            .args(["-v", "error", "-i"])
             .arg(file)
             .args(["-f", "null", "-"])
             .output()
             .expect("ffmpeg");
-        String::from_utf8_lossy(&out.stderr).lines().count()
+        String::from_utf8_lossy(&o.stderr).lines().count()
     };
-    let mut table =
-        String::from("\nvariant | encode ok | errors(native) | errors(libopus) | last packets\n");
-    for (name, args, ext) in variants {
-        let file = dir.join(format!("{name}.{ext}"));
-        let enc = Command::new("ffmpeg")
-            .args(["-v", "error", "-y"])
-            .args(&args)
-            .arg(&file)
-            .output()
-            .expect("ffmpeg");
-        let packets = Command::new("ffprobe")
+    let last = |file: &Path| {
+        let o = Command::new("ffprobe")
             .args([
                 "-v",
                 "error",
                 "-select_streams",
                 "a:0",
-                "-show_entries",
-                "packet=pts,duration,size,flags",
+                "-show_packets",
+                "-show_data",
                 "-of",
-                "csv",
+                "flat",
             ])
-            .arg(&file)
+            .arg(file)
             .output()
-            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
-            .unwrap_or_default();
-        let last: Vec<&str> = packets.lines().rev().take(2).collect();
-        table.push_str(&format!(
-            "{name} | {} {} | {} | {} | {:?}\n",
-            enc.status.success(),
-            String::from_utf8_lossy(&enc.stderr).trim(),
-            errors(&[], &file),
-            errors(&["-c:a", "libopus"], &file),
-            last
-        ));
+            .expect("ffprobe");
+        let text = String::from_utf8_lossy(&o.stdout).into_owned();
+        let n = text
+            .lines()
+            .filter(|l| l.ends_with(".codec_type=\"audio\""))
+            .count();
+        let key = format!("packets.packet.{}.", n.saturating_sub(1));
+        text.lines()
+            .filter(|l| l.starts_with(&key))
+            .map(|l| format!("{l}\n"))
+            .collect::<String>()
+    };
+    report += &format!(
+        "decode errors: ogg {} | webm (copied from the ogg) {} | ogg copied back from the webm {}\n",
+        decode(&ogg),
+        decode(&webm),
+        decode(&back)
+    );
+    report += &format!(
+        "--- last packet, Ogg demuxer:\n{}--- last packet, Matroska demuxer:\n{}",
+        last(&ogg),
+        last(&webm)
+    );
+    let bytes = std::fs::read(&webm).expect("webm");
+    let tail = &bytes[bytes.len().saturating_sub(900)..];
+    report += &format!(
+        "--- last {} bytes of the WebM ({} in all):\n",
+        tail.len(),
+        bytes.len()
+    );
+    for chunk in tail.chunks(32) {
+        report += &chunk.iter().map(|b| format!("{b:02x}")).collect::<String>();
+        report.push('\n');
     }
     let version = Command::new("ffmpeg")
         .arg("-version")
         .output()
         .expect("ffmpeg");
     panic!(
-        "{}{table}",
+        "{}\n{report}",
         String::from_utf8_lossy(&version.stdout)
             .lines()
             .next()
