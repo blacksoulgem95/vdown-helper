@@ -1,4 +1,5 @@
-import { parseUrl } from './security';
+/** Header replay. Implemented in Rust (`core/src/replay.rs`); the declarativeNetRequest rule itself is built here. */
+import { core } from './core';
 
 /**
  * Headers a download may replay: exactly the two the browser itself sent for requests made from the frame that
@@ -11,30 +12,17 @@ export interface ReplayHeaders {
 }
 
 export function replayHeadersFor(frameUrl: string | undefined): ReplayHeaders | undefined {
-  const u = frameUrl ? parseUrl(frameUrl) : undefined;
-  if (!u || (u.protocol !== 'http:' && u.protocol !== 'https:')) return undefined;
-  return { referer: `${u.origin}/`, origin: u.origin };
+  return core.replayHeadersFor(frameUrl) as ReplayHeaders | undefined;
 }
 
 /** Hosts a rule may apply to: only the hosts of this job's own URLs, never "everything". */
 export function replayDomains(urls: string[], max = 24): string[] {
-  const hosts = new Set<string>();
-  for (const url of urls) {
-    const u = parseUrl(url);
-    if (u && (u.protocol === 'http:' || u.protocol === 'https:')) hosts.add(u.hostname);
-    if (hosts.size >= max) break;
-  }
-  return [...hosts];
+  return core.replayDomains(urls, max);
 }
 
 /** Deterministic rule id in a private range, so a job's rule can be found (and removed) after a worker restart. */
 export function ruleIdFor(jobId: string): number {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < jobId.length; i++) {
-    h ^= jobId.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return 1_000_000 + ((h >>> 0) % 900_000_000);
+  return core.ruleIdFor(jobId);
 }
 
 type DnrRule = chrome.declarativeNetRequest.Rule;

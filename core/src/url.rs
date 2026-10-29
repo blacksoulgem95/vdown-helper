@@ -11,6 +11,18 @@ pub fn parse_url(input: &str, base: Option<&str>) -> Option<url::Url> {
     }
 }
 
+/// `url.host`: the host name plus a port that is not the scheme's default.
+pub fn host(u: &url::Url) -> String {
+    let h = u.host_str().unwrap_or("");
+    u.port()
+        .map_or_else(|| h.to_string(), |p| format!("{h}:{p}"))
+}
+
+/// `url.origin` of an http(s) URL (`scheme://host[:port]`).
+pub fn origin(u: &url::Url) -> String {
+    u.origin().ascii_serialization()
+}
+
 /// True for http(s) URLs only. Everything else (javascript:, data:, file:, chrome:, ftp:, blob: ...) is rejected.
 pub fn is_safe_fetch_url(input: &str) -> bool {
     // JavaScript counts UTF-16 code units.

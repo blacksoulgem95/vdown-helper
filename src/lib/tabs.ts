@@ -1,5 +1,6 @@
+/** How the popup lists resources. Implemented in Rust (`core/src/tabs.rs`). */
 import type { MediaResource } from '@/types/media';
-import { parseUrl } from './security';
+import { core } from './core';
 
 export type TabKey = 'video' | 'audio' | 'subtitles' | 'images' | 'files' | 'assets';
 
@@ -7,19 +8,7 @@ export const TAB_ORDER: readonly TabKey[] = ['video', 'audio', 'subtitles', 'ima
 
 /** The popup tab a resource is listed under. */
 export function tabOf(r: MediaResource): TabKey {
-  switch (r.kind) {
-    case 'subtitle':
-      return 'subtitles';
-    case 'image':
-      return 'images';
-    case 'document':
-    case 'archive':
-      return 'files';
-    case 'asset':
-      return 'assets';
-    default:
-      return r.mediaType === 'audio' ? 'audio' : 'video';
-  }
+  return core.tabOf(r) as TabKey;
 }
 
 export const isFileTab = (t: TabKey): boolean => t === 'images' || t === 'files' || t === 'assets';
@@ -33,14 +22,13 @@ export function splitByTab(resources: readonly MediaResource[]): Record<TabKey, 
     files: [],
     assets: [],
   };
-  for (const r of resources) out[tabOf(r)].push(r);
+  core.tabsOf(resources).forEach((tab, i) => out[tab as TabKey].push(resources[i] as MediaResource));
   return out;
 }
 
 /** The first tab that has something in it, or the preferred one while it still does. */
 export function activeTab(counts: Record<TabKey, number>, preferred: TabKey | undefined): TabKey {
-  if (preferred && counts[preferred] > 0) return preferred;
-  return TAB_ORDER.find((k) => counts[k] > 0) ?? 'video';
+  return core.activeTab(counts, preferred) as TabKey;
 }
 
 /**
@@ -48,8 +36,7 @@ export function activeTab(counts: Record<TabKey, number>, preferred: TabKey | un
  * size is unknown (CSS backgrounds, images that have not loaded) is kept: hiding it would be a guess.
  */
 export function imageMeetsMinimum(r: MediaResource, minPx: number): boolean {
-  if (minPx <= 0 || !r.width || !r.height) return true;
-  return Math.min(r.width, r.height) >= minPx;
+  return core.imageMeetsMinimum(r, minPx);
 }
 
 export interface FrameGroup {
@@ -62,25 +49,13 @@ export interface FrameGroup {
 
 /** Items grouped by the frame they were found in, top page first, then in order of first appearance. */
 export function groupByFrame(items: readonly MediaResource[]): FrameGroup[] {
-  const groups = new Map<number, FrameGroup>();
-  for (const r of items) {
-    const id = r.frameId ?? 0;
-    let g = groups.get(id);
-    if (!g) {
-      g = { frameId: id, host: id === 0 ? '' : (parseUrl(r.frameUrl ?? '')?.host ?? ''), items: [] };
-      groups.set(id, g);
-    }
-    g.items.push(r);
-  }
-  return [...groups.values()].sort((a, b) => Number(b.frameId === 0) - Number(a.frameId === 0));
+  const groups = core.frameGroups(items) as Array<{ frameId: number; host: string; items: number[] }>;
+  return groups.map((g) => ({ ...g, items: g.items.map((i) => items[i] as MediaResource) }));
 }
 
 /** Why the popup has nothing to offer, which decides the one button the empty state shows. */
 export type EmptyCause = 'error' | 'blocked-frames' | 'reload' | 'nothing';
 
 export function emptyCause(o: { error: boolean; blockedFrames: number; reloadPending: boolean }): EmptyCause {
-  if (o.error) return 'error';
-  if (o.blockedFrames > 0) return 'blocked-frames';
-  if (o.reloadPending) return 'reload';
-  return 'nothing';
+  return core.emptyCause(o.error, o.blockedFrames, o.reloadPending) as EmptyCause;
 }

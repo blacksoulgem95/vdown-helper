@@ -1,30 +1,30 @@
+/** The job state machine. Implemented in Rust (`core/src/queue.rs`). */
 import type { DownloadJob, DownloadRequest, JobError, JobProgress, JobStage } from '@/types/download';
 import type { Plan } from './compat';
+import { core } from './core';
 
-/** Allowed stage transitions. Retry is a separate, explicit operation (see retryJob). */
-export const TRANSITIONS: Readonly<Record<JobStage, readonly JobStage[]>> = {
-  detected: ['preparing', 'cancelled', 'failed'],
-  preparing: ['downloading', 'recording', 'merging', 'encoding', 'cancelled', 'failed'],
-  downloading: ['merging', 'encoding', 'completed', 'cancelled', 'failed'],
-  recording: ['merging', 'completed', 'cancelled', 'failed'],
-  merging: ['encoding', 'completed', 'cancelled', 'failed'],
-  encoding: ['completed', 'cancelled', 'failed'],
-  completed: [],
-  failed: [],
-  cancelled: [],
-};
-
-export const ACTIVE_STAGES: readonly JobStage[] = [
+const STAGES: readonly JobStage[] = [
+  'detected',
   'preparing',
   'downloading',
   'recording',
   'merging',
   'encoding',
+  'completed',
+  'failed',
+  'cancelled',
 ];
-export const TERMINAL_STAGES: readonly JobStage[] = ['completed', 'failed', 'cancelled'];
 
-export const isActive = (j: Pick<DownloadJob, 'stage'>): boolean => ACTIVE_STAGES.includes(j.stage);
-export const isTerminal = (j: Pick<DownloadJob, 'stage'>): boolean => TERMINAL_STAGES.includes(j.stage);
+/** Allowed stage transitions. Retry is a separate, explicit operation (see retryJob). */
+export const TRANSITIONS: Readonly<Record<JobStage, readonly JobStage[]>> = Object.fromEntries(
+  STAGES.map((s) => [s, core.transitionsFrom(s) as JobStage[]]),
+) as Record<JobStage, JobStage[]>;
+
+export const ACTIVE_STAGES: readonly JobStage[] = STAGES.filter((s) => core.isActiveStage(s));
+export const TERMINAL_STAGES: readonly JobStage[] = STAGES.filter((s) => core.isTerminalStage(s));
+
+export const isActive = (j: Pick<DownloadJob, 'stage'>): boolean => core.isActiveStage(j.stage);
+export const isTerminal = (j: Pick<DownloadJob, 'stage'>): boolean => core.isTerminalStage(j.stage);
 export const isQueued = (j: Pick<DownloadJob, 'stage'>): boolean => j.stage === 'detected';
 
 /** Finished jobs the popup keeps in view; the rest is one click away, so history never buries the page. */
@@ -38,8 +38,12 @@ export function popupQueue<J extends Pick<DownloadJob, 'stage'>>(
   jobs: readonly J[],
   keep = POPUP_FINISHED,
 ): { shown: J[]; hidden: number } {
-  let kept = 0;
-  const shown = jobs.filter((j) => !isTerminal(j) || kept++ < keep);
+  const shown = [
+    ...core.popupQueue(
+      jobs.map((j) => j.stage),
+      keep,
+    ),
+  ].map((i) => jobs[i] as J);
   return { shown, hidden: jobs.length - shown.length };
 }
 
@@ -55,54 +59,25 @@ export class IllegalTransitionError extends Error {
 
 /** Only the stages this job will really pass through, in order (never a simulated one). */
 export function stagesFor(plan: Pick<Plan, 'pipeline' | 'video' | 'audio' | 'requiresFfmpeg'>): JobStage[] {
-  // A recording has no download: it records until it is stopped, and is then tidied up (duration, index) by a copy.
-  if (plan.pipeline === 'record' || plan.pipeline === 'live')
-    return ['detected', 'preparing', 'recording', 'merging', 'completed'];
-  const stages: JobStage[] = ['detected', 'preparing', 'downloading'];
-  if (plan.requiresFfmpeg) {
-    const reencodes = plan.audio === 'transcode' || plan.video === 'transcode';
-    stages.push(reencodes ? 'encoding' : 'merging');
-  }
-  stages.push('completed');
-  return stages;
+  return core.stagesFor(plan) as JobStage[];
 }
 
 export function createJob(id: string, request: DownloadRequest, plan: Plan, now: number): DownloadJob {
-  return {
-    id,
-    request,
-    stage: 'detected',
-    progress: {},
-    stages: stagesFor(plan),
-    // Only Chrome's own download manager supports pause/resume; the segment pipeline does not.
-    canPause: plan.pipeline === 'native',
-    paused: false,
-    createdAt: now,
-    updatedAt: now,
-    attempts: 0,
-  };
+  return core.createJob(id, request, plan, now) as DownloadJob;
 }
 
 export function canTransition(from: JobStage, to: JobStage): boolean {
-  return TRANSITIONS[from].includes(to);
+  return core.canTransition(from, to);
 }
 
 /** Returns the job moved to `to`. Throws IllegalTransitionError for invalid moves. */
 export function transition(job: DownloadJob, to: JobStage, now: number, error?: JobError): DownloadJob {
-  if (!canTransition(job.stage, to)) throw new IllegalTransitionError(job.stage, to);
-  const next: DownloadJob = { ...job, stage: to, updatedAt: now, paused: false };
-  if (to === 'failed' && error) next.error = error;
-  if (to !== 'failed') delete next.error;
-  if (isTerminal(next)) {
-    next.finishedAt = now;
-    if (to === 'completed') next.progress = { ...next.progress, fraction: 1 };
-  } else {
-    // A new stage restarts measurement; stale numbers from the previous stage would mislead.
-    next.progress = {};
-  }
+  const next = core.transition(job, to, now, error) as DownloadJob | undefined;
+  if (!next) throw new IllegalTransitionError(job.stage, to);
   return next;
 }
 
+/** The job failed with `error`; a job that can no longer fail is returned as it is. */
 export function failJob(job: DownloadJob, now: number, error: JobError): DownloadJob {
   return canTransition(job.stage, 'failed') ? transition(job, 'failed', now, error) : job;
 }
@@ -116,24 +91,13 @@ export const canStop = (j: Pick<DownloadJob, 'stage'>): boolean => j.stage === '
 
 /** Reset a failed/cancelled job so the scheduler picks it up again. */
 export function retryJob(job: DownloadJob, now: number): DownloadJob {
-  if (!canRetry(job)) throw new IllegalTransitionError(job.stage, 'detected');
-  const next: DownloadJob = {
-    ...job,
-    stage: 'detected',
-    progress: {},
-    updatedAt: now,
-    attempts: job.attempts + 1,
-    paused: false,
-  };
-  delete next.error;
-  delete next.finishedAt;
-  delete next.chromeDownloadId;
-  delete next.filePath;
+  const next = core.retryJob(job, now) as DownloadJob | undefined;
+  if (!next) throw new IllegalTransitionError(job.stage, 'detected');
   return next;
 }
 
 export function withProgress(job: DownloadJob, progress: JobProgress, now: number): DownloadJob {
-  return { ...job, progress: { ...job.progress, ...progress }, updatedAt: now };
+  return core.withProgress(job, progress, now) as DownloadJob;
 }
 
 /**
@@ -141,49 +105,25 @@ export function withProgress(job: DownloadJob, progress: JobProgress, now: numbe
  * ETA only once the rate is both positive and stable, so the UI never shows a wild early guess.
  */
 export class SpeedMeter {
-  private last?: { t: number; bytes: number };
-  private firstT?: number;
-  private rate?: number;
-  private samples = 0;
+  /** The meter's state, kept here and advanced by the core. */
+  private state: unknown = {};
 
   update(bytes: number, nowMs: number): void {
-    if (this.firstT === undefined) this.firstT = nowMs;
-    if (this.last && nowMs > this.last.t) {
-      const inst = ((bytes - this.last.bytes) * 1000) / (nowMs - this.last.t);
-      if (inst >= 0) {
-        this.rate = this.rate === undefined ? inst : this.rate * 0.7 + inst * 0.3;
-        this.samples++;
-      }
-    }
-    this.last = { t: nowMs, bytes };
+    this.state = core.speedUpdate(this.state, bytes, nowMs);
   }
 
   get bytesPerSecond(): number | undefined {
-    if (this.rate === undefined || this.firstT === undefined || !this.last) return undefined;
-    return this.last.t - this.firstT >= 1500 ? this.rate : undefined;
+    return core.speedRate(this.state);
   }
 
   etaSeconds(remainingBytes: number | undefined): number | undefined {
-    const r = this.bytesPerSecond;
-    if (r === undefined || r <= 0 || remainingBytes === undefined || remainingBytes < 0 || this.samples < 3)
-      return undefined;
-    return remainingBytes / r;
+    return core.speedEta(this.state, remainingBytes);
   }
 }
 
-/** Chrome errors that mean "the server refused this request": worth one retry with the frame's headers replayed. */
-export const REFUSED_BY_SERVER: readonly string[] = ['SERVER_FORBIDDEN', 'SERVER_UNAUTHORIZED'];
-
+/** A native download the server refused (SERVER_FORBIDDEN, SERVER_UNAUTHORIZED) is worth one retry with the frame's headers. */
 export function canRestage(job: DownloadJob, chromeError: string | undefined): boolean {
-  return (
-    job.stage === 'downloading' &&
-    !job.staged &&
-    job.request.replay !== undefined &&
-    !job.request.isHls &&
-    !job.request.isDash &&
-    chromeError !== undefined &&
-    REFUSED_BY_SERVER.includes(chromeError)
-  );
+  return core.canRestage(job, chromeError);
 }
 
 /**
@@ -191,18 +131,7 @@ export function canRestage(job: DownloadJob, chromeError: string | undefined): b
  * runner starts it again; it cannot be paused any more because Chrome no longer owns the transfer.
  */
 export function restage(job: DownloadJob, now: number): DownloadJob {
-  if (job.stage !== 'downloading' || job.staged) throw new IllegalTransitionError(job.stage, 'preparing');
-  const next: DownloadJob = {
-    ...job,
-    stage: 'preparing',
-    progress: {},
-    updatedAt: now,
-    paused: false,
-    canPause: false,
-    viaOffscreen: true,
-    staged: true,
-  };
-  delete next.chromeDownloadId;
-  delete next.error;
+  const next = core.restage(job, now) as DownloadJob | undefined;
+  if (!next) throw new IllegalTransitionError(job.stage, 'preparing');
   return next;
 }

@@ -7,8 +7,9 @@ use std::collections::HashMap;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use vdh_core::{
-    analyze, compat, dash, ffmpeg_args, filetypes, hls, inspect, request, security, settings,
-    sniff, xml,
+    analyze, compat, dash, data_url, ffmpeg_args, filetypes, hls, hook_data, inspect, media,
+    metadata, mse, queue, replay, request, resources, security, settings, sniff, subtitles, tabs,
+    xml, zip,
 };
 
 /// JSON equality where every number compares as f64 (JavaScript has one number type) and an absent field equals null
@@ -248,6 +249,230 @@ fn run(fun: &str, args: &[Value], today: &str) -> Option<Result<Value, String>> 
         "sanitizeRequest" => opt(request::sanitize_request(&args[0])),
         "dashRef" => json(dash::dash_ref(s(args, 0), s(args, 1))),
         "parseDashRef" => opt(dash::parse_dash_ref(s(args, 0))),
+        _ => return run_064(fun, args),
+    };
+    Some(Ok(v))
+}
+
+fn list(v: &Value) -> &[Value] {
+    v.as_array().map_or(&[], Vec::as_slice)
+}
+
+fn strs(v: &Value) -> impl Iterator<Item = &str> {
+    list(v).iter().filter_map(Value::as_str)
+}
+
+/// A recorded `Map` (`{ $map: [[key, value], ...] }`) as pairs.
+fn entries<T: DeserializeOwned>(v: &Value) -> Vec<(f64, T)> {
+    list(&v["$map"])
+        .iter()
+        .map(|e| {
+            (
+                e[0].as_f64().expect("numeric key"),
+                serde_json::from_value(e[1].clone()).expect("map value"),
+            )
+        })
+        .collect()
+}
+
+fn opt_f(args: &[Value], i: usize) -> Option<f64> {
+    args.get(i).and_then(Value::as_f64)
+}
+
+/// The modules ported in VDH-064.
+fn run_064(fun: &str, args: &[Value]) -> Option<Result<Value, String>> {
+    let v = match fun {
+        "formatBytes" => json(media::format_bytes(opt_f(args, 0))),
+        "formatDuration" => json(media::format_duration(opt_f(args, 0))),
+        "formatBitrate" => json(media::format_bitrate(opt_f(args, 0))),
+        "formatSpeed" => json(media::format_speed(opt_f(args, 0))),
+        "qualityTag" => json(media::quality_tag(opt_f(args, 0))),
+        "resolutionLabel" => json(media::resolution_label(opt_f(args, 0), opt_f(args, 1))),
+        "formatFromMime" => opt(media::format_from_mime(opt_s(args, 0))),
+        "extensionOf" => json(media::extension_of(s(args, 0))),
+        "formatFromUrl" => opt(media::format_from_url(s(args, 0))),
+        "mediaTypeOf" => json(media::media_type_of(s(args, 0))),
+        "inferTitle" => {
+            let o = &args[0];
+            json(media::infer_title(
+                o["url"].as_str().unwrap_or(""),
+                o["elementTitle"].as_str(),
+                o["pageTitle"].as_str(),
+            ))
+        }
+        "describeCodecs" => json(media::describe_codecs(opt_s(args, 0))),
+        "estimateBytes" => opt(media::estimate_bytes(opt_f(args, 0), opt_f(args, 1))),
+        "replayHeadersFor" => opt(replay::replay_headers_for(opt_s(args, 0))),
+        "replayDomains" => json(replay::replay_domains(
+            strs(&args[0]),
+            num(args, 1, 24.0) as usize,
+        )),
+        "ruleIdFor" => json(replay::rule_id_for(s(args, 0))),
+        "tabOf" => json(tabs::tab_of(&args[0])),
+        "splitByTab" => json(tabs::split_by_tab(list(&args[0]))),
+        "activeTab" => json(tabs::active_tab(&args[0], opt_s(args, 1))),
+        "imageMeetsMinimum" => json(tabs::image_meets_minimum(&args[0], num(args, 1, 0.0))),
+        "groupByFrame" => json(tabs::group_by_frame(list(&args[0]))),
+        "emptyCause" => {
+            let o = &args[0];
+            json(tabs::empty_cause(
+                o["error"].as_bool().unwrap_or(false),
+                o["blockedFrames"].as_f64().unwrap_or(0.0),
+                o["reloadPending"].as_bool().unwrap_or(false),
+            ))
+        }
+        "shouldDeflate" => json(zip::should_deflate(opt_s(args, 0))),
+        "zipEntryNames" => {
+            json(zip::zip_entry_names(list(&args[0]).iter().map(|i| {
+                (i["title"].as_str().unwrap_or(""), i["ext"].as_str())
+            })))
+        }
+        "planZip" => json(zip::plan_zip(list(&args[0]))),
+        "resourceId" => json(resources::resource_id(s(args, 0))),
+        "mergeResource" => json(resources::merge_resource(&args[0], &args[1])),
+        "dedupeResources" => json(resources::dedupe_resources(list(&args[0]))),
+        "groupResources" => json(resources::group_resources(list(&args[0]))),
+        "hideCoveredVariants" => json(resources::hide_covered_variants(list(&args[0]))),
+        "rankResources" => json(resources::rank_resources(list(&args[0]))),
+        "bestMatch" => opt(resources::best_match(list(&args[0]))),
+        "bestHeight" => json(resources::best_height(&args[0])),
+        "popupQueue" => {
+            let jobs = list(&args[0]);
+            let shown = queue::popup_queue(
+                jobs.iter().map(|j| j["stage"].as_str().unwrap_or("")),
+                num(args, 1, 3.0) as usize,
+            );
+            let hidden = jobs.len() - shown.len();
+            serde_json::json!({
+                "shown": shown.iter().map(|i| jobs[*i].clone()).collect::<Vec<_>>(),
+                "hidden": hidden,
+            })
+        }
+        "stagesFor" => json(queue::stages_for(&arg(args, 0))),
+        "createJob" => json(queue::create_job(
+            s(args, 0),
+            &args[1],
+            &arg(args, 2),
+            num(args, 3, 0.0),
+        )),
+        "canTransition" => json(queue::can_transition(s(args, 0), s(args, 1))),
+        "transition" => {
+            return Some(queue::transition(
+                &args[0],
+                s(args, 1),
+                num(args, 2, 0.0),
+                args.get(3),
+            ));
+        }
+        "failJob" => json(queue::fail_job(&args[0], num(args, 1, 0.0), &args[2])),
+        "canRetry" => json(queue::can_retry(&args[0])),
+        "retryJob" => return Some(queue::retry_job(&args[0], num(args, 1, 0.0))),
+        "withProgress" => json(queue::with_progress(&args[0], &args[1], num(args, 2, 0.0))),
+        "canRestage" => json(queue::can_restage(&args[0], opt_s(args, 1))),
+        "restage" => return Some(queue::restage(&args[0], num(args, 1, 0.0))),
+        "isActive" => json(queue::is_active(args[0]["stage"].as_str().unwrap_or(""))),
+        "isTerminal" => json(queue::is_terminal(args[0]["stage"].as_str().unwrap_or(""))),
+        "isQueued" => json(queue::is_queued(args[0]["stage"].as_str().unwrap_or(""))),
+        "canStop" => json(queue::can_stop(args[0]["stage"].as_str().unwrap_or(""))),
+        "speedMeterTrace" => {
+            let mut m = queue::SpeedMeter::default();
+            let outs: Vec<Value> = list(&args[0])
+                .iter()
+                .map(|e| {
+                    m.update(e[0].as_f64().unwrap_or(0.0), e[1].as_f64().unwrap_or(0.0));
+                    serde_json::json!([m.bytes_per_second(), m.eta_seconds(e[2].as_f64())])
+                })
+                .collect();
+            json(outs)
+        }
+        "inspectDataUrl" => opt(data_url::inspect_data_url(s(args, 0))),
+        "dataHandle" => json(data_url::data_handle(s(args, 0))),
+        "dataLabel" => json(data_url::data_label(s(args, 0), s(args, 1))),
+        "blobLabel" => json(data_url::blob_label(s(args, 0))),
+        "isDataLabel" => json(data_url::is_data_label(s(args, 0))),
+        "isInteresting" => json(hook_data::is_interesting(&arg(args, 0))),
+        "parseHookReport" => json(hook_data::parse_hook_report(&args[0])),
+        "hookCandidates" => json(hook_data::hook_candidates(
+            &arg(args, 0),
+            args[1]["frameId"].as_f64(),
+            args[1]["frameUrl"].as_str(),
+        )),
+        "protectedKeySystems" => json(hook_data::protected_key_systems(&arg::<Vec<String>>(
+            args, 0,
+        ))),
+        "markProtectedFrames" => json(hook_data::mark_protected_frames(
+            list(&args[0]),
+            &entries(&args[1]),
+        )),
+        "mseMissingReason" => json(hook_data::mse_missing_reason(
+            args[0].as_bool().unwrap_or(false),
+            args[1].as_bool().unwrap_or(false),
+        )),
+        "markMseResources" => json(hook_data::mark_mse_resources(
+            list(&args[0]),
+            &entries(&args[1]),
+            &args.get(2).map(entries).unwrap_or_default(),
+        )),
+        "safeAbs" => opt(metadata::safe_abs(args.first(), s(args, 1))),
+        "mediaTypeOfMime" => opt(metadata::media_type_of_mime(opt_s(args, 0))),
+        "mediaFromMetaTags" => json(metadata::media_from_meta_tags(
+            &arg::<Vec<_>>(args, 0),
+            s(args, 1),
+        )),
+        "mediaFromJsonLd" => json(metadata::media_from_json_ld(s(args, 0), s(args, 1))),
+        "mediaFromLinks" => json(metadata::media_from_links(
+            &arg::<Vec<_>>(args, 0),
+            s(args, 1),
+        )),
+        "mediaFromFeed" => json(metadata::media_from_feed(s(args, 0), s(args, 1))),
+        "detectSubtitleFormat" => json(subtitles::detect_subtitle_format(s(args, 0))),
+        "parseTimestamp" => opt(subtitles::parse_timestamp(s(args, 0))),
+        "parseVtt" => json(subtitles::parse_vtt(s(args, 0))),
+        "timestampMapOffset" => opt(subtitles::timestamp_map_offset(s(args, 0))),
+        "stitchVttSegments" => json(subtitles::stitch_vtt_segments(
+            &strs(&args[0]).collect::<Vec<_>>(),
+        )),
+        "parseTtml" => json(subtitles::parse_ttml(s(args, 0))),
+        "formatSrt" => json(subtitles::format_srt(&arg::<Vec<_>>(args, 0))),
+        "formatVtt" => json(subtitles::format_vtt(&arg::<Vec<_>>(args, 0))),
+        "parseSubtitles" => json(subtitles::parse_subtitles(s(args, 0))),
+        "toSrt" => opt(subtitles::to_srt(s(args, 0))),
+        "decodeSubtitleBytes" => json(subtitles::decode_subtitle_bytes(&bytes(&args[0]))),
+        "mdatPayloads" => json(
+            subtitles::mdat_payloads(&bytes(&args[0]))
+                .iter()
+                .map(|p| serde_json::json!({ "$bytes": p }))
+                .collect::<Vec<_>>(),
+        ),
+        "cuesFromBytes" => json(subtitles::cues_from_bytes(&bytes(&args[0]))),
+        "assembleCues" => json(subtitles::assemble_cues(
+            &list(&args[0]).iter().map(bytes).collect::<Vec<_>>(),
+        )),
+        "parseInit" => opt(mse::parse_init(&bytes(&args[0]))),
+        "parseFragment" => opt(mse::parse_fragment(&bytes(&args[0]))),
+        "mediaStartInInit" => opt(mse::media_start_in_init(&bytes(&args[0]))),
+        "chunkSignature" => json(mse::chunk_signature(&bytes(&args[0]))),
+        "planParts" => json(mse::plan_parts(&arg::<Vec<_>>(args, 0))),
+        "classifierTrace" => {
+            let mut c = mse::ChunkClassifier::default();
+            json(
+                list(&args[0])
+                    .iter()
+                    .map(|call| {
+                        c.classify_all(
+                            call[0].as_str().unwrap_or(""),
+                            call[1].as_f64().unwrap_or(0.0),
+                            &bytes(&call[2]),
+                            call[3].as_f64().unwrap_or(0.0),
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            )
+        }
+        "exceedsHeldLimit" => json(data_url::exceeds_held_limit(
+            num(args, 0, 0.0),
+            opt_s(args, 1).unwrap_or("data"),
+        )),
         _ => return None,
     };
     Some(Ok(v))
@@ -334,4 +559,24 @@ fn planner_matches_typescript() {
 #[test]
 fn requests_match_typescript() {
     replay("requests.jsonl", 1500);
+}
+
+#[test]
+fn ui_helpers_match_typescript() {
+    replay("ui.jsonl", 3500);
+}
+
+#[test]
+fn page_reports_and_metadata_match_typescript() {
+    replay("page.jsonl", 350);
+}
+
+#[test]
+fn subtitles_match_typescript() {
+    replay("subtitles.jsonl", 200);
+}
+
+#[test]
+fn mse_parsing_and_parts_match_typescript() {
+    replay("mse.jsonl", 300);
 }

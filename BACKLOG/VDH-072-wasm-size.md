@@ -1,6 +1,6 @@
 ---
 id: VDH-072
-title: Trim the shared core's wasm (about 840 KB, inlined in every extension page)
+title: Trim the shared core's wasm (about 1 MB, inlined in every extension page)
 status: todo
 priority: P2
 area: build
@@ -12,7 +12,7 @@ depends_on: [VDH-063]
 ## Description
 
 The wasm grew to about 840 KB with VDH-063 (Unicode normalisation tables for NFC/NFKD, IDNA tables from `url`,
-`serde_json`). It is inlined as base64 in the service worker, the offscreen document and each extension page, and
+`serde_json`) and to about 1074 KB with VDH-064. It is inlined as base64 in the service worker, the offscreen document and each extension page, and
 compiled every time a page opens. Page scripts carry none of it (VDH-071).
 
 ## Acceptance criteria
