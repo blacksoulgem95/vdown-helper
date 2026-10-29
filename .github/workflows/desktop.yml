@@ -1,7 +1,7 @@
 name: Desktop
 
-# The Rust side: the shared core (and, from VDH-065, the desktop app). Formatting, lints and tests on every OS the app
-# ships for. Design: docs/desktop.md.
+# The Rust side: the shared core and the desktop engine. Formatting, lints and tests on every OS the app ships for, and
+# the engine against the E2E fixture servers on Linux. Design: docs/desktop.md.
 on:
   push:
   pull_request:
@@ -29,3 +29,30 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
+
+  # The `vdh` binary downloads from the extension's fixture servers; outputs are checked with ffprobe and a full decode.
+  engine-fixtures:
+    runs-on: ubuntu-latest # the same runner (and ffmpeg) the extension's E2E fixtures are generated with
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: ffmpeg (fixture generation and output verification)
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-fixtures-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+      - run: cargo test -p vdh-engine --locked --test fixtures
+        env:
+          VDH_REQUIRE_FIXTURES: '1'

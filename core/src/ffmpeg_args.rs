@@ -21,6 +21,9 @@ pub struct FfmpegArgsInput {
     /// Keep the inputs' own timestamps, shifted together so the earliest starts at zero (two live tracks joined).
     #[serde(default)]
     pub keep_offsets: Option<bool>,
+    /// Report progress as `key=value` lines on stdout (the desktop app reads them; the extension's FFmpeg.wasm does not).
+    #[serde(default)]
+    pub progress: Option<bool>,
     pub output: String,
 }
 
@@ -40,7 +43,11 @@ fn audio_codec_args(i: &FfmpegArgsInput) -> Vec<String> {
 pub fn build_ffmpeg_args(i: &FfmpegArgsInput) -> Vec<String> {
     let s = |x: &str| x.to_string();
     // +genpts: legacy containers often carry no timestamps for copied packets, which Matroska/MP4 muxers refuse.
-    let mut args = vec![s("-hide_banner"), s("-y"), s("-fflags"), s("+genpts")];
+    let mut args = vec![s("-hide_banner"), s("-y")];
+    if i.progress == Some(true) {
+        args.extend([s("-nostats"), s("-progress"), s("pipe:1")]);
+    }
+    args.extend([s("-fflags"), s("+genpts")]);
     let keep = i.keep_offsets == Some(true);
     if keep {
         args.push(s("-copyts"));
@@ -98,4 +105,34 @@ pub fn mime_by_extension(ext: &str) -> Option<&'static str> {
         "ttml" => "application/ttml+xml",
         _ => return None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn progress_is_reported_only_when_asked() {
+        let mut i = FfmpegArgsInput {
+            mode: "video-audio".into(),
+            extension: "mp4".into(),
+            video: "copy".into(),
+            audio: "copy".into(),
+            video_path: "/in/v.ts".into(),
+            audio_path: None,
+            audio_format: "mp3".into(),
+            audio_bitrate: 192.0,
+            keep_offsets: None,
+            progress: None,
+            output: "/out/o.mp4".into(),
+        };
+        assert!(!build_ffmpeg_args(&i).contains(&"-progress".to_string()));
+        i.progress = Some(true);
+        let args = build_ffmpeg_args(&i);
+        assert_eq!(
+            &args[..5],
+            ["-hide_banner", "-y", "-nostats", "-progress", "pipe:1"]
+        );
+        assert_eq!(args.last().map(String::as_str), Some("/out/o.mp4"));
+    }
 }

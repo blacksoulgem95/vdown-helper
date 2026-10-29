@@ -67,9 +67,15 @@ The shapes crossing the boundary are the TypeScript types in `src/types`; they a
 fixtures recorded from the former TypeScript implementation (`core/fixtures/golden/*.jsonl`), replayed by `cargo test`
 natively and by `tests/core-golden.test.ts` through the wasm. The existing vitest suites keep running against the wasm.
 
-### Engine (VDH-065)
+### Engine (VDH-065, queue VDH-075)
 
-- `reqwest` (rustls, system proxy); per-job Referer/Origin/User-Agent; redirects only to http(s).
+- `vdh` CLI: `vdh probe <url>`, `vdh get <url> -o DIR` (a live stream records until it ends or Ctrl+C), `vdh run
+<request.json>` (a request as the extension hands it over). The integration tests drive it against the E2E fixture
+  servers (`e2e/fixture-server.mjs`).
+- Every request is planned again by `vdh-core` and every playlist or manifest is checked for DRM by the engine itself;
+  standalone addresses are probed into the same resource the extension's scan builds, so requests are built alike.
+- `reqwest` (rustls with the system's certificate store, system proxy); per-job Referer/Origin/User-Agent; redirects
+  only to http(s).
 - Segments fetched concurrently into a job folder; progress and byte ranges recorded in SQLite so a job resumes after
   a crash or restart. AES-128 with the `aes` + `cbc` crates.
 - `ffmpeg` / `ffprobe` are sidecar processes. Argument vectors come only from `vdh-core` (a closed set of operations:

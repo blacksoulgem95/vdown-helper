@@ -63,6 +63,7 @@ npm run test:e2e       # real Chromium + fixtures; needs ffmpeg/ffprobe on PATH
 npm run serve:fixtures # the E2E sites, for manual testing
 node scripts/backlog.mjs set VDH-0xx done   # update a task status + the BACKLOG index
 cargo fmt --check && cargo clippy --workspace -- -D warnings && cargo test --workspace   # Rust core / desktop
+cargo run -p vdh-engine --bin vdh -- get <url> -o out   # the desktop engine from a terminal (probe / get / run)
 ```
 
 ## Layout

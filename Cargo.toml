@@ -1,8 +1,8 @@
-# Rust side of vdown-helper: the shared core (compiled to wasm for the extension, used natively by the desktop app) and,
-# later, the desktop app. Design: docs/desktop.md.
+# Rust side of vdown-helper: the shared core (compiled to wasm for the extension, used natively by the desktop app) and
+# the desktop app (desktop/). Design: docs/desktop.md.
 [workspace]
 resolver = "3"
-members = ["core", "core-wasm"]
+members = ["core", "core-wasm", "desktop/engine"]
 
 [workspace.package]
 edition = "2024"
