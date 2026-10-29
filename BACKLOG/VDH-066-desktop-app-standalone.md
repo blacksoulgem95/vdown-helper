@@ -4,7 +4,7 @@ title: Desktop app (Tauri v2): standalone downloads, queue, history, tray
 status: todo
 priority: P1
 area: desktop
-depends_on: [VDH-065]
+depends_on: [VDH-065, VDH-075]
 ---
 
 # VDH-066: Desktop app (Tauri v2): standalone downloads, queue, history, tray
