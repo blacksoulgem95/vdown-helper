@@ -5,11 +5,18 @@
 //! are reproduced in [`js`] and [`url`]. Design: `docs/desktop.md`.
 
 pub mod analyze;
+pub mod compat;
 pub mod dash;
+pub mod ffmpeg_args;
+pub mod filetypes;
 pub mod hls;
 pub mod inspect;
 pub mod js;
 pub mod link;
 pub mod media;
+pub mod request;
+pub mod security;
+pub mod settings;
+pub mod sniff;
 pub mod url;
 pub mod xml;
