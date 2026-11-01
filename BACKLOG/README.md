@@ -99,3 +99,4 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-079](VDH-079-desktop-trim.md) | Desktop trim: preview player, timeline, keyframe snapping | todo | P3 | desktop | VDH-068 |
 | [VDH-080](VDH-080-desktop-soft-subtitles.md) | Desktop subtitles: download, convert and embed as soft subtitles | todo | P3 | desktop | VDH-068 |
 | [VDH-081](VDH-081-opus-native-decoder.md) | Desktop Opus re-encodes: FFmpeg 8 logs an error at the last Opus packet from Matroska | done | P2 | desktop | VDH-068 |
+| [VDH-082](VDH-082-no-remote-ffmpeg-core-url.md) | Web Store "remotely hosted code": FFmpeg.wasm's unpkg fallback in the bundled worker | in-progress | P0 | build | - |
