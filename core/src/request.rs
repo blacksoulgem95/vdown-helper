@@ -633,7 +633,7 @@ pub fn build_request(
     req.estimated_bytes = estimated;
 
     let plan = plan_from_request(&req, limits_of(settings));
-    // May be empty for a source of unknown type: the file then keeps no extension and Chrome picks one.
+    // May be empty for a source of unknown type: a Chrome download is then left for Chrome to name (runner.ts).
     let ext = plan.extension;
     let typed = js::trim(&choices.filename);
     let base = if !typed.is_empty() {

@@ -179,7 +179,9 @@ export async function originsNeedingAccess(inspections: Inspections, pageUrl: st
     const sample = samples[origin];
     // Never probe private-network targets on a page's say-so.
     const probe =
-      sample && mayExtensionFetch(sample, pageUrl) ? await probeHeaders(sample, fetch, 'omit') : undefined;
+      sample && mayExtensionFetch(sample, pageUrl)
+        ? await probeHeaders(sample, fetch, 'omit', false)
+        : undefined;
     // Any HTTP response (even 4xx) means the request was readable; only a blocked fetch needs permission.
     if (!probe || (!probe.ok && probe.kind !== 'http')) missing.push(origin);
   }

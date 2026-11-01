@@ -3732,6 +3732,42 @@ await step('queue: the popup keeps 3 finished jobs in view and the rest behind "
 });
 
 await shot(popup, 'popup-final');
+// ---------------------------------------------------------------------------------------------------------------
+// VDH-083: scripts (stream.php?id=…) that stream an MP4 without saying so on HEAD
+await step(
+  'script-served MP4: a <video>, a link typed video/mp4 and a download link are found, other script links are never requested',
+  async () => {
+    const pg = await ctx.newPage();
+    await pg.goto(`${A}/pages/script.html`);
+    const id = await tabOf(`${A}/pages/script.html`);
+    const { pop, st } = await scanTab(id);
+    const found = (part) => st.resources.find((r) => r.url.includes(part));
+    for (const part of ['stream.php', 'watch.php', 'dl.php']) {
+      const r = found(part);
+      assert(r, `${part} not listed: ${st.resources.map((x) => x.url).join(', ')}`);
+      assert(
+        r.format === 'mp4' && r.downloadability.status === 'downloadable',
+        `${part}: ${r.format} ${JSON.stringify(r.downloadability)}`,
+      );
+    }
+    assert(found('stream.php').mediaType === 'video', `mediaType ${found('stream.php').mediaType}`);
+    // a request runs the script: a link that does not say it is media is never probed
+    assert(
+      !servers.state.hits.some((h) => h.includes('/__script/logout.php')),
+      'the logout link was requested',
+    );
+    const r = found('watch.php');
+    await pop.locator(`[data-resource-id="${r.id}"]`).getByRole('button', { name: 'DOWNLOAD' }).click();
+    const job = await jobFinished((j) => j.request.resourceId === r.id);
+    assert(job.stage === 'completed', `stage ${job.stage}: ${JSON.stringify(job.error)}`);
+    assert(job.request.filename.endsWith('.mp4'), `name ${job.request.filename}`);
+    const p = probe(fileOf(job));
+    assert(p.codecs.includes('h264') && p.codecs.includes('aac'), `codecs ${p.codecs}`);
+    await pop.close();
+    await pg.close();
+  },
+);
+
 await ctx.close();
 
 // ---- Italian UI (separate browser instance with an Italian UI language)

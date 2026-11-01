@@ -39,6 +39,11 @@ export function formatFromUrl(url: string): MediaFormat | undefined {
   return core.formatFromUrl(url) as MediaFormat | undefined;
 }
 
+/** The format a file extension (without the dot) names. */
+export function formatFromExtension(ext: string): MediaFormat | undefined {
+  return core.formatFromExtension(ext) as MediaFormat | undefined;
+}
+
 /** Subtitle documents that are saved or converted as text (data; held to the core by tests/core-golden). */
 export const SUBTITLE_FILE_FORMATS: ReadonlySet<MediaFormat> = new Set(['vtt', 'srt', 'ttml']);
 

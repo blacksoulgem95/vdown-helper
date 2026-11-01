@@ -614,6 +614,11 @@ pub fn format_from_url(url: &str) -> Option<String> {
     media::format_from_url(url).map(Into::into)
 }
 
+#[wasm_bindgen(js_name = formatFromExtension)]
+pub fn format_from_extension(ext: &str) -> Option<String> {
+    media::format_from_extension(&ext.to_lowercase()).map(Into::into)
+}
+
 #[wasm_bindgen(js_name = mediaTypeOf)]
 pub fn media_type_of(format: &str) -> String {
     media::media_type_of(format).into()

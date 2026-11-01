@@ -168,17 +168,19 @@ function scanElements(c: Collector, doc: Document): void {
   const base = doc.baseURI;
   for (const root of roots(doc)) {
     for (const media of root.querySelectorAll<HTMLMediaElement>('video, audio')) {
-      const isVideo = media instanceof HTMLVideoElement;
+      // by tag name: an element of a same-origin iframe is not an instance of this document's HTMLVideoElement
+      const video = media.localName === 'video' ? (media as HTMLVideoElement) : undefined;
+      const isVideo = video !== undefined;
       const extra: Partial<RawCandidate> = { mediaType: isVideo ? 'video' : 'audio' };
       if (Number.isFinite(media.duration) && media.duration > 0) extra.durationSec = media.duration;
-      if (isVideo && media.videoWidth > 0) {
-        extra.width = media.videoWidth;
-        extra.height = media.videoHeight;
+      if (video && video.videoWidth > 0) {
+        extra.width = video.videoWidth;
+        extra.height = video.videoHeight;
       }
       const title = media.getAttribute('title') ?? media.getAttribute('aria-label') ?? undefined;
       if (title) extra.title = title.slice(0, 300);
-      if (isVideo && media.poster) {
-        const poster = abs(media.poster, base);
+      if (video?.poster) {
+        const poster = abs(video.poster, base);
         if (poster && /^https?:/i.test(poster)) extra.poster = poster;
       }
       for (const track of media.querySelectorAll('track')) {
@@ -216,14 +218,19 @@ function scanElements(c: Collector, doc: Document): void {
     // Standalone <source> not inside media elements (e.g. inside <picture> is irrelevant; keep only media-looking ones).
     for (const a of root.querySelectorAll<HTMLAnchorElement>('a[href]')) {
       const href = a.getAttribute('href');
-      if (href && (MEDIA_EXT.test(href) || /^data:(video|audio)\//i.test(href) || /^blob:/i.test(href)))
-        addUrl(
-          c,
-          href,
-          base,
-          'dom-link',
-          a.textContent?.trim() ? { title: a.textContent.trim().slice(0, 200) } : {},
-        );
+      // A link the page itself says is media (`type="video/mp4"`, `download="clip.mp4"`) counts whatever its address
+      // looks like (stream.php?id=12). Other links to scripts are never probed: a request runs the script.
+      const type = a.getAttribute('type')?.trim() ?? '';
+      const declared = /^(video|audio)\//i.test(type);
+      const hinted = declared || MEDIA_EXT.test(a.getAttribute('download') ?? '');
+      if (
+        href &&
+        (hinted || MEDIA_EXT.test(href) || /^data:(video|audio)\//i.test(href) || /^blob:/i.test(href))
+      )
+        addUrl(c, href, base, 'dom-link', {
+          ...(a.textContent?.trim() ? { title: a.textContent.trim().slice(0, 200) } : {}),
+          ...(declared ? { mimeType: type } : {}),
+        });
     }
   }
 }
@@ -422,7 +429,7 @@ export async function scanAsync(): Promise<ScanReport> {
     if (!found) {
       // A media element playing from a blob: URL we cannot read is most likely fed through MediaSource. List it as a
       // video that can be captured (if the page hook saw how; the background decides), instead of hiding it.
-      if (p.counted && p.el instanceof HTMLMediaElement && /^blob:/i.test(p.url)) {
+      if (p.counted && p.el && /^(video|audio)$/.test(p.el.localName) && /^blob:/i.test(p.url)) {
         const id = dataHandle(p.url);
         mseVideos.set(id, p.el);
         if (!uncounted.has(p.url)) {

@@ -1,0 +1,14 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Script-served video</title>
+  </head>
+  <body>
+    <!-- VDH-083: addresses of scripts that stream an MP4 (e2e/server.mjs /__script/) -->
+    <video src="/__script/stream.php?case=html&id=1" muted></video>
+    <a href="/__script/watch.php?case=html&id=2" type="video/mp4">Watch</a>
+    <a href="/__script/dl.php?case=disposition&id=3" download="clip.mp4">Save the clip</a>
+    <a href="/__script/logout.php">Log out</a>
+  </body>
+</html>

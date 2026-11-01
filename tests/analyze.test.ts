@@ -85,6 +85,52 @@ describe('direct files', () => {
     const [r] = await analyzeCandidates([cand('https://cdn.example/x', { method: 'dom-link' })], ctx, f);
     expect(r?.downloadability).toMatchObject({ status: 'unsupported', reason: 'unsupported-format' });
   });
+  describe('a script-served file (stream.php?id=…) whose HEAD says nothing useful', () => {
+    const url = 'https://site.example/stream.php?id=12';
+    // the first bytes of an MP4: a box size, then "ftyp" and the brand
+    const MP4 = [0, 0, 0, 0x20, ...[...'ftypisom'].map((c) => c.charCodeAt(0)), 0, 0, 2, 0];
+    const vague = (extra: Partial<Extract<ProbeResult, { ok: true }>>): ProbeResult => ({
+      ...(okHead('text/html') as Extract<ProbeResult, { ok: true }>),
+      ...extra,
+    });
+    it('is told by its first bytes, from a <video> and from a link alike', async () => {
+      for (const method of ['dom-element', 'dom-link'] as const) {
+        const f = fetcher({ [url]: vague({ sample: { contentType: 'text/html', bytes: MP4 } }) });
+        const [r] = await analyzeCandidates([cand(url, { method })], ctx, f);
+        expect(r, method).toMatchObject({
+          format: 'mp4',
+          mimeType: 'video/mp4',
+          mediaType: 'video',
+          downloadability: { status: 'downloadable', reason: 'ok' },
+        });
+      }
+    });
+    it('trusts the type a GET declares over the one HEAD gave', async () => {
+      const f = fetcher({ [url]: vague({ sample: { contentType: 'video/webm', bytes: [] } }) });
+      const [r] = await analyzeCandidates([cand(url, { method: 'dom-link' })], ctx, f);
+      expect(r).toMatchObject({ format: 'webm', mimeType: 'video/webm' });
+    });
+    it('takes the format from the Content-Disposition name when the bytes say nothing', async () => {
+      const f = fetcher({
+        [url]: vague({ contentType: 'application/octet-stream', dispositionName: 'clip.mp4' }),
+      });
+      const [r] = await analyzeCandidates([cand(url, { method: 'dom-link' })], ctx, f);
+      expect(r).toMatchObject({ format: 'mp4', downloadability: { status: 'downloadable' } });
+    });
+    it('reads a playlist a script serves as text/html as a playlist', async () => {
+      const bytes = [...new TextEncoder().encode(MEDIA.slice(0, 200))];
+      const f = fetcher({ [url]: okText(MEDIA, url, 'text/html') });
+      f.head = async () => vague({ sample: { contentType: 'text/html', bytes } });
+      const [r] = await analyzeCandidates([cand(url, { method: 'dom-link' })], ctx, f);
+      expect(r).toMatchObject({ format: 'hls', kind: 'hls-media' });
+    });
+    it('still refuses a page that is really a page', async () => {
+      const bytes = [...new TextEncoder().encode('<!doctype html><title>x</title>')];
+      const f = fetcher({ [url]: vague({ sample: { contentType: 'text/html', bytes } }) });
+      const [r] = await analyzeCandidates([cand(url, { method: 'dom-link' })], ctx, f);
+      expect(r?.downloadability).toMatchObject({ status: 'unsupported', reason: 'unsupported-format' });
+    });
+  });
   it('ignores unsafe URLs entirely', async () => {
     const f = fetcher({});
     expect(await analyzeCandidates([cand('javascript:alert(1)'), cand('file:///x.mp4')], ctx, f)).toEqual([]);

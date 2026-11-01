@@ -67,14 +67,19 @@ function chromePath(req: DownloadRequest, ascii = false): string {
   return ascii ? asciiFileName(path) : path;
 }
 
-/** chrome.downloads.download, retrying once with an ASCII-only name if Chrome rejects the file name. */
-export async function startChromeDownload(url: string, req: DownloadRequest): Promise<number> {
+/**
+ * chrome.downloads.download, retrying once with an ASCII-only name if Chrome rejects the file name. `named` false: the
+ * type of the file is unknown (its headers could not be read), so it would be saved without an extension; Chrome then
+ * names it itself from the response (its type or `Content-Disposition`), without the naming template or subfolder.
+ */
+export async function startChromeDownload(url: string, req: DownloadRequest, named = true): Promise<number> {
   const options = (filename: string): chrome.downloads.DownloadOptions => ({
     url,
-    filename,
+    ...(named ? { filename } : {}),
     conflictAction: 'uniquify',
     saveAs: req.saveAs === true,
   });
+  if (!named) return chrome.downloads.download(options(''));
   try {
     return await chrome.downloads.download(options(chromePath(req)));
   } catch (e) {
@@ -464,7 +469,9 @@ async function sendHeldBytes(job: DownloadJob): Promise<void> {
 async function runNative(job: DownloadJob): Promise<void> {
   let downloadId: number;
   try {
-    downloadId = await startChromeDownload(job.request.sourceUrl, job.request);
+    // the limits do not change the extension; an empty one means a source of unknown type
+    const named = planFromRequest(job.request, APP_LIMITS).extension !== '';
+    downloadId = await startChromeDownload(job.request.sourceUrl, job.request, named);
   } catch (e) {
     return void (await settle(
       job.id,
