@@ -9,7 +9,12 @@ export interface SiteConfig {
   releasesUrl: string;
   repoUrl: string;
   siteUrl: string;
+  /** The latest release's download folder: the desktop installers are released under fixed names. */
+  desktopDownloadBase: string;
 }
+
+/** The desktop installers' fixed release names (desktop/release-assets.json), by key. */
+export type DesktopAssets = Record<string, { target: string; kind: string; file: string }>;
 
 export const LANGS = ['en', 'it'] as const;
 export type Lang = (typeof LANGS)[number];
@@ -44,6 +49,7 @@ export function renderPage(
   config: SiteConfig,
   lang: Lang,
   checks: string,
+  desktop: DesktopAssets,
 ): string {
   const en = lang === 'en';
   const root = en ? '' : '../';
@@ -65,6 +71,10 @@ export function renderPage(
     releasesUrl: config.releasesUrl,
     repoUrl: config.repoUrl,
     checks,
+    // {{dl.windowsX64Setup}} ...: the latest release's installer under its fixed name
+    ...Object.fromEntries(
+      Object.entries(desktop).map(([key, a]) => [`dl.${key}`, `${config.desktopDownloadBase}${a.file}`]),
+    ),
   };
   const html = applyBlocks(template, { store, nostore: !store });
   return html.replace(/\{\{(t:)?([a-zA-Z0-9.]+)\}\}/g, (_m, isText: string | undefined, key: string) => {

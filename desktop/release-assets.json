@@ -1,0 +1,42 @@
+{
+  "windowsX64Setup": {
+    "target": "x86_64-pc-windows-msvc",
+    "kind": "setup",
+    "file": "vdown-helper-desktop-windows-x64-setup.exe"
+  },
+  "windowsX64Msi": {
+    "target": "x86_64-pc-windows-msvc",
+    "kind": "msi",
+    "file": "vdown-helper-desktop-windows-x64.msi"
+  },
+  "windowsArm64Setup": {
+    "target": "aarch64-pc-windows-msvc",
+    "kind": "setup",
+    "file": "vdown-helper-desktop-windows-arm64-setup.exe"
+  },
+  "windowsArm64Msi": {
+    "target": "aarch64-pc-windows-msvc",
+    "kind": "msi",
+    "file": "vdown-helper-desktop-windows-arm64.msi"
+  },
+  "macosDmg": {
+    "target": "universal-apple-darwin",
+    "kind": "dmg",
+    "file": "vdown-helper-desktop-macos-universal.dmg"
+  },
+  "linuxAppImage": {
+    "target": "x86_64-unknown-linux-gnu",
+    "kind": "appimage",
+    "file": "vdown-helper-desktop-linux-x86_64.AppImage"
+  },
+  "linuxDeb": {
+    "target": "x86_64-unknown-linux-gnu",
+    "kind": "deb",
+    "file": "vdown-helper-desktop-linux-x86_64.deb"
+  },
+  "linuxRpm": {
+    "target": "x86_64-unknown-linux-gnu",
+    "kind": "rpm",
+    "file": "vdown-helper-desktop-linux-x86_64.rpm"
+  }
+}

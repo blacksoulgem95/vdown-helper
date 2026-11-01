@@ -10,6 +10,7 @@ on:
       - 'store-assets/**'
       - 'scripts/build-site.mjs'
       - 'scripts/lib/site.ts'
+      - 'desktop/release-assets.json' # the desktop installers' release names
       - 'public/logo.svg'
       - 'e2e/run.mjs' # the page quotes how many end-to-end checks there are
       - '.github/workflows/pages.yml'

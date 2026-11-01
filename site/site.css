@@ -503,6 +503,40 @@ h4 {
   border-radius: 6px;
 }
 
+/* desktop app downloads */
+.desktop {
+  padding: 40px 0 100px;
+}
+.narrow-lead {
+  max-width: 720px;
+  margin: 14px auto 0;
+}
+.dl {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin: 36px 0 24px;
+}
+.dl-os {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 26px 24px 24px;
+}
+.dl-os h3 {
+  font-size: 21px;
+}
+.dl-os .note {
+  margin: 6px 0 18px;
+}
+.dl-more {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 16px 0 0;
+  font-size: 14px;
+}
+
 /* faq */
 .faq {
   padding: 80px 0;
@@ -609,7 +643,8 @@ details p {
   .pillars {
     grid-template-columns: repeat(2, 1fr);
   }
-  .steps {
+  .steps,
+  .dl {
     grid-template-columns: 1fr;
   }
 }

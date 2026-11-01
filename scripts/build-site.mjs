@@ -20,6 +20,8 @@ const out = join(site, 'dist');
 const read = (p) => readFileSync(p, 'utf8');
 
 const config = JSON.parse(read(join(site, 'config.json')));
+// the desktop installers' fixed release names, shared with scripts/desktop/smoke-test.mjs
+const desktop = JSON.parse(read(join(root, 'desktop/release-assets.json')));
 const template = read(join(site, 'template.html'));
 const strings = Object.fromEntries(LANGS.map((l) => [l, JSON.parse(read(join(site, 'i18n', `${l}.json`)))]));
 const gap = missingKeys(strings.en, strings.it);
@@ -48,7 +50,7 @@ for (const lang of LANGS) {
   copyFileSync(join(shots, 'marquee.png'), join(dest, 'marquee.png'));
   const dir = lang === 'en' ? out : join(out, lang);
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, 'index.html'), renderPage(template, strings[lang], config, lang, checks));
+  writeFileSync(join(dir, 'index.html'), renderPage(template, strings[lang], config, lang, checks, desktop));
 }
 writeFileSync(join(out, '.nojekyll'), '');
 writeFileSync(join(out, 'robots.txt'), `User-agent: *\nAllow: /\nSitemap: ${config.siteUrl}sitemap.xml\n`);

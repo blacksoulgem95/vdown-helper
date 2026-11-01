@@ -1,7 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { applyBlocks, checksLabel, missingKeys, renderPage, type SiteConfig } from '../scripts/lib/site.ts';
+import {
+  applyBlocks,
+  checksLabel,
+  missingKeys,
+  renderPage,
+  type DesktopAssets,
+  type SiteConfig,
+} from '../scripts/lib/site.ts';
 
 const root = resolve(import.meta.dirname, '..');
 const read = (p: string) => readFileSync(resolve(root, p), 'utf8');
@@ -11,6 +18,7 @@ const strings = {
 };
 const template = read('site/template.html');
 const config = JSON.parse(read('site/config.json')) as SiteConfig;
+const desktop = JSON.parse(read('desktop/release-assets.json')) as DesktopAssets;
 type Shot = { kind: string; page: string; panel: string };
 const COPY = JSON.parse(read('store/copy.json')) as Record<'en' | 'it', { screenshots: Shot[] }>;
 
@@ -22,24 +30,37 @@ describe('website (VDH-052)', () => {
   });
   it('every placeholder resolves in both languages, and nothing is left unreplaced', () => {
     for (const lang of ['en', 'it'] as const) {
-      const html = renderPage(template, strings[lang], config, lang, '110+');
+      const html = renderPage(template, strings[lang], config, lang, '110+', desktop);
       expect(html).not.toMatch(/\{\{|\}\}|<!--if:|<!--endif:/);
       expect(html).toContain(`<html lang="${lang}">`);
     }
   });
   it('without a store listing, the main button leads to the 3-step install; with one, to the store', () => {
-    const soon = renderPage(template, strings.en, { ...config, storeUrl: '' }, 'en', '110+');
+    const soon = renderPage(template, strings.en, { ...config, storeUrl: '' }, 'en', '110+', desktop);
     expect(soon).toContain('href="#install"');
     expect(soon).toContain(config.downloadUrl);
     expect(soon).not.toContain('Add it from the Chrome Web Store');
     const store = 'https://chromewebstore.google.com/detail/example';
-    const live = renderPage(template, strings.en, { ...config, storeUrl: store }, 'en', '110+');
+    const live = renderPage(template, strings.en, { ...config, storeUrl: store }, 'en', '110+', desktop);
     expect(live).toContain(`href="${store}"`);
     expect(live).toContain('Add to Chrome');
     expect(live).not.toContain('coming soon');
   });
+  it('links every desktop installer under the fixed name the release workflow gives it (VDH-086)', () => {
+    const html = renderPage(template, strings.it, config, 'it', '110+', desktop);
+    const files = Object.values(desktop).map((a) => a.file);
+    expect(files).toHaveLength(8);
+    for (const file of files)
+      expect(html).toContain(
+        `href="https://github.com/blacksoulgem95/vdown-helper/releases/latest/download/${file}"`,
+      );
+    // one installer per target and kind, as scripts/desktop/smoke-test.mjs looks them up
+    const pairs = Object.values(desktop).map((a) => `${a.target}/${a.kind}`);
+    expect(new Set(pairs).size).toBe(pairs.length);
+    expect(html).toContain('id="desktop"');
+  });
   it('loads nothing from other sites: every src and stylesheet is local', () => {
-    const html = renderPage(template, strings.it, config, 'it', '110+');
+    const html = renderPage(template, strings.it, config, 'it', '110+', desktop);
     for (const m of html.matchAll(/(?:src|href)="([^"]+)"/g)) {
       const url = m[1] as string;
       if (/<link rel="stylesheet"|<img|<script/.test(html.slice(Math.max(0, (m.index ?? 0) - 40), m.index)))
@@ -48,12 +69,14 @@ describe('website (VDH-052)', () => {
     expect(html).not.toMatch(/<script/);
   });
   it('escapes text, keeps known blocks and refuses unknown ones', () => {
-    expect(renderPage('<p>{{t:x}}</p>', { x: '<b>&' }, config, 'en', '1')).toBe('<p>&lt;b&gt;&amp;</p>');
+    expect(renderPage('<p>{{t:x}}</p>', { x: '<b>&' }, config, 'en', '1', desktop)).toBe(
+      '<p>&lt;b&gt;&amp;</p>',
+    );
     expect(
       applyBlocks('a<!--if:on-->B<!--endif:on--><!--if:off-->C<!--endif:off-->', { on: true, off: false }),
     ).toBe('aB');
     expect(() => applyBlocks('<!--if:x-->y<!--endif:x-->', {})).toThrow();
-    expect(() => renderPage('{{t:nope}}', {}, config, 'en', '1')).toThrow(/nope/);
+    expect(() => renderPage('{{t:nope}}', {}, config, 'en', '1', desktop)).toThrow(/nope/);
   });
   it('rounds the number of end-to-end checks down', () => {
     expect(checksLabel(117)).toBe('110+');
