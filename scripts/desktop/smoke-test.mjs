@@ -74,34 +74,32 @@ const run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit' });
 const shipped = [];
 
 if (target.includes('windows')) {
+  const local = join(process.env.LOCALAPPDATA ?? '', 'vdown-helper');
+  const programFiles = join(process.env.ProgramFiles ?? 'C:\\Program Files', 'vdown-helper');
+  // MSI first, on a clean machine: Tauri's MSI reuses the folder of an earlier install it finds in the registry
+  // (an NSIS one included), so after NSIS it would land in that folder instead
+  const msi = one(/\.msi$/);
+  const log = join(process.env.RUNNER_TEMP ?? 'C:\\vdh', 'vdh-msi.log');
+  const installed = spawnSync('msiexec', ['/i', msi, '/qn', '/norestart', '/l*v', log], { stdio: 'inherit' });
+  const msiExe = [programFiles, local].map((d) => join(d, 'vdown-helper.exe')).find((f) => existsSync(f));
+  if (installed.status !== 0 || !msiExe) {
+    const text = existsSync(log) ? readFileSync(log, 'utf16le') : '(no log)';
+    const dirs = text
+      .split('\n')
+      .filter((l) => /INSTALLDIR|APPLICATIONFOLDER/.test(l))
+      .slice(-10)
+      .join('\n');
+    throw new Error(`msiexec exit ${installed.status}, app not found\n${dirs}\n${text.slice(-2000)}`);
+  }
+  selfTest(msiExe);
+  run('msiexec', ['/x', msi, '/qn', '/norestart']);
+  shipped.push(msi);
   // NSIS, per-user: installs under %LOCALAPPDATA%\vdown-helper
   const setup = one(/-setup\.exe$/);
   run(setup, ['/S']);
-  const dir = join(process.env.LOCALAPPDATA ?? '', 'vdown-helper');
-  selfTest(join(dir, 'vdown-helper.exe'));
-  run(join(dir, 'uninstall.exe'), ['/S']);
+  selfTest(join(local, 'vdown-helper.exe'));
+  run(join(local, 'uninstall.exe'), ['/S']);
   shipped.push(setup);
-  // MSI, per-machine (the runner is an administrator), into a known folder, with a log to show when it fails
-  const msi = one(/\.msi$/);
-  const dir2 = join(process.env.RUNNER_TEMP ?? 'C:\\vdh', 'vdh-msi');
-  const log = join(process.env.RUNNER_TEMP ?? 'C:\\vdh', 'vdh-msi.log');
-  const installed = spawnSync(
-    'msiexec',
-    ['/i', msi, '/qn', '/norestart', `INSTALLDIR=${dir2}`, '/l*v', log],
-    {
-      stdio: 'inherit',
-    },
-  );
-  const exe = join(dir2, 'vdown-helper.exe');
-  if (installed.status !== 0 || !existsSync(exe)) {
-    const text = existsSync(log) ? readFileSync(log, 'utf16le') : '(no log)';
-    throw new Error(
-      `msiexec exit ${installed.status}, ${exe} present: ${existsSync(exe)}\n${text.slice(-3000)}`,
-    );
-  }
-  selfTest(exe);
-  run('msiexec', ['/x', msi, '/qn', '/norestart']);
-  shipped.push(msi);
 } else if (target.includes('apple')) {
   const dmg = one(/\.dmg$/);
   const mount = '/tmp/vdh-dmg';
