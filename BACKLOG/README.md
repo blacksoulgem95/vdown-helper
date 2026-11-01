@@ -103,5 +103,5 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-083](VDH-083-script-served-media.md) | Script-served media (stream.php?id=…): sniff the first bytes, Content-Disposition, typed links, names | done | P1 | lib | VDH-082 |
 | [VDH-084](VDH-084-endless-script-streams.md) | Endless script streams (live.php): record until Stop instead of a download that never ends | todo | P2 | background | VDH-083 |
 | [VDH-085](VDH-085-desktop-updater.md) | Desktop auto-update (signed latest.json, install after the user confirms) | blocked | P2 | desktop | VDH-069 |
-| [VDH-086](VDH-086-site-desktop-downloads.md) | Site: desktop app download section (per OS, from the latest release) | in-progress | P3 | docs | VDH-069 |
+| [VDH-086](VDH-086-site-desktop-downloads.md) | Site: desktop app download section (per OS, from the latest release) | done | P3 | docs | VDH-069 |
 | [VDH-087](VDH-087-desktop-ui-shared-styles.md) | Desktop window: the shared components lost the styles only they use | in-progress | P1 | desktop | VDH-066 |
