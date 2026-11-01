@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
-import type { InlineConfig } from 'vite';
+import type { InlineConfig, Plugin } from 'vite';
 
 export const ROOT = resolve(import.meta.dirname);
 export const SRC = resolve(ROOT, 'src');
@@ -20,6 +20,26 @@ export function baseConfig(): InlineConfig {
   };
 }
 
+/**
+ * FFmpeg.wasm's worker falls back to a core on unpkg.com when `load()` is given no `coreURL`. The extension always
+ * passes its bundled core (`vendor/ffmpeg`), but the Web Store refuses a script that names remote code at all, so the
+ * default is replaced by the bundled copy at build time. The build fails if the library changes and the replacement no
+ * longer applies (`check:dist` also rejects any remote address in the shipped scripts).
+ */
+function bundledFfmpegCore(): Plugin {
+  const constants = /@ffmpeg[\\/]ffmpeg[\\/]dist[\\/]esm[\\/]const\.js$/;
+  const remote = /export const CORE_URL = `https:\/\/unpkg\.com\/[^`]*`;/;
+  return {
+    name: 'vdh-bundled-ffmpeg-core',
+    transform(code, id) {
+      if (!constants.test(id)) return null;
+      if (!remote.test(code))
+        this.error('@ffmpeg/ffmpeg changed: its default core address was not found in const.js');
+      return code.replace(remote, "export const CORE_URL = '/vendor/ffmpeg/ffmpeg-core.js';");
+    },
+  };
+}
+
 export function pagesConfig(): InlineConfig {
   const base = baseConfig();
   return {
@@ -27,7 +47,9 @@ export function pagesConfig(): InlineConfig {
     root: SRC,
     base: './',
     publicDir: resolve(ROOT, 'public'),
-    plugins: [react(), tailwindcss()],
+    plugins: [react(), tailwindcss(), bundledFfmpegCore()],
+    // the FFmpeg.wasm worker is a separate bundle with its own plugins
+    worker: { plugins: () => [bundledFfmpegCore()] },
     build: {
       ...base.build,
       outDir: DIST,

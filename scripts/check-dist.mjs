@@ -137,6 +137,22 @@ for (const file of walk(dist).filter((f) => f.endsWith('.js') && !f.includes(`${
     fail(`${rel}: remote import`);
 }
 
+// No web address in anything that ships, third-party code (vendor/) included: the Web Store refuses an extension
+// whose code names remotely hosted code at all, even a fallback that never runs (FFmpeg.wasm's unpkg default once
+// did; vite.shared.ts replaces it). Only inert strings are allowed: XML namespaces and documentation links that
+// appear in error messages or comments.
+const INERT = [
+  /^http:\/\/www\.w3\.org\/(1999\/xlink|2000\/svg|XML\/1998\/namespace|1998\/Math\/MathML)$/,
+  /^https:\/\/react\.dev\/errors\/$/,
+  /^https:\/\/emscripten\.org\/docs\/compiling\/Dynamic-Linking\.html$/,
+  /^https:\/\/tailwindcss\.com$/,
+];
+for (const file of walk(dist).filter((f) => /\.(js|mjs|html|css|json)$/.test(f))) {
+  const rel = file.slice(dist.length + 1);
+  for (const [url] of readFileSync(file, 'utf8').matchAll(/https?:\/\/[A-Za-z0-9._~:/?#@!$&'()*+,;=%-]+/g))
+    if (!INERT.some((ok) => ok.test(url))) fail(`${rel}: names a web address (${url.slice(0, 80)})`);
+}
+
 // The Rust core (vdh-core as wasm, inlined as base64: "AGFzbQ" is the wasm magic number) must be in the service worker,
 // which parses playlists and re-checks every request.
 if (!read('background.js').includes('AGFzbQ'))
