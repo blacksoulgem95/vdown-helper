@@ -1,7 +1,7 @@
 ---
 id: VDH-082
 title: Web Store "remotely hosted code": FFmpeg.wasm's unpkg fallback in the bundled worker
-status: in-progress
+status: done
 priority: P0
 area: build
 depends_on: []
@@ -20,12 +20,12 @@ a URL written inside the call, and it skipped `vendor/`.
 
 ## Acceptance criteria
 
-- [ ] The build replaces the library's default core address with the bundled copy, and fails if the library changes
+- [x] The build replaces the library's default core address with the bundled copy, and fails if the library changes
       so that the replacement no longer applies
-- [ ] `check:dist` scans every shipped script (`vendor/` included) and fails on any http(s) address except a short
+- [x] `check:dist` scans every shipped script (`vendor/` included) and fails on any http(s) address except a short
       allowlist of inert strings (XML namespaces, documentation links in error messages)
-- [ ] FFmpeg.wasm still works: the extension E2E (merges, conversions) passes
-- [ ] CI green on the PR head
+- [x] FFmpeg.wasm still works: the extension E2E (merges, conversions) passes
+- [x] CI green on the PR head
 
 ## Notes
 
@@ -33,3 +33,5 @@ a URL written inside the call, and it skipped `vendor/`.
 - CI: from 1 Nov `rust (macos-14)` was cancelled by GitHub within a second, with no runner assigned (green on 29 Oct;
   every other job green). With the owner's agreement the Desktop matrix moves to `macos-15`; if that is cancelled too,
   the cause is the account's Actions limits, not the image.
+- Done: merged in PR #21 (`3e1dd23`) with every check green on `f2cd1c5` (Desktop runs 41329207668 and 41329203983,
+  check and e2e runs 41329207622 and 41329203961) and the full local suite green on that head.

@@ -99,6 +99,6 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-079](VDH-079-desktop-trim.md) | Desktop trim: preview player, timeline, keyframe snapping | todo | P3 | desktop | VDH-068 |
 | [VDH-080](VDH-080-desktop-soft-subtitles.md) | Desktop subtitles: download, convert and embed as soft subtitles | todo | P3 | desktop | VDH-068 |
 | [VDH-081](VDH-081-opus-native-decoder.md) | Desktop Opus re-encodes: FFmpeg 8 logs an error at the last Opus packet from Matroska | done | P2 | desktop | VDH-068 |
-| [VDH-082](VDH-082-no-remote-ffmpeg-core-url.md) | Web Store "remotely hosted code": FFmpeg.wasm's unpkg fallback in the bundled worker | in-progress | P0 | build | - |
+| [VDH-082](VDH-082-no-remote-ffmpeg-core-url.md) | Web Store "remotely hosted code": FFmpeg.wasm's unpkg fallback in the bundled worker | done | P0 | build | - |
 | [VDH-083](VDH-083-script-served-media.md) | Script-served media (stream.php?id=…): sniff the first bytes, Content-Disposition, typed links, names | in-progress | P1 | lib | VDH-082 |
 | [VDH-084](VDH-084-endless-script-streams.md) | Endless script streams (live.php): record until Stop instead of a download that never ends | todo | P2 | background | VDH-083 |
