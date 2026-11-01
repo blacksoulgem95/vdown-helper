@@ -2,10 +2,12 @@
 // It shares the extension's components, theme, fonts, catalogs and Rust core (src/, _locales/, src/lib/core.ts).
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { build } from 'vite';
 
 const root = resolve(import.meta.dirname, '..');
-const { baseConfig } = await import(resolve(root, 'vite.shared.ts'));
+// a file: URL, not a path: on Windows an absolute path ("D:\...") is not a module specifier
+const { baseConfig } = await import(pathToFileURL(resolve(root, 'vite.shared.ts')).href);
 const react = (await import('@vitejs/plugin-react')).default;
 const tailwindcss = (await import('@tailwindcss/vite')).default;
 
