@@ -1,7 +1,7 @@
 ---
 id: VDH-083
 title: Script-served media (stream.php?id=…): sniff the first bytes, Content-Disposition, typed links, names
-status: in-progress
+status: done
 priority: P1
 area: lib
 depends_on: [VDH-082]
@@ -24,16 +24,16 @@ report):
 
 ## Acceptance criteria
 
-- [ ] When the declared type is vague, the first bytes are read (capped ranged GET, endless streams included) and the
+- [x] When the declared type is vague, the first bytes are read (capped ranged GET, endless streams included) and the
       type a GET declares, the magic numbers (MP4/WebM/…, `#EXTM3U`, `<MPD`) or the `Content-Disposition` name decide
-- [ ] Links the page marks as media (`type="video/…"`, `download="….mp4"`) are listed; other links to scripts are never
+- [x] Links the page marks as media (`type="video/…"`, `download="….mp4"`) are listed; other links to scripts are never
       requested
-- [ ] A Chrome download of a file whose type is still unknown is named by Chrome (type / `Content-Disposition`)
+- [x] A Chrome download of a file whose type is still unknown is named by Chrome (type / `Content-Disposition`)
       instead of saved without an extension
-- [ ] Videos in same-origin iframes are videos
-- [ ] Unit tests, and an E2E step with a script that answers HEAD with text/html and one with octet-stream +
+- [x] Videos in same-origin iframes are videos
+- [x] Unit tests, and an E2E step with a script that answers HEAD with text/html and one with octet-stream +
       Content-Disposition (listed as MP4, downloaded and checked with ffprobe; a logout link never requested)
-- [ ] CI green on the PR head
+- [x] CI green on the PR head
 
 ## Notes
 
@@ -42,3 +42,5 @@ report):
   `<source>`, JS `src`, iframe, direct, links, pasted, page `fetch()`).
 - Not covered here: a page `fetch()` of an octet-stream file (the page hook and the network observer still need a media
   type or extension); a link with an empty `download` attribute; endless streams (VDH-084).
+- Done: merged in PR #22 (`572bff7`) with every check green on `36e99ad` (Desktop runs 41330869620 and 41330844350,
+  check and e2e runs 41330869677 and 41330844358) and the full local suite green on that head (extension E2E 114/114).

@@ -86,7 +86,7 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-066](VDH-066-desktop-app-standalone.md) | Desktop app (Tauri v2): window, queue, history, settings, tray | done | P1 | desktop | VDH-065, VDH-075 |
 | [VDH-067](VDH-067-native-link.md) | Native link: extension hands jobs to the desktop app | done | P1 | desktop | VDH-066 |
 | [VDH-068](VDH-068-desktop-reencode.md) | Desktop re-encoding: presets, codec controls, hardware encoders, MKV, batch | done | P2 | desktop | VDH-066 |
-| [VDH-069](VDH-069-desktop-packaging.md) | Desktop packaging, updater and release workflow | todo | P1 | build | VDH-066 |
+| [VDH-069](VDH-069-desktop-packaging.md) | Desktop installers in every release (NSIS, MSI, DMG, AppImage, deb, rpm) with a pinned GPL ffmpeg | in-progress | P1 | build | VDH-066 |
 | [VDH-070](VDH-070-owner-extension-key.md) | Pin the extension ID with the owner's public key | done | P1 | build | VDH-061 |
 | [VDH-071](VDH-071-page-scanner-without-core.md) | The page scanner never loads the shared core (content.js back to ~20 KB) | done | P0 | content | VDH-062 |
 | [VDH-072](VDH-072-wasm-size.md) | Trim the shared core's wasm (about 1 MB, inlined in every extension page) | todo | P2 | build | VDH-063 |
@@ -100,5 +100,7 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-080](VDH-080-desktop-soft-subtitles.md) | Desktop subtitles: download, convert and embed as soft subtitles | todo | P3 | desktop | VDH-068 |
 | [VDH-081](VDH-081-opus-native-decoder.md) | Desktop Opus re-encodes: FFmpeg 8 logs an error at the last Opus packet from Matroska | done | P2 | desktop | VDH-068 |
 | [VDH-082](VDH-082-no-remote-ffmpeg-core-url.md) | Web Store "remotely hosted code": FFmpeg.wasm's unpkg fallback in the bundled worker | done | P0 | build | - |
-| [VDH-083](VDH-083-script-served-media.md) | Script-served media (stream.php?id=…): sniff the first bytes, Content-Disposition, typed links, names | in-progress | P1 | lib | VDH-082 |
+| [VDH-083](VDH-083-script-served-media.md) | Script-served media (stream.php?id=…): sniff the first bytes, Content-Disposition, typed links, names | done | P1 | lib | VDH-082 |
 | [VDH-084](VDH-084-endless-script-streams.md) | Endless script streams (live.php): record until Stop instead of a download that never ends | todo | P2 | background | VDH-083 |
+| [VDH-085](VDH-085-desktop-updater.md) | Desktop auto-update (signed latest.json, install after the user confirms) | blocked | P2 | desktop | VDH-069 |
+| [VDH-086](VDH-086-site-desktop-downloads.md) | Site: desktop app download section (per OS, from the latest release) | todo | P3 | docs | VDH-069 |

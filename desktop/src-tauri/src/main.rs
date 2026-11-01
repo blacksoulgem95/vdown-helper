@@ -174,6 +174,42 @@ fn on_run(app: &AppHandle, e: RunEvent) {
     }
 }
 
+/// `--self-test`: what an installer smoke test checks, without a window: the bundled ffmpeg and ffprobe run, and the
+/// browser link was written. One JSON line on stdout; exit code 0 when ffmpeg and ffprobe work.
+const SELF_TEST: &str = "--self-test";
+
+fn self_test(browsers: &[link::host::Registered]) -> i32 {
+    let version = |program: std::path::PathBuf| {
+        std::process::Command::new(&program)
+            .arg("-version")
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .and_then(|o| {
+                String::from_utf8_lossy(&o.stdout)
+                    .lines()
+                    .next()
+                    .map(str::to_string)
+            })
+            .map(|v| (program.to_string_lossy().into_owned(), v))
+    };
+    let ffmpeg = version(vdh_engine::ffmpeg::ffmpeg_program());
+    let ffprobe = version(vdh_engine::ffmpeg::ffprobe_program());
+    let ok = ffmpeg.is_some() && ffprobe.is_some();
+    println!(
+        "{}",
+        serde_json::json!({
+            "ok": ok,
+            // the release version the installers are built with (the release workflow sets it)
+            "version": option_env!("VDH_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")),
+            "ffmpeg": ffmpeg,
+            "ffprobe": ffprobe,
+            "browsers": browsers.iter().map(|b| &b.browser).collect::<Vec<_>>(),
+        })
+    );
+    i32::from(!ok)
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     // started by the browser: only pass messages to the running app (starting it if needed)
@@ -185,6 +221,9 @@ fn main() {
         .zip(link::data_dir())
         .map(|(p, d)| link::host::register(&p, &d))
         .unwrap_or_default();
+    if args.iter().any(|a| a == SELF_TEST) {
+        std::process::exit(self_test(&browsers));
+    }
     tauri::Builder::default()
         // first, so a second launch only brings the running app forward (one started for the browser stays hidden)
         .plugin(tauri_plugin_single_instance::init(|app, args, _| {

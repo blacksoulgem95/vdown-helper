@@ -15,7 +15,7 @@ frame) and downloads, captures or records them locally with an optional FFmpeg.w
   new PR from the session branch (never reuse a merged one), **run the full suite locally on the PR's exact head**
   (`typecheck`, `lint`, `format:check`, `test`, `build`, `check:dist`, `test:e2e`, `test:desktop`, `test:link`, plus the `cargo` checks), wait for CI (`check`, `e2e` and the `Desktop` workflow) to be
   green on that head, then merge it with a merge commit. A red or conflicting PR is fixed first, never merged red. Merging to `main` publishes a
-  release: patch by default; put `#minor` / `#major` on a line of its own in the merge commit message (or `[minor]` /
+  release (the extension's zip and the desktop installers, `installers.yml`): patch by default; put `#minor` / `#major` on a line of its own in the merge commit message (or `[minor]` /
   `[major]` in a commit subject) for a bigger bump, and never write those tokens in a message that is only describing them.
 
 ## Hard constraints (never relax these)
