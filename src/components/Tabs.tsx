@@ -4,7 +4,8 @@ import { cx } from './ui';
 export interface TabDef<K extends string> {
   key: K;
   label: string;
-  count: number;
+  /** Shown next to the label; a tab with nothing to count has none. */
+  count?: number;
 }
 
 /** Accessible tab strip (WAI-ARIA tabs pattern: arrow keys, Home/End, roving tabindex). The panel is the caller's. */
@@ -63,9 +64,11 @@ export function Tabs<K extends string>({
               )}
             >
               {tab.label}
-              <span className={cx('rounded px-1 text-[10px]', selected ? 'bg-neon/15' : 'bg-white/8')}>
-                {tab.count}
-              </span>
+              {tab.count !== undefined && (
+                <span className={cx('rounded px-1 text-[10px]', selected ? 'bg-neon/15' : 'bg-white/8')}>
+                  {tab.count}
+                </span>
+              )}
             </button>
           );
         })}
