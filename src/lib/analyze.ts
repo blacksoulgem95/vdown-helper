@@ -13,6 +13,7 @@ import { exceedsHeldLimit, isDataLabel } from './dataUrl';
 import { heldLimit } from '@/types/ingest';
 import {
   estimateBytes,
+  formatFromExtension,
   formatFromMime,
   formatFromUrl,
   inferTitle,
@@ -22,6 +23,7 @@ import {
 import type { ProbeResult } from './netprobe';
 import { dedupeResources, hideCoveredVariants, resourceId } from './resources';
 import { isSafeFetchUrl, normalizeUrl, parseUrl } from './security';
+import { sniffMime } from './sniff';
 import { core } from './core';
 
 /** Network access used while analysing. Implementations decide which origin the request is made from. */
@@ -344,6 +346,34 @@ async function finishMaster(
   return r;
 }
 
+/**
+ * What a file whose declared type says nothing is: the type a GET declared, then its first bytes (magic numbers, or a
+ * playlist's first line), then the name `Content-Disposition` gives it.
+ */
+function identify(
+  head: Extract<ProbeResult, { ok: true }>,
+): { mime?: string; format: MediaFormat } | undefined {
+  const sample = head.sample;
+  if (sample) {
+    const got = sample.contentType.split(';')[0]?.trim().toLowerCase() ?? '';
+    const fromGet = formatFromMime(got);
+    if (fromGet) return { mime: got, format: fromGet };
+    const bytes = Uint8Array.from(sample.bytes);
+    const sniffed = sniffMime(bytes);
+    const fromBytes = formatFromMime(sniffed);
+    if (sniffed && fromBytes) return { mime: sniffed, format: fromBytes };
+    const text = new TextDecoder()
+      .decode(bytes)
+      .replace(/^\uFEFF/, '')
+      .trimStart();
+    if (text.startsWith('#EXTM3U')) return { mime: 'application/vnd.apple.mpegurl', format: 'hls' };
+    if (/^(<\?xml[^>]*>\s*)?<MPD[\s>]/.test(text)) return { mime: 'application/dash+xml', format: 'dash' };
+  }
+  const ext = /\.([A-Za-z0-9]{1,5})$/.exec(head.dispositionName?.trim() ?? '')?.[1];
+  const named = ext ? formatFromExtension(ext) : undefined;
+  return named ? { format: named } : undefined;
+}
+
 async function analyzeFile(
   r: MediaResource,
   e: Entry,
@@ -361,8 +391,11 @@ async function analyzeFile(
     }
     return r;
   }
-  const mime = head.contentType.split(';')[0]?.trim().toLowerCase() ?? '';
-  const fromMime = formatFromMime(mime);
+  const declared = head.contentType.split(';')[0]?.trim().toLowerCase() ?? '';
+  // a script (stream.php?id=…) often declares nothing useful on HEAD: what its body is decides
+  const found = formatFromMime(declared) ? undefined : identify(head);
+  const mime = found?.mime ?? declared;
+  const fromMime = formatFromMime(mime) ?? found?.format;
   if (fromMime && PLAYLIST_FORMATS.has(fromMime)) {
     r.format = fromMime;
     return analyzePlaylist(r, fetcher, covered);

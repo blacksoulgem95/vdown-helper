@@ -139,6 +139,26 @@ describe('content scanner', () => {
     expect(scan().candidates.map((c) => c.url)).toContain('https://cdn.example.org/inner.mp4');
   });
 
+  it("knows a video in a same-origin iframe is a video (its element is not this document's HTMLVideoElement)", () => {
+    setBody('<iframe id="f"></iframe>');
+    const frame = document.getElementById('f') as HTMLIFrameElement;
+    frame.contentDocument?.write('<video src="https://cdn.example.org/inner.mp4"></video>');
+    const inner = scan().candidates.find((c) => c.url === 'https://cdn.example.org/inner.mp4');
+    expect(inner?.mediaType).toBe('video');
+  });
+
+  it('lists links the page says are media, whatever their address, and never other script links', () => {
+    setBody(`
+      <a href="/get.php?id=1" type="video/mp4">Watch</a>
+      <a href="/dl.php?id=2" download="clip.mp4">Save</a>
+      <a href="/logout.php">Log out</a>
+      <a href="/delete.php?id=3" download>Delete</a>`);
+    const media = classify(scan()).candidates.filter((c) => c.method === 'dom-link');
+    expect(media.map((c) => new URL(c.url).pathname)).toEqual(['/get.php', '/dl.php']);
+    expect(media[0]).toMatchObject({ mimeType: 'video/mp4', title: 'Watch' });
+    expect(media[1]?.mimeType).toBeUndefined();
+  });
+
   it('does not modify the page', () => {
     const html = '<video src="/a.mp4"></video>';
     setBody(html);

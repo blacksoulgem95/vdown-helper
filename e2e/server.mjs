@@ -125,6 +125,21 @@ export function startServers(root, pagesDir) {
       res.write('<!doctype html><html><head><title>never finishes</title></head><body><p>loading…</p>');
       return;
     }
+    // /__script/<name>.php?case=…: a script that streams the sample video, chunked, without a length, ignoring Range
+    // (VDH-083). case=html: HEAD answers text/html (PHP's default) while GET sends video/mp4; case=disposition:
+    // application/octet-stream with a Content-Disposition name. Any other name (logout.php) is a page.
+    if (origin === 'A' && path.startsWith('/__script/')) {
+      const kase = url.searchParams.get('case');
+      if (!kase) return void res.writeHead(200, { 'Content-Type': 'text/html' }).end('<p>a page</p>');
+      const named = { 'Content-Disposition': 'attachment; filename="clip.mp4"' };
+      const type =
+        kase === 'disposition'
+          ? { 'Content-Type': 'application/octet-stream', ...named }
+          : { 'Content-Type': req.method === 'HEAD' ? 'text/html; charset=UTF-8' : 'video/mp4' };
+      res.writeHead(200, { ...type, 'Cache-Control': 'no-store' });
+      if (req.method === 'HEAD') return void res.end();
+      return void createReadStream(join(root, 'media/sample.mp4')).pipe(res);
+    }
     // /__cookie/<path>: served only with the cookie a signed-in visitor would have (the desktop link's cookie job).
     if (origin === 'A' && path.startsWith('/__cookie/')) {
       if (!/(^|;\s*)e2e_session=granted(;|$)/.test(req.headers.cookie ?? ''))
