@@ -1,0 +1,67 @@
+{
+  "comment": "GPL builds of ffmpeg + ffprobe bundled in the desktop installers (scripts/desktop/fetch-ffmpeg.mjs). Every download is checked against its SHA-256. BtbN keeps a month's last build for two years (this one until about 2028-02); shaka-project tags are kept. Change versions here only together with new hashes.",
+  "targets": {
+    "x86_64-pc-windows-msvc": {
+      "build": "FFmpeg n8.0.1-66-g27b8d1a017, BtbN FFmpeg-Builds win64 GPL (static)",
+      "source": "https://github.com/BtbN/FFmpeg-Builds/tree/autobuild-2026-02-28-12-59 (scripts.d pins every library) and https://github.com/FFmpeg/FFmpeg/commit/27b8d1a017",
+      "archives": [
+        {
+          "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-02-28-12-59/ffmpeg-n8.0.1-66-g27b8d1a017-win64-gpl-8.0.zip",
+          "sha256": "e1f9fc491ef1969e666cfe36ec1d6c02b53baf49df800d5256eda10c942b1251"
+        }
+      ]
+    },
+    "aarch64-pc-windows-msvc": {
+      "build": "FFmpeg n8.0.1-66-g27b8d1a017, BtbN FFmpeg-Builds winarm64 GPL (static)",
+      "source": "https://github.com/BtbN/FFmpeg-Builds/tree/autobuild-2026-02-28-12-59 (scripts.d pins every library) and https://github.com/FFmpeg/FFmpeg/commit/27b8d1a017",
+      "archives": [
+        {
+          "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-02-28-12-59/ffmpeg-n8.0.1-66-g27b8d1a017-winarm64-gpl-8.0.zip",
+          "sha256": "283b8d375423e86528d63a9b70e9bca3ea243872c3c1427db7088ea0690b253a"
+        }
+      ]
+    },
+    "x86_64-unknown-linux-gnu": {
+      "build": "FFmpeg n8.0.1-66-g27b8d1a017, BtbN FFmpeg-Builds linux64 GPL (static, glibc 2.28+)",
+      "source": "https://github.com/BtbN/FFmpeg-Builds/tree/autobuild-2026-02-28-12-59 (scripts.d pins every library) and https://github.com/FFmpeg/FFmpeg/commit/27b8d1a017",
+      "archives": [
+        {
+          "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-02-28-12-59/ffmpeg-n8.0.1-66-g27b8d1a017-linux64-gpl-8.0.tar.xz",
+          "sha256": "26d2ecd0cefba99f9d1ea92252a3a4f743a58df4c1c3cf9f8bbaaa40b1fca5b0"
+        }
+      ]
+    },
+    "x86_64-apple-darwin": {
+      "build": "FFmpeg n8.0.3, shaka-project static-ffmpeg-binaries n8.0.3-1, macOS x64 GPL",
+      "source": "https://github.com/shaka-project/static-ffmpeg-binaries/tree/n8.0.3-1 (builds every library from source) and https://github.com/FFmpeg/FFmpeg/tree/n8.0.3",
+      "archives": [
+        {
+          "url": "https://github.com/shaka-project/static-ffmpeg-binaries/releases/download/n8.0.3-1/ffmpeg-osx-x64",
+          "sha256": "b2ea2ac9b4cb060acb70874648f4c48863ab5c61d5c71dbfe3d65fd5292e40ef",
+          "program": "ffmpeg"
+        },
+        {
+          "url": "https://github.com/shaka-project/static-ffmpeg-binaries/releases/download/n8.0.3-1/ffprobe-osx-x64",
+          "sha256": "72bb3454b9d63d1c1c597e459114f3f82251a859a27e6dc48f8179fa73c2170f",
+          "program": "ffprobe"
+        }
+      ]
+    },
+    "aarch64-apple-darwin": {
+      "build": "FFmpeg n8.0.3, shaka-project static-ffmpeg-binaries n8.0.3-1, macOS arm64 GPL",
+      "source": "https://github.com/shaka-project/static-ffmpeg-binaries/tree/n8.0.3-1 (builds every library from source) and https://github.com/FFmpeg/FFmpeg/tree/n8.0.3",
+      "archives": [
+        {
+          "url": "https://github.com/shaka-project/static-ffmpeg-binaries/releases/download/n8.0.3-1/ffmpeg-osx-arm64",
+          "sha256": "3ef8a1b1ff20b28f7b17ec0bf42105434b7997f4a02525f818e472e7baa86749",
+          "program": "ffmpeg"
+        },
+        {
+          "url": "https://github.com/shaka-project/static-ffmpeg-binaries/releases/download/n8.0.3-1/ffprobe-osx-arm64",
+          "sha256": "611aebc88eda026ef21418aeca45533959b8527dfcce3e28baa3e78daeaf4b82",
+          "program": "ffprobe"
+        }
+      ]
+    }
+  }
+}

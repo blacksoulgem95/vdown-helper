@@ -1,0 +1,82 @@
+name: Installers
+
+# The desktop app's installers: Windows NSIS + MSI (x64 and arm64), macOS universal DMG, Linux AppImage, deb and rpm,
+# with the pinned GPL ffmpeg (desktop/ffmpeg.lock.json, SHA-256 checked). Each installer is installed on its runner and
+# the app's --self-test must find its bundled vdh-ffmpeg and vdh-ffprobe. Called by release.yml with the release's
+# version (the installers are attached to the same release as the extension), and run on pull requests that change
+# the app or its packaging. Unsigned until certificates exist: SmartScreen and Gatekeeper ask before the first start.
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Version the installers are built with
+        type: string
+        required: true
+  pull_request:
+    paths:
+      - 'desktop/**'
+      - 'core/**'
+      - 'scripts/desktop/**'
+      - 'scripts/build-desktop-ui.mjs'
+      - 'package-lock.json'
+      - '.github/workflows/installers.yml'
+      - '.github/workflows/release.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  installers:
+    strategy:
+      fail-fast: false # every platform reports its own result
+      matrix:
+        include:
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, bundles: 'nsis,msi' }
+          - { os: windows-11-arm, target: aarch64-pc-windows-msvc, bundles: 'nsis,msi' }
+          - { os: macos-15, target: universal-apple-darwin, bundles: 'app,dmg' }
+          - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, bundles: 'appimage,deb,rpm' }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Version (the release's, or package.json's on a pull request)
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: echo "VDH_VERSION=${VERSION:-$(node -p "require('./package.json').version")}" >> "$GITHUB_ENV"
+      - uses: ./.github/actions/setup-core
+      - name: Rust targets
+        shell: bash
+        run: |
+          if [ "${{ matrix.target }}" = universal-apple-darwin ]; then
+            rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          else
+            rustup target add ${{ matrix.target }}
+          fi
+      - name: Linux libraries for the app
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev rpm
+      - name: ffmpeg and ffprobe (pinned GPL builds, SHA-256 checked)
+        run: node scripts/desktop/fetch-ffmpeg.mjs --target ${{ matrix.target }}
+      - run: npm run desktop:ui
+      - name: Build the installers
+        working-directory: desktop/src-tauri
+        shell: bash
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: '1' # linuxdeploy without FUSE
+        run: >
+          npx tauri build --ci --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+          --config tauri.bundle.conf.json --config "{\"version\":\"$VDH_VERSION\"}"
+      - name: Install each installer and run the app's self-test
+        run: node scripts/desktop/smoke-test.mjs --target ${{ matrix.target }} --out desktop-release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.target }}-${{ github.sha }}
+          path: desktop-release/*
+          if-no-files-found: error

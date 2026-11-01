@@ -11,9 +11,24 @@ use vdh_core::ffmpeg_args::{FfmpegArgsInput, build_ffmpeg_args};
 
 use crate::error::{EngineError, ErrorCode, Result};
 
-/// The ffmpeg to run: `VDH_FFMPEG` when set (the app points it at its bundled copy), otherwise `ffmpeg` on the PATH.
+/// The ffmpeg to run: `VDH_FFMPEG` when set, else the copy installed next to the program (the app's installers bundle
+/// one as `vdh-ffmpeg`, a name no system package uses: the .deb puts it in /usr/bin), else `ffmpeg` on the PATH.
 pub fn ffmpeg_program() -> PathBuf {
-    std::env::var_os("VDH_FFMPEG").map_or_else(|| PathBuf::from("ffmpeg"), PathBuf::from)
+    if let Some(p) = std::env::var_os("VDH_FFMPEG") {
+        return PathBuf::from(p);
+    }
+    bundled("vdh-ffmpeg").unwrap_or_else(|| PathBuf::from("ffmpeg"))
+}
+
+/// `name` (with `.exe` on Windows) beside the running program, when it is there.
+fn bundled(name: &str) -> Option<PathBuf> {
+    let file = if cfg!(windows) {
+        format!("{name}.exe")
+    } else {
+        name.to_string()
+    };
+    let p = std::env::current_exe().ok()?.parent()?.join(file);
+    p.is_file().then_some(p)
 }
 
 /// The last lines ffmpeg wrote to stderr: what went wrong, without the whole log.
@@ -22,10 +37,16 @@ fn tail(stderr: &str) -> String {
     lines[lines.len().saturating_sub(4)..].join(" | ")
 }
 
-/// The ffprobe next to the ffmpeg in use: `VDH_FFPROBE`, else beside `VDH_FFMPEG`, else `ffprobe` on the PATH.
+/// The ffprobe next to the ffmpeg in use: `VDH_FFPROBE`, else the bundled one, else beside `VDH_FFMPEG`, else
+/// `ffprobe` on the PATH.
 pub fn ffprobe_program() -> PathBuf {
     if let Some(p) = std::env::var_os("VDH_FFPROBE") {
         return PathBuf::from(p);
+    }
+    if std::env::var_os("VDH_FFMPEG").is_none()
+        && let Some(p) = bundled("vdh-ffprobe")
+    {
+        return p;
     }
     let ffmpeg = ffmpeg_program();
     let name = if cfg!(windows) {

@@ -1,7 +1,9 @@
 name: Release
 
 # On every push to main that changes the project: verify, build and package the extension, pick the NEXT version
-# automatically, then tag it (v<version>) and publish a GitHub Release with the Chrome package attached.
+# automatically, build the desktop app's installers with that version, then tag it (v<version>) and publish one GitHub
+# Release with the Chrome package and the installers (Windows NSIS + MSI x64/arm64, macOS universal DMG, Linux AppImage,
+# deb and rpm) attached.
 #
 # Version rule (scripts/next-version.mjs, tested in tests/version.test.ts):
 #   - no release yet                      -> the version in package.json (first release)
@@ -24,8 +26,7 @@ on:
       - 'scripts/build-site.mjs'
       - 'scripts/store-assets.mjs'
       - '.github/workflows/pages.yml'
-      - 'desktop/**' # the desktop app has its own releases (desktop-v*)
-      - '.github/workflows/desktop.yml'
+      - '.github/workflows/desktop.yml' # the desktop app's CI; its installers ship in these same releases
   workflow_dispatch:
     inputs:
       bump:
@@ -102,8 +103,16 @@ jobs:
           path: release/*
           if-no-files-found: error
 
-  release:
+  # The desktop app's installers with the release's version (installers.yml: also run on pull requests).
+  desktop:
     needs: package
+    if: needs.package.outputs.tagged == 'false'
+    uses: ./.github/workflows/installers.yml
+    with:
+      version: ${{ needs.package.outputs.version }}
+
+  release:
+    needs: [package, desktop]
     if: needs.package.outputs.tagged == 'false' # a re-run of an already released commit publishes nothing new
     runs-on: ubuntu-latest
     permissions:
@@ -114,6 +123,11 @@ jobs:
           pattern: vdown-helper-*
           merge-multiple: true
           path: release
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          merge-multiple: true
+          path: release/desktop
 
       - name: Create tag and GitHub Release
         env:
@@ -128,8 +142,13 @@ jobs:
             "release/vdown-helper-$VERSION.zip" \
             "release/vdown-helper-$VERSION.zip.sha256" \
             release/vdown-helper-chrome.zip \
+            release/desktop/* \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "vdown-helper $VERSION" \
             --generate-notes \
-            --notes "Chrome package for vdown-helper $VERSION. Unzip it, open chrome://extensions, enable Developer mode and choose Load unpacked. Verify the download with the .sha256 file. The package bundles an FFmpeg.wasm core (GPL-2.0-or-later); see THIRD_PARTY_NOTICES.md."
+            --notes "Chrome package for vdown-helper $VERSION: unzip it, open chrome://extensions, enable Developer mode and choose Load unpacked. It bundles an FFmpeg.wasm core (GPL-2.0-or-later); see THIRD_PARTY_NOTICES.md.
+
+          Desktop app $VERSION: Windows (setup .exe or .msi, x64 and arm64), macOS 11+ (universal .dmg), Linux x64 (.AppImage, .deb, .rpm). The installers are not signed yet: Windows SmartScreen and macOS Gatekeeper ask before the first start (macOS: right-click the app, Open). They bundle GPL builds of ffmpeg and ffprobe; their licences and source are listed in the app's licenses folder.
+
+          Verify any download with its .sha256 file."

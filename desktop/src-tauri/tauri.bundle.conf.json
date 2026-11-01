@@ -1,0 +1,24 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi", "dmg", "app", "appimage", "deb", "rpm"],
+    "publisher": "vdown-helper",
+    "category": "Utility",
+    "shortDescription": "Download manager for media and streams",
+    "longDescription": "vdown-helper's desktop app: downloads media files and HLS/DASH streams, records live streams and re-encodes files, outside the browser. Linked to the vdown-helper browser extension.",
+    "copyright": "vdown-helper contributors. The bundled ffmpeg and ffprobe are GPL software (licenses/).",
+    "externalBin": ["binaries/vdh-ffmpeg", "binaries/vdh-ffprobe"],
+    "resources": {
+      "binaries/licenses/": "licenses/"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    },
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    }
+  }
+}

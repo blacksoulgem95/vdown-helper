@@ -197,21 +197,32 @@ Trim with a preview player, timeline and keyframe snapping is VDH-079; subtitles
 
 ### Packaging (VDH-069)
 
-| Target          | Bundles                                  | Auto-update                         |
-| --------------- | ---------------------------------------- | ----------------------------------- |
-| Windows x64     | MSI, NSIS `.exe`                         | yes                                 |
-| Windows arm64   | MSI, NSIS `.exe`                         | yes                                 |
-| macOS universal | `.dmg` (+ `.app.tar.gz` for the updater) | yes                                 |
-| Linux x64       | AppImage, `.deb`, `.rpm`                 | AppImage; `.deb`/`.rpm` notify only |
+The installers are attached to the **same** GitHub release as the extension (`v1.x.y`, one version): every merge to
+`main` that releases builds them (`installers.yml`, called by `release.yml`; it also runs on pull requests that change
+the app or its packaging).
 
-Minimum: Windows 10 1809, macOS 11, Ubuntu 22.04 (webkit2gtk-4.1). Builds are unsigned until certificates exist (the
-signing steps are wired and skipped). The bundled ffmpeg is a pinned **GPL** build (x264/x265), verified by SHA-256 in
-CI and shipped as a separate program; installers and About carry its licence and a link to its source. The app's own
-code is MIT.
+| Target          | Installers                  |
+| --------------- | --------------------------- |
+| Windows x64     | NSIS setup `.exe`, `.msi`   |
+| Windows arm64   | NSIS setup `.exe`, `.msi`   |
+| macOS universal | `.dmg` (macOS 11+)          |
+| Linux x64       | `.AppImage`, `.deb`, `.rpm` |
 
-Releases are tagged `desktop-vX.Y.Z` (patch for a merge that touches `core/` or `desktop/`; `#desktop-minor` /
-`#desktop-major` on a line of their own raise it). The updater reads `latest.json` from the rolling `desktop-latest`
-release.
+Minimum: Windows 10 1809, macOS 11, Ubuntu 22.04 (webkit2gtk-4.1). The installers are unsigned until certificates
+exist: Windows SmartScreen and macOS Gatekeeper ask before the first start.
+
+The bundled ffmpeg and ffprobe are pinned **GPL** builds (`desktop/ffmpeg.lock.json`: BtbN FFmpeg-Builds for Windows and
+Linux, shaka-project static-ffmpeg-binaries for macOS, joined into universal programs with `lipo`), each download
+checked against its SHA-256 (`scripts/desktop/fetch-ffmpeg.mjs`). They are installed next to the app as `vdh-ffmpeg` /
+`vdh-ffprobe`, a name no system package uses (the `.deb` puts them in `/usr/bin`); the engine runs `VDH_FFMPEG` when
+set, else the bundled copy, else `ffmpeg` on the PATH. Every installer carries a `licenses` folder with the GPL text and
+the build and source references. The app's own code is MIT.
+
+Each installer is installed on its runner (NSIS per user, MSI per machine, the DMG mounted, the AppImage run, the `.deb`
+installed, the `.rpm`'s file list read) and the installed app's `--self-test` must run its bundled ffmpeg and ffprobe
+(`scripts/desktop/smoke-test.mjs`); the macOS programs must be universal.
+
+Auto-update (signed `latest.json`, installed after the user confirms) is VDH-085.
 
 ## Tests
 

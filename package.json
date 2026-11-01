@@ -41,6 +41,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@tailwindcss/vite": "^4.3.3",
+    "@tauri-apps/cli": "^2.12.4",
     "@types/chrome": "^0.3.6",
     "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
