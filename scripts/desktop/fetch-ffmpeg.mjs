@@ -129,6 +129,15 @@ if (target === 'universal-apple-darwin') {
     const to = join(out, `vdh-${name}-${target}`);
     execFileSync('lipo', ['-create', x[name], a[name], '-output', to]);
     chmodSync(to, 0o755);
+    // a universal build compiles each architecture on its own first, and each looks for its own copy
+    for (const [arch, f] of [
+      ['x86_64-apple-darwin', x],
+      ['aarch64-apple-darwin', a],
+    ]) {
+      const own = join(out, `vdh-${name}-${arch}`);
+      copyFileSync(f[name], own);
+      chmodSync(own, 0o755);
+    }
   }
   licenses([...x.dirs, ...a.dirs], 'aarch64-apple-darwin');
 } else {

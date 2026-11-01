@@ -28,7 +28,7 @@ permissions:
 jobs:
   installers:
     strategy:
-      fail-fast: true
+      fail-fast: false # every platform reports its own result
       matrix:
         include:
           - { os: windows-latest, target: x86_64-pc-windows-msvc, bundles: 'nsis,msi' }
