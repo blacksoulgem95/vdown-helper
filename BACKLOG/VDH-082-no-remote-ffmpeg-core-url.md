@@ -30,3 +30,6 @@ a URL written inside the call, and it skipped `vendor/`.
 ## Notes
 
 - Found on `main` at `bb6d6f5`, after the owner reported the rejection of an older upload.
+- CI: from 1 Nov `rust (macos-14)` was cancelled by GitHub within a second, with no runner assigned (green on 29 Oct;
+  every other job green). With the owner's agreement the Desktop matrix moves to `macos-15`; if that is cancelled too,
+  the cause is the account's Actions limits, not the image.
