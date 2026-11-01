@@ -86,7 +86,7 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-066](VDH-066-desktop-app-standalone.md) | Desktop app (Tauri v2): window, queue, history, settings, tray | done | P1 | desktop | VDH-065, VDH-075 |
 | [VDH-067](VDH-067-native-link.md) | Native link: extension hands jobs to the desktop app | done | P1 | desktop | VDH-066 |
 | [VDH-068](VDH-068-desktop-reencode.md) | Desktop re-encoding: presets, codec controls, hardware encoders, MKV, batch | done | P2 | desktop | VDH-066 |
-| [VDH-069](VDH-069-desktop-packaging.md) | Desktop installers in every release (NSIS, MSI, DMG, AppImage, deb, rpm) with a pinned GPL ffmpeg | in-progress | P1 | build | VDH-066 |
+| [VDH-069](VDH-069-desktop-packaging.md) | Desktop installers in every release (NSIS, MSI, DMG, AppImage, deb, rpm) with a pinned GPL ffmpeg | done | P1 | build | VDH-066 |
 | [VDH-070](VDH-070-owner-extension-key.md) | Pin the extension ID with the owner's public key | done | P1 | build | VDH-061 |
 | [VDH-071](VDH-071-page-scanner-without-core.md) | The page scanner never loads the shared core (content.js back to ~20 KB) | done | P0 | content | VDH-062 |
 | [VDH-072](VDH-072-wasm-size.md) | Trim the shared core's wasm (about 1 MB, inlined in every extension page) | todo | P2 | build | VDH-063 |
