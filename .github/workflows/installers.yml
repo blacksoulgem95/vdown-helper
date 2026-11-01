@@ -65,6 +65,10 @@ jobs:
       - name: ffmpeg and ffprobe (pinned GPL builds, SHA-256 checked)
         run: node scripts/desktop/fetch-ffmpeg.mjs --target ${{ matrix.target }}
       - run: npm run desktop:ui
+      # target/ is restored from the cache (setup-core): an earlier build's installers must not be shipped again
+      - name: No installers from an earlier build
+        shell: bash
+        run: rm -rf "target/${{ matrix.target }}/release/bundle"
       - name: Build the installers
         working-directory: desktop/src-tauri
         shell: bash

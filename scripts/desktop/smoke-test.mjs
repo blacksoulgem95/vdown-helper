@@ -34,7 +34,9 @@ function files(dir) {
     return statSync(p).isDirectory() ? (p.endsWith('.app') ? [p] : files(p)) : [p];
   });
 }
-const built = files(bundle);
+// only this build's installers (their names carry the version), whatever an earlier build left in the folder
+const version = process.env.VDH_VERSION;
+const built = files(bundle).filter((f) => !version || basename(f).includes(version));
 const one = (re) => {
   const hits = built.filter((f) => re.test(basename(f)));
   if (hits.length !== 1)
