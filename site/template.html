@@ -29,6 +29,7 @@
           <a href="#features">{{t:nav.features}}</a>
           <a href="#privacy">{{t:nav.privacy}}</a>
           <a href="#install">{{t:nav.install}}</a>
+          <a href="#desktop">{{t:nav.desktop}}</a>
           <a href="#faq">{{t:nav.faq}}</a>
         </nav>
         <a
@@ -273,6 +274,42 @@
           </ol>
           <p class="center"><a class="link" href="{{releasesUrl}}">{{t:install.all}} →</a></p>
           <!--endif:nostore-->
+        </div>
+      </section>
+
+      <section id="desktop" class="desktop">
+        <div class="wrap">
+          <h2 class="center">{{t:desktop.title}}</h2>
+          <p class="center lead narrow-lead">{{t:desktop.body}}</p>
+          <div class="dl">
+            <div class="dl-os">
+              <h3>{{t:desktop.windows}}</h3>
+              <p class="note">{{t:desktop.windowsNote}}</p>
+              <a class="btn" href="{{dl.windowsX64Setup}}">{{t:desktop.setupX64}}</a>
+              <p class="dl-more">
+                <a class="link" href="{{dl.windowsArm64Setup}}">{{t:desktop.setupArm64}}</a>
+                <a class="link" href="{{dl.windowsX64Msi}}">{{t:desktop.msiX64}}</a>
+                <a class="link" href="{{dl.windowsArm64Msi}}">{{t:desktop.msiArm64}}</a>
+              </p>
+            </div>
+            <div class="dl-os">
+              <h3>{{t:desktop.macos}}</h3>
+              <p class="note">{{t:desktop.macosNote}}</p>
+              <a class="btn" href="{{dl.macosDmg}}">{{t:desktop.dmg}}</a>
+            </div>
+            <div class="dl-os">
+              <h3>{{t:desktop.linux}}</h3>
+              <p class="note">{{t:desktop.linuxNote}}</p>
+              <a class="btn" href="{{dl.linuxAppImage}}">{{t:desktop.appimage}}</a>
+              <p class="dl-more">
+                <a class="link" href="{{dl.linuxDeb}}">{{t:desktop.deb}}</a>
+                <a class="link" href="{{dl.linuxRpm}}">{{t:desktop.rpm}}</a>
+              </p>
+            </div>
+          </div>
+          <p class="center note">{{t:desktop.unsigned}}</p>
+          <p class="center note">{{t:desktop.gpl}}</p>
+          <p class="center"><a class="link" href="{{releasesUrl}}">{{t:install.all}} →</a></p>
         </div>
       </section>
 

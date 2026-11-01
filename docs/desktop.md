@@ -218,6 +218,10 @@ checked against its SHA-256 (`scripts/desktop/fetch-ffmpeg.mjs`). They are insta
 set, else the bundled copy, else `ffmpeg` on the PATH. Every installer carries a `licenses` folder with the GPL text and
 the build and source references. The app's own code is MIT.
 
+The installers are released under fixed names (`desktop/release-assets.json`, e.g.
+`vdown-helper-desktop-windows-x64-setup.exe`), so `…/releases/latest/download/<name>` always gives the latest one: the
+website's download section links them (VDH-086).
+
 Each installer is installed on its runner (NSIS per user, MSI per machine, the DMG mounted, the AppImage run, the `.deb`
 installed, the `.rpm`'s file list read) and the installed app's `--self-test` must run its bundled ffmpeg and ffprobe
 (`scripts/desktop/smoke-test.mjs`); the macOS programs must be universal.

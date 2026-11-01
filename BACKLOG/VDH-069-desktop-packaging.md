@@ -1,7 +1,7 @@
 ---
 id: VDH-069
 title: Desktop installers in every release (NSIS, MSI, DMG, AppImage, deb, rpm) with a pinned GPL ffmpeg
-status: in-progress
+status: done
 priority: P1
 area: build
 depends_on: [VDH-066]
@@ -19,15 +19,15 @@ name no system package uses), with its licence and source references in the inst
 
 ## Acceptance criteria
 
-- [ ] `installers.yml` builds every installer, installs each on its runner and runs the app's `--self-test` (the
+- [x] `installers.yml` builds every installer, installs each on its runner and runs the app's `--self-test` (the
       bundled ffmpeg and ffprobe run; the macOS programs are universal; the rpm lists them); run on pull requests that
       change the app or its packaging, and called by `release.yml`
-- [ ] `release.yml` attaches the installers (with a `.sha256` each) to the extension's release; changes to `desktop/`
+- [x] `release.yml` attaches the installers (with a `.sha256` each) to the extension's release; changes to `desktop/`
       and `core/` now release
-- [ ] The engine uses the bundled ffmpeg (`VDH_FFMPEG`, else `vdh-ffmpeg` next to the program, else the PATH)
-- [ ] GPL text, build and source references in every installer (`licenses/`)
-- [ ] First release with installers published
-- [ ] CI green on the PR head
+- [x] The engine uses the bundled ffmpeg (`VDH_FFMPEG`, else `vdh-ffmpeg` next to the program, else the PATH)
+- [x] GPL text, build and source references in every installer (`licenses/`)
+- [x] First release with installers published
+- [x] CI green on the PR head
 
 ## Notes
 
@@ -35,3 +35,7 @@ name no system package uses), with its licence and source references in the inst
   download section is VDH-086.
 - ffmpeg: BtbN FFmpeg-Builds n8.0.1 (month-end build kept for two years) for Windows and Linux, shaka-project
   static-ffmpeg-binaries n8.0.3 for macOS (joined into a universal program with lipo).
+- Done: merged in PR #23 (`af8178b`) with every check green on `b8b9498` (installers run 41337122926: NSIS + MSI on
+  Windows x64 and arm64, the universal DMG, AppImage/deb/rpm, each installed and self-tested) and the full local suite
+  green on that head. First release with the installers: v1.3.13 (Release run 41339987012), with the Chrome zip and
+  every installer, each with a `.sha256`.

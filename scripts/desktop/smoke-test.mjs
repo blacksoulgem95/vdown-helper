@@ -1,6 +1,6 @@
 // Installs each installer Tauri built for one target on this runner, runs the installed app's --self-test (which must
-// find its bundled vdh-ffmpeg and vdh-ffprobe, not a system copy), and copies the installers, with a .sha256 file
-// each, into the release folder.
+// find its bundled vdh-ffmpeg and vdh-ffprobe, not a system copy), and copies the installers, under their fixed release
+// names (desktop/release-assets.json) and with a .sha256 file each, into the release folder.
 //
 //   node scripts/desktop/smoke-test.mjs --target x86_64-pc-windows-msvc --out desktop-release
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -34,7 +34,9 @@ function files(dir) {
     return statSync(p).isDirectory() ? (p.endsWith('.app') ? [p] : files(p)) : [p];
   });
 }
-const built = files(bundle);
+// only this build's installers (their names carry the version), whatever an earlier build left in the folder
+const version = process.env.VDH_VERSION;
+const built = files(bundle).filter((f) => !version || basename(f).includes(version));
 const one = (re) => {
   const hits = built.filter((f) => re.test(basename(f)));
   if (hits.length !== 1)
@@ -93,13 +95,13 @@ if (target.includes('windows')) {
   }
   selfTest(msiExe);
   run('msiexec', ['/x', msi, '/qn', '/norestart']);
-  shipped.push(msi);
+  shipped.push(['msi', msi]);
   // NSIS, per-user: installs under %LOCALAPPDATA%\vdown-helper
   const setup = one(/-setup\.exe$/);
   run(setup, ['/S']);
   selfTest(join(local, 'vdown-helper.exe'));
   run(join(local, 'uninstall.exe'), ['/S']);
-  shipped.push(setup);
+  shipped.push(['setup', setup]);
 } else if (target.includes('apple')) {
   const dmg = one(/\.dmg$/);
   const mount = '/tmp/vdh-dmg';
@@ -114,7 +116,7 @@ if (target.includes('windows')) {
   } finally {
     run('hdiutil', ['detach', mount]);
   }
-  shipped.push(dmg);
+  shipped.push(['dmg', dmg]);
 } else {
   const appimage = one(/\.AppImage$/);
   chmodSync(appimage, 0o755);
@@ -127,14 +129,22 @@ if (target.includes('windows')) {
   const listed = execFileSync('rpm', ['-qlp', rpm], { encoding: 'utf8' });
   for (const f of ['/usr/bin/vdown-helper', '/usr/bin/vdh-ffmpeg', '/usr/bin/vdh-ffprobe'])
     if (!listed.split('\n').includes(f)) throw new Error(`${basename(rpm)} lacks ${f}:\n${listed}`);
-  shipped.push(appimage, deb, rpm);
+  shipped.push(['appimage', appimage], ['deb', deb], ['rpm', rpm]);
 }
 
+// Released under fixed names (desktop/release-assets.json), so .../releases/latest/download/<name> always works (the site
+// links them); the version is in the release.
+const assets = Object.values(JSON.parse(readFileSync(join(root, 'desktop/release-assets.json'), 'utf8')));
 mkdirSync(out, { recursive: true });
-for (const f of shipped) {
-  const to = join(out, basename(f));
+for (const [kind, f] of shipped) {
+  const asset = assets.find((a) => a.target === target && a.kind === kind);
+  if (!asset) throw new Error(`no release name for ${target} ${kind} (desktop/release-assets.json)`);
+  const to = join(out, asset.file);
   copyFileSync(f, to);
   const sum = createHash('sha256').update(readFileSync(to)).digest('hex');
-  writeFileSync(`${to}.sha256`, `${sum}  ${basename(f)}\n`);
-  console.log(`release: ${basename(f)} (${statSync(to).size} bytes) ${sum}`);
+  writeFileSync(`${to}.sha256`, `${sum}  ${asset.file}\n`);
+  console.log(`release: ${asset.file} (from ${basename(f)}, ${statSync(to).size} bytes) ${sum}`);
 }
+const expected = assets.filter((a) => a.target === target).length;
+if (shipped.length !== expected)
+  throw new Error(`shipped ${shipped.length} installers for ${target}, expected ${expected}`);

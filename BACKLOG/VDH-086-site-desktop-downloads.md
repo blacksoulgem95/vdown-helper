@@ -1,7 +1,7 @@
 ---
 id: VDH-086
 title: Site: desktop app download section (per OS, from the latest release)
-status: todo
+status: in-progress
 priority: P3
 area: docs
 depends_on: [VDH-069]
@@ -24,3 +24,6 @@ notes, en/it.
 ## Notes
 
 - Split from VDH-069.
+- The installers were released with the version in their names; they are now released under fixed names
+  (`desktop/release-assets.json`, shared by `scripts/desktop/smoke-test.mjs` and the site build), so the site links
+  `releases/latest/download/<name>`. The first release with those names is the one this PR's merge publishes.
