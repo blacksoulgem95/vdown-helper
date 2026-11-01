@@ -1,4 +1,7 @@
 @import 'tailwindcss';
+/* The shared components live here: also scan them when another app (the desktop window, desktop/ui) builds this theme,
+   whose own root is elsewhere (Tailwind only detects classes under the build's root). */
+@source '..';
 
 /* Fonts are bundled with the extension (no external requests). */
 @font-face {

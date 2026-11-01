@@ -99,7 +99,7 @@ export function App({ initial }: { initial: SettingsView }) {
           { key: 'queue', label: td('tabQueue'), count: jobs.length },
           { key: 'history', label: td('tabHistory'), count: history.length },
           { key: 'convert', label: td('tabConvert'), count: toConvert.length },
-          { key: 'settings', label: td('tabSettings'), count: 0 },
+          { key: 'settings', label: td('tabSettings') },
         ]}
       >
         {section === 'queue' &&
