@@ -1,7 +1,7 @@
 ---
 id: VDH-088
 title: Desktop window: its own stylesheet with every utility in it
-status: in-progress
+status: done
 priority: P2
 area: desktop
 depends_on: [VDH-087]
@@ -36,7 +36,7 @@ already 63 MB.
 - [x] The window build fails if any utility Tailwind lists, or any class of the shared Tabs component, is missing from
       the window's CSS
 - [x] The real app starts and renders as before (tauri-driver E2E and screenshots), and its start-up time is measured
-- [ ] Full local suite and CI green on the PR head
+- [x] Full local suite and CI green on the PR head
 
 ## Notes
 
@@ -50,3 +50,7 @@ already 63 MB.
   earlier CSS, 774 ms with every utility. The binary is 21.94 MB, up from 21.69 MB, because the assets are compressed.
 - `__unstable__loadDesignSystem` is Tailwind's tooling API, pinned by package-lock. If it changes, the generator
   fails: it requires at least 10,000 utilities and rejects any candidate that could break the `inline()` string.
+- PR #26 merged as `f0af532` and released in v1.3.16.
+  - On the PR head `0fa1cf4`, the full local suite (14 steps) passed, and so did all 20 CI checks, the installers on
+    all four OS runners included.
+  - Release run 41368821490 is green: each installer is installed and passes the app's self-test.
