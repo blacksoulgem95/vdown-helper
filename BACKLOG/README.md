@@ -105,3 +105,4 @@ Priorities: P0 critical, P1 high, P2 normal, P3 low.
 | [VDH-085](VDH-085-desktop-updater.md) | Desktop auto-update (signed latest.json, install after the user confirms) | blocked | P2 | desktop | VDH-069 |
 | [VDH-086](VDH-086-site-desktop-downloads.md) | Site: desktop app download section (per OS, from the latest release) | done | P3 | docs | VDH-069 |
 | [VDH-087](VDH-087-desktop-ui-shared-styles.md) | Desktop window: the shared components lost the styles only they use | done | P1 | desktop | VDH-066 |
+| [VDH-088](VDH-088-desktop-full-css.md) | Desktop window: its own stylesheet with every utility in it | in-progress | P2 | desktop | VDH-087 |
