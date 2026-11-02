@@ -12,4 +12,5 @@ src/wasm/gen
 target
 core/fixtures
 desktop/ui/dist
+desktop/ui/.generated
 desktop/src-tauri/gen

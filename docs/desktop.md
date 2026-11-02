@@ -100,6 +100,14 @@ natively and by `tests/core-golden.test.ts` through the wasm. The existing vites
 - The window reuses the extension's components (`QueueItem`, `Tabs`, fields), theme, fonts, Rust core and catalogs;
   the app's own strings are in `desktop/ui/locales/{en,it}.json` (also used for the tray and notifications). The
   language follows the system unless the user picks one.
+- The window has its own stylesheet (`desktop/ui/src/styles.css`), separate from the extension's. It is the same
+  theme plus every utility Tailwind knows, so no class can go missing because a scan did not find it.
+  - `scripts/desktop/tailwind-all.mjs` lists the utilities from Tailwind's design system. It adds the theme's colours
+    at every opacity step and the interactive states on the colour and effect utilities.
+  - The scan of the sources still adds the arbitrary values and other variants the code uses.
+  - The window build fails if any listed utility is missing from the CSS.
+  - The cost is about 10 MB of CSS. That adds about 0.25 MB to the app, since its files are compressed, and a little
+    over half a second before the window's first paint.
 - Settings live in the queue database and apply while jobs run (jobs and segments at a time, bandwidth cap, schedule
   window, history on/off). Closing the window keeps the app and its jobs in the tray (can be turned off); quitting holds
   the running jobs, which continue at the next start. Start at login is off until the user turns it on. A second launch

@@ -1,0 +1,5 @@
+/* The desktop window's stylesheet (VDH-088): the extension's theme, plus every utility Tailwind knows, not only the
+   ones found in the sources. Size does not matter here, and a class can no longer go missing because a scan did not
+   see it. The list is written by scripts/desktop/tailwind-all.mjs when the window is built. */
+@import '@/styles/theme.css';
+@import '../.generated/tailwind-all.css';
